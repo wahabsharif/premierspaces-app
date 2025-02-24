@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { View, Button, Image, Text, TouchableOpacity } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import * as Camera from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
+import React, { useState } from "react";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 
 const UploadScreen = ({ route }: any) => {
   const { category } = route.params;
@@ -9,7 +9,7 @@ const UploadScreen = ({ route }: any) => {
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 1,
     });
@@ -28,10 +28,6 @@ const UploadScreen = ({ route }: any) => {
         return;
       }
     }
-    if (status !== "granted") {
-      alert("Camera permission is required!");
-      return;
-    }
 
     let result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
@@ -44,18 +40,55 @@ const UploadScreen = ({ route }: any) => {
   };
 
   return (
-    <View style={{ flex: 1, padding: 20, alignItems: "center" }}>
-      <Text style={{ fontSize: 20, marginBottom: 10 }}>
+    <View
+      style={{
+        flex: 1,
+        padding: 20,
+        alignItems: "center",
+        backgroundColor: "#f8f9fa",
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: "bold",
+          marginBottom: 20,
+          color: "#333",
+        }}
+      >
         Upload to {category}
       </Text>
-      <TouchableOpacity style={{ marginBottom: 20 }} onPress={pickImage}>
-        <Text style={{ fontSize: 18, color: "blue" }}>Choose from Gallery</Text>
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#007bff",
+          padding: 12,
+          borderRadius: 8,
+          marginBottom: 10,
+          width: "80%",
+          alignItems: "center",
+        }}
+        onPress={pickImage}
+      >
+        <Text style={{ fontSize: 18, color: "#fff" }}>Choose from Gallery</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={{ marginBottom: 20 }} onPress={takePhoto}>
-        <Text style={{ fontSize: 18, color: "blue" }}>Take a Photo/Video</Text>
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#28a745",
+          padding: 12,
+          borderRadius: 8,
+          marginBottom: 20,
+          width: "80%",
+          alignItems: "center",
+        }}
+        onPress={takePhoto}
+      >
+        <Text style={{ fontSize: 18, color: "#fff" }}>Take a Photo/Video</Text>
       </TouchableOpacity>
       {media && (
-        <Image source={{ uri: media }} style={{ width: 200, height: 200 }} />
+        <Image
+          source={{ uri: media }}
+          style={{ width: 200, height: 200, borderRadius: 10, marginTop: 20 }}
+        />
       )}
     </View>
   );
