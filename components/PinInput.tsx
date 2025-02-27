@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Button, TextInput } from "react-native-paper";
 
 interface PinInputProps {
   onSubmit: (pin: string) => void;
-  title: string;
 }
 
-const PinInput: React.FC<PinInputProps> = ({ onSubmit, title }) => {
+const PinInput: React.FC<PinInputProps> = ({ onSubmit }) => {
   const [pin, setPin] = useState("");
 
   const handleSubmit = () => {
@@ -20,30 +20,30 @@ const PinInput: React.FC<PinInputProps> = ({ onSubmit, title }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
       <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        maxLength={4}
+        label="Enter PIN"
         value={pin}
         onChangeText={setPin}
+        keyboardType="numeric"
+        maxLength={4}
         secureTextEntry
+        style={styles.input}
       />
-      <Button title="Submit" onPress={handleSubmit} />
+      <Button mode="contained" onPress={handleSubmit} style={styles.button}>
+        Submit
+      </Button>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 20, marginBottom: 20 },
+  container: { width: "100%", alignItems: "center" },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    width: 100,
-    textAlign: "center",
+    width: "80%",
     marginBottom: 20,
+  },
+  button: {
+    width: "80%",
   },
 });
 

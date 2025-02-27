@@ -66,7 +66,7 @@ const LoginScreen = ({ navigation }: any) => {
         <TextInput
           placeholder="Username"
           value={username}
-          onChangeText={setUsername}
+          onChangeText={(text) => setUsername(text.toLowerCase())}
           onFocus={() => handleFocus(usernameAnim)}
           onBlur={() => handleBlur(usernameAnim)}
           style={{

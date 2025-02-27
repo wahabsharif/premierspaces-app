@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { View, Button, Alert } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
+import React, { useEffect, useState } from "react";
+import { Alert, StyleSheet, View } from "react-native";
+import { Button, Card, Text } from "react-native-paper";
 import PinInput from "../components/PinInput";
 
 interface LockScreenProps {
@@ -26,7 +27,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           attemptBiometricAuth();
         }
       } else {
-        setIsSettingPin(true); // Prompt to set PIN
+        setIsSettingPin(true);
       }
     };
     initializeAuth();
@@ -53,11 +54,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     }
   };
 
-  interface PinSubmitHandler {
-    (pin: string): Promise<void>;
-  }
-
-  const handlePinSubmit: PinSubmitHandler = async (pin) => {
+  const handlePinSubmit = async (pin: string) => {
     if (isSettingPin) {
       await SecureStore.setItemAsync("app_pin", pin);
       setIsPinSet(true);
@@ -92,19 +89,52 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   };
 
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <PinInput
-        onSubmit={handlePinSubmit}
-        title={isSettingPin ? "Set a 4-Digit PIN" : "Enter Your PIN"}
-      />
-      {isPinSet && !isSettingPin && (
-        <Button
-          title="Use Fingerprint/Face ID"
-          onPress={attemptBiometricAuth}
-        />
-      )}
+    <View style={styles.container}>
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text style={styles.title}>
+            {isSettingPin ? "Set a 4-Digit PIN" : "Enter Your PIN"}
+          </Text>
+          <PinInput onSubmit={handlePinSubmit} />
+          {isPinSet && !isSettingPin && (
+            <Button
+              mode="contained"
+              icon="fingerprint"
+              onPress={attemptBiometricAuth}
+              style={styles.bioButton}
+            >
+              Use Fingerprint/Face ID
+            </Button>
+          )}
+        </Card.Content>
+      </Card>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f4f4f4",
+  },
+  card: {
+    width: "85%",
+    padding: 20,
+    elevation: 5,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  bioButton: {
+    marginTop: 20,
+  },
+});
 
 export default LockScreen;
