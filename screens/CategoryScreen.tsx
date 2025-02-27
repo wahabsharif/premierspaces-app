@@ -1,7 +1,6 @@
 import React from "react";
 import { View, Text, FlatList, TouchableOpacity } from "react-native";
-
-const categories = ["Nature", "Events", "Family", "Travel"];
+import { categories } from "../data/categories";
 
 const CategoryScreen = ({ navigation }: any) => {
   return (
