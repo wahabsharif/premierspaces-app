@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "PremierGalleryApp",
-    "slug": "PremierGalleryApp",
+    "name": "Premier Gallery",
+    "slug": "premier-gallery",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
