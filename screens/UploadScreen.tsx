@@ -70,7 +70,7 @@ const UploadScreen = ({ route }: any) => {
     <View style={styles.container}>
       <Text style={styles.title}>Upload to {category}</Text>
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: "#007bff" }]}
+        style={[styles.button, { backgroundColor: "#347ab8" }]}
         onPress={pickImage}
       >
         <Text style={styles.buttonText}>Choose from Gallery</Text>

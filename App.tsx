@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { AppState, View } from "react-native";
+import { AppState, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import LoginScreen from "./screens/LoginScreen";
 import CategoryScreen from "./screens/CategoryScreen";
 import UploadScreen from "./screens/UploadScreen";
@@ -10,12 +11,11 @@ import LockScreen from "./screens/LockScreen";
 const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => (
-  <Stack.Navigator initialRouteName="LoginScreen">
-    <Stack.Screen
-      name="LoginScreen"
-      component={LoginScreen}
-      options={{ headerShown: false }}
-    />
+  <Stack.Navigator
+    initialRouteName="LoginScreen"
+    screenOptions={{ headerShown: false }}
+  >
+    <Stack.Screen name="LoginScreen" component={LoginScreen} />
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />
   </Stack.Navigator>
@@ -23,22 +23,24 @@ const AppNavigator = () => (
 
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isPickingImage, setIsPickingImage] = useState(false); // Track image selection
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
-      if (nextAppState === "background") {
+      if (nextAppState === "background" && !isPickingImage) {
         setIsUnlocked(false);
       }
     };
+
     const subscription = AppState.addEventListener(
       "change",
       handleAppStateChange
     );
     return () => subscription.remove();
-  }, []);
+  }, [isPickingImage]);
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={styles.container}>
       {isUnlocked ? (
         <NavigationContainer>
           <AppNavigator />
@@ -46,6 +48,12 @@ export default function App() {
       ) : (
         <LockScreen onUnlock={() => setIsUnlocked(true)} />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

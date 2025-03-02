@@ -28,6 +28,7 @@ const PinInput: React.FC<PinInputProps> = ({ onSubmit }) => {
         maxLength={4}
         secureTextEntry
         style={styles.input}
+        mode="outlined"
       />
       <Button mode="contained" onPress={handleSubmit} style={styles.button}>
         Submit
@@ -37,13 +38,20 @@ const PinInput: React.FC<PinInputProps> = ({ onSubmit }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { width: "100%", alignItems: "center" },
+  container: {
+    width: "100%",
+    alignItems: "center",
+  },
   input: {
-    width: "80%",
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 8,
     marginBottom: 20,
   },
   button: {
-    width: "80%",
+    width: "100%",
+    borderRadius: 8,
+    backgroundColor: "#3b82f6",
   },
 });
 
