@@ -1,0 +1,164 @@
+
+------------------------------------------- REQUESTS --------------------------------------------
+1: Request-Wrapper Object
+	{
+		userid: 1,
+		payload:
+		{
+		}
+	}
+
+
+2: Payload Objects
+
+	A: User Login
+	{
+		initials:"text",
+		pin:"####"
+	}
+	
+	B: Peoperty Search
+	{
+		door_num : "alpha-numeric"  // alpha-numeric value eg: 33, 32B
+	}
+	
+	C: 
+
+------------------------------------------- RESPONCES --------------------------------------------
+
+1: Response-Wrapper Object
+	{
+		"status":NUMBER // "1= success" or "0 = error"
+		"payload":{}	
+	}
+
+
+payload could be any object
+
+	A: Error
+		{
+			"message":"Error message"
+		}
+
+	B: User Login Successfull
+		{
+			"userid":1,
+			"name": "Hameed",
+			"role": "p"  // possible values = p(principal), m(manager), a(accounts),b(builder)
+		}
+		
+		
+	C: Property (Object)
+		{
+			"id": number,
+			"address": "text"
+		}
+		
+	D: Properties List ( in response to search on door number)
+		{
+			"properties":[
+				PropertyObject,
+				PropertyObject,
+				PropertyObject
+			]
+		}
+		
+	E: 	Job (Object)
+	{
+		"id":number,
+		"job_num":"alpha-numeric"
+		"date_created":"DD-mmm-YYYY",
+		"task1":"text" // varchar(150)
+		"task1_status": number // tinyint(0-1)
+		"task2":"text"
+		"task2_status":number
+		"task3":"text"
+		"task3_status":number
+		"task4":"text"
+		"task4_status":number
+		"task5":"text"
+		"task5_status":number
+		"task6":"text"
+		"task6_status":number
+		"task7":"text"
+		"task7_status":number
+		"task8":"text"
+		"task8_status":number
+		"task9":"text"
+		"task9_status":number
+		"task10":"text"
+		"task10_status":number
+	} // NOTE : if task_status = 1 then show the task
+	
+	F: Jobs List
+	{
+		"jobs":[
+			job,
+			job,
+			job
+		]
+	}
+	
+	
+	
+	G: FileUploadCategory (Object)
+	{
+		"id": number,
+		"category": "string",
+		"sub_categories":[
+			FileUploadCategoryObject,
+			FileUploadCategoryObject,
+			FileUploadCategoryObject
+		]
+	}
+	
+	G: Image file upload categories
+	{
+		"main_categories":[
+			FileUploadCategoryObject,
+			FileUploadCategoryObject,
+			FileUploadCategoryObject
+		]
+	}
+	
+	
+	
+//----------------------------------------------------------------------------------
+
+
+Example Request (login form submit)
+
+	{
+		userid: LOGGED_IN_USERID,
+		payload:
+		{
+			initials:"text",
+			pin:"####"
+		}
+	}
+	
+	
+
+//--------------------------------------------
+
+
+Eample Response (login error)
+
+	{
+		"status":0
+		"payload":{
+			"message":"Could not login."
+		}	
+	}	
+
+
+Eample Response (propeties list returned after door number search)
+
+	{
+		"status":1
+		"payload":{
+			PropertyObject,
+			PropertyObject,
+			PropertyObject
+		}	
+	}	
