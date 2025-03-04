@@ -55,7 +55,14 @@ const PropertyListScreen = () => {
       ]}
       onPress={() => handlePress(item)}
     >
-      <Text style={styles.address}>{item.address}</Text>
+      <Text
+        style={[
+          styles.address,
+          selectedPropertyId === item.id && { color: "#fff" }, // change text color when selected
+        ]}
+      >
+        {item.address}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -97,7 +104,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#ccc",
   },
   selectedItem: {
-    backgroundColor: "#d0e8ff",
+    backgroundColor: "#347ab8",
+    borderRadius: 5,
   },
   address: {
     fontSize: 16,
