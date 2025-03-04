@@ -7,13 +7,11 @@ const Header = () => {
   const dropdownOptions = ["Home", "Settings", "Logout"];
 
   const handleDropdownPress = () => {
-    // Toggle dropdown list
     setDropdownVisible((prev) => !prev);
   };
 
   const handleOptionSelect = (option: string) => {
     console.log(`${option} selected`);
-    // Hide dropdown after selection (or navigate based on option)
     setDropdownVisible(false);
   };
 
@@ -22,7 +20,7 @@ const Header = () => {
       <View style={styles.headerContainer}>
         {/* Left Side - Hamburger Icon */}
         <TouchableOpacity onPress={handleDropdownPress} style={styles.left}>
-          <MaterialCommunityIcons name="menu" size={24} color="black" />{" "}
+          <MaterialCommunityIcons name="menu" size={24} color="black" />
         </TouchableOpacity>
 
         {/* Center - Logo */}
