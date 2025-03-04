@@ -1,22 +1,26 @@
+import { AntDesign } from "@expo/vector-icons";
 import * as Camera from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
+  Dimensions,
+  FlatList,
   Image,
+  Modal,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  FlatList,
-  StyleSheet,
-  Dimensions,
-  Modal,
 } from "react-native";
-import { AntDesign } from "@expo/vector-icons";
 
+interface UploadScreenProps {
+  route: any;
+  navigation: any;
+}
 const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
 
-const UploadScreen = ({ route }: any) => {
+const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const { category } = route.params;
   const [media, setMedia] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -24,15 +28,21 @@ const UploadScreen = ({ route }: any) => {
   const [permission, requestPermission] = Camera.useCameraPermissions();
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      allowsEditing: true,
-      quality: 1,
-    });
+    try {
+      navigation.setParams({ isPickingImage: true });
 
-    if (!result.canceled) {
-      setMedia([...media, ...result.assets.map((asset) => asset.uri)]);
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setMedia([...media, ...result.assets.map((asset) => asset.uri)]);
+      }
+    } finally {
+      navigation.setParams({ isPickingImage: false });
     }
   };
 
@@ -45,13 +55,21 @@ const UploadScreen = ({ route }: any) => {
       }
     }
 
-    let result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 1,
-    });
+    try {
+      // Set global picking state to true via navigation params
+      navigation.setParams({ isPickingImage: true });
 
-    if (!result.canceled) {
-      setMedia([...media, result.assets[0].uri]);
+      let result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setMedia([...media, result.assets[0].uri]);
+      }
+    } finally {
+      // Reset picking state
+      navigation.setParams({ isPickingImage: false });
     }
   };
 
