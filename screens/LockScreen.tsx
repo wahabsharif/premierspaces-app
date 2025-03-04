@@ -2,7 +2,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
-import { Button, Card, Text } from "react-native-paper";
+import { Card, Text } from "react-native-paper";
 import PinInput from "../components/PinInput";
 
 interface LockScreenProps {
@@ -13,6 +13,8 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [isPinSet, setIsPinSet] = useState(false);
   const [isBiometricsEnabled, setIsBiometricsEnabled] = useState(false);
   const [isSettingPin, setIsSettingPin] = useState(false);
+  const [pinError, setPinError] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState(false);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -81,9 +83,16 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     } else {
       const storedPin = await SecureStore.getItemAsync("app_pin");
       if (pin === storedPin) {
-        onUnlock();
+        // Set success state to show green dots
+        setPinSuccess(true);
+        // Delay unlock to allow user to see the green dots
+        setTimeout(() => {
+          onUnlock();
+          setPinSuccess(false);
+        }, 500);
       } else {
-        Alert.alert("Error", "Incorrect PIN");
+        setPinError(true);
+        setTimeout(() => setPinError(false), 500);
       }
     }
   };
@@ -95,17 +104,12 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           <Text style={styles.title}>
             {isSettingPin ? "Set a 4-Digit PIN" : "Enter Your PIN"}
           </Text>
-          <PinInput onSubmit={handlePinSubmit} />
-          {isPinSet && !isSettingPin && (
-            <Button
-              mode="contained"
-              icon="fingerprint"
-              onPress={attemptBiometricAuth}
-              style={styles.bioButton}
-            >
-              Use Fingerprint/Face ID
-            </Button>
-          )}
+          <PinInput
+            onSubmit={handlePinSubmit}
+            onBiometric={attemptBiometricAuth}
+            error={pinError}
+            success={pinSuccess}
+          />
         </Card.Content>
       </Card>
     </View>
@@ -115,6 +119,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f5f6fa",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -131,12 +136,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 30,
     color: "#333",
-  },
-  bioButton: {
-    marginTop: 20,
-    width: "100%",
-    borderRadius: 8,
-    backgroundColor: "#3b82f6",
   },
 });
 
