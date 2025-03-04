@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { AppState, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { AppState, ImageBackground, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import LoginScreen from "./screens/LoginScreen";
+
 import CategoryScreen from "./screens/CategoryScreen";
-import UploadScreen from "./screens/UploadScreen";
 import LockScreen from "./screens/LockScreen";
+import LoginScreen from "./screens/LoginScreen";
+import UploadScreen from "./screens/UploadScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -23,7 +24,7 @@ const AppNavigator = () => (
 
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [isPickingImage, setIsPickingImage] = useState(false); // Track image selection
+  const [isPickingImage, setIsPickingImage] = useState(false);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
@@ -39,20 +40,29 @@ export default function App() {
     return () => subscription.remove();
   }, [isPickingImage]);
 
+  // Make sure to adjust the path to your background image accordingly
+  const backgroundImage = require("./assets/background.jpg");
+
   return (
-    <SafeAreaView style={styles.container}>
-      {isUnlocked ? (
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
-      ) : (
-        <LockScreen onUnlock={() => setIsUnlocked(true)} />
-      )}
-    </SafeAreaView>
+    <ImageBackground source={backgroundImage} style={styles.background}>
+      <SafeAreaView style={styles.container}>
+        {isUnlocked ? (
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        ) : (
+          <LockScreen onUnlock={() => setIsUnlocked(true)} />
+        )}
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    resizeMode: "cover",
+  },
   container: {
     flex: 1,
   },
