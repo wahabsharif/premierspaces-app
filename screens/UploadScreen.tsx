@@ -68,7 +68,7 @@ const UploadScreen = ({ route }: any) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Upload to {category}</Text>
+      <Text style={styles.title}>Upload to {category?.category}</Text>
       <TouchableOpacity
         style={[styles.button, { backgroundColor: "#347ab8" }]}
         onPress={pickImage}
@@ -180,9 +180,9 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)", // Dark overlay
-    justifyContent: "center", // Centers content vertically
-    alignItems: "center", // Centers content horizontally
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
   },
   closeModal: {
