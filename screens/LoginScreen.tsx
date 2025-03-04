@@ -1,22 +1,37 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Image,
 } from "react-native";
+import { loginUser } from "../data/userLoginData";
 
 const LoginScreen = ({ navigation }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
 
-  const handleLogin = () => {
-    if (initials === "admin" && pin === "1122") {
+  const handleLogin = async () => {
+    const response = loginUser(initials.toLowerCase(), pin);
+    if (response.status === 1) {
+      try {
+        await AsyncStorage.setItem(
+          "userData",
+          JSON.stringify(response.payload)
+        );
+      } catch (error) {
+        console.error("Error storing user data:", error);
+      }
       navigation.replace("SearchPropertyScreen");
     } else {
-      Alert.alert("Invalid Credentials", "Please try again.");
+      if ("message" in response.payload) {
+        Alert.alert("Invalid Credentials", response.payload.message);
+      } else {
+        Alert.alert("Invalid Credentials", "Unknown error occurred");
+      }
     }
   };
 
@@ -56,7 +71,7 @@ const LoginScreen = ({ navigation }: any) => {
             placeholder="Enter Initials"
             value={initials}
             autoCapitalize="none"
-            onChangeText={(text) => setInitials(text.toLowerCase())}
+            onChangeText={(text) => setInitials(text)}
             style={{
               flex: 1,
               borderWidth: 1,

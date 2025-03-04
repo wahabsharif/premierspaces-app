@@ -27,7 +27,6 @@ const PropertyListScreen = () => {
   const handlePress = async (item: { id: number; address: string }) => {
     try {
       await AsyncStorage.setItem("selectedProperty", JSON.stringify(item));
-      console.log("Property stored:", item);
       setSelectedPropertyId(item.id);
     } catch (error) {
       console.error("Error storing property:", error);

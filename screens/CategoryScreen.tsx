@@ -31,8 +31,6 @@ const CategoryScreen = ({ navigation }: any) => {
             onPress={() => {
               setSelectedSubCategory(subCategory);
               setSelectedCategory(category);
-              console.log("Selected Subcategory:", subCategory);
-              console.log("From Category:", category);
             }}
             style={{
               paddingVertical: 8,
@@ -58,11 +56,7 @@ const CategoryScreen = ({ navigation }: any) => {
       Alert.alert("Selection Required", "Please select a subcategory");
       return;
     }
-    console.log("Navigating with selected data:", {
-      category: selectedCategory,
-      subCategory: selectedSubCategory,
-    });
-    // Store selected data in AsyncStorage
+
     try {
       await AsyncStorage.setItem(
         "selectedData",
@@ -71,7 +65,6 @@ const CategoryScreen = ({ navigation }: any) => {
           subCategory: selectedSubCategory,
         })
       );
-      console.log("Selected data stored in AsyncStorage");
     } catch (error) {
       console.error("Error storing selected data", error);
     }

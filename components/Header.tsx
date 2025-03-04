@@ -11,7 +11,6 @@ const Header = () => {
   };
 
   const handleOptionSelect = (option: string) => {
-    console.log(`${option} selected`);
     setDropdownVisible(false);
   };
 
