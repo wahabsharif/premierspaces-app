@@ -1,6 +1,6 @@
+// App.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,45 +10,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import CategoryScreen from "./screens/CategoryScreen";
+import { AppNavigator } from "./components/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
-import PropertyListScreen from "./screens/PropertyListScreen";
-import SearchPropertyScreen from "./screens/SearchPropertyScreen";
-import UploadScreen from "./screens/UploadScreen";
-
-const Stack = createNativeStackNavigator();
-
-const AppNavigator = ({
-  setIsPickingImage,
-}: {
-  setIsPickingImage: (value: boolean) => void;
-}) => (
-  <Stack.Navigator
-    screenOptions={{ headerShown: false }}
-    screenListeners={({
-      route,
-    }: {
-      route: { params?: { isPickingImage?: boolean } };
-    }) => ({
-      state: (e) => {
-        // Update isPickingImage based on route params
-        const currentParams = route.params;
-        if (currentParams?.isPickingImage !== undefined) {
-          setIsPickingImage(currentParams.isPickingImage);
-        }
-      },
-    })}
-  >
-    <Stack.Screen
-      name="SearchPropertyScreen"
-      component={SearchPropertyScreen}
-    />
-    <Stack.Screen name="PropertyListScreen" component={PropertyListScreen} />
-    <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
-    <Stack.Screen name="UploadScreen" component={UploadScreen} />
-  </Stack.Navigator>
-);
 
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
