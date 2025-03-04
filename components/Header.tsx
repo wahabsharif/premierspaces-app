@@ -1,9 +1,30 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const Header = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [userName, setUserName] = useState("Profile"); // Default text
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userDataJson = await AsyncStorage.getItem("userData");
+        if (userDataJson !== null) {
+          const userData = JSON.parse(userDataJson);
+          if (userData.name) {
+            setUserName(userData.name);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
   const dropdownOptions = ["Home", "Settings", "Logout"];
 
   const handleDropdownPress = () => {
@@ -31,9 +52,8 @@ const Header = () => {
           />
         </View>
 
-        {/* Right Side - Text */}
         <View style={styles.right}>
-          <Text style={styles.rightText}>Profile</Text>
+          <Text style={styles.rightText}>{userName}</Text>
         </View>
       </View>
 
@@ -57,7 +77,6 @@ const Header = () => {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    // marginTop: 30,
     height: 60,
     backgroundColor: "#fff",
     flexDirection: "row",
@@ -89,10 +108,13 @@ const styles = StyleSheet.create({
   rightText: {
     fontSize: 16,
     color: "#333",
+    fontWeight: "bold",
+    flexShrink: 1,
+    textAlign: "right",
   },
   dropdownContainer: {
     position: "absolute",
-    top: 90, // Header's marginTop (30) + height (60)
+    top: 90,
     left: 10,
     width: 150,
     backgroundColor: "#fff",
