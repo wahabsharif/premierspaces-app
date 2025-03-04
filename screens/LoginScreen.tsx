@@ -13,8 +13,8 @@ const LoginScreen = ({ navigation }: any) => {
   const [pin, setPin] = useState("");
 
   const handleLogin = () => {
-    if (initials === "admin" && pin === "1234") {
-      navigation.replace("CategoryScreen");
+    if (initials === "admin" && pin === "1122") {
+      navigation.replace("SearchPropertyScreen");
     } else {
       Alert.alert("Invalid Credentials", "Please try again.");
     }
