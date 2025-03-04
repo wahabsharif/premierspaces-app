@@ -7,7 +7,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import CategoryScreen from "./screens/CategoryScreen";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
+import SearchPropertyScreen from "./screens/SearchPropertyScreen";
 import UploadScreen from "./screens/UploadScreen";
+import PropertyListScreen from "./screens/PropertyListScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -17,6 +19,11 @@ const AppNavigator = () => (
     screenOptions={{ headerShown: false }}
   >
     <Stack.Screen name="LoginScreen" component={LoginScreen} />
+    <Stack.Screen
+      name="SearchPropertyScreen"
+      component={SearchPropertyScreen}
+    />
+    <Stack.Screen name="PropertyListScreen" component={PropertyListScreen} />
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />
   </Stack.Navigator>
