@@ -1,3 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useState } from "react";
 import {
   FlatList,
@@ -6,11 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Header from "../components/Header";
 import { propertyListData } from "../data/propertyListData";
-import { useNavigation, NavigationProp } from "@react-navigation/native";
 
 // Define your route parameters
 type RootStackParamList = {

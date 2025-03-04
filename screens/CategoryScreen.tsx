@@ -1,30 +1,27 @@
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
   Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from "@expo/vector-icons";
-import { categories } from "../data/categoryData";
 import Header from "../components/Header";
+import { categories } from "../data/categoryData";
 
-const CategoryScreen = ({ navigation }: any) => {
+const CategoryScreen = ({ navigation, route }: any) => {
+  const { paramKey } = route.params;
+
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
-
   const [modalVisible, setModalVisible] = useState(false);
 
   const toggleCategory = (id: number) => {
-    if (expandedCategory === id) {
-      setExpandedCategory(null);
-    } else {
-      setExpandedCategory(id);
-    }
+    setExpandedCategory((prev) => (prev === id ? null : id));
   };
 
   const renderSubCategories = (subCategories: any, category: any) => (
@@ -60,7 +57,6 @@ const CategoryScreen = ({ navigation }: any) => {
       Alert.alert("Selection Required", "Please select a subcategory");
       return;
     }
-
     try {
       await AsyncStorage.setItem(
         "selectedData",
@@ -78,9 +74,12 @@ const CategoryScreen = ({ navigation }: any) => {
     });
   };
 
-  // Handlers for the modal
   const openModal = () => setModalVisible(true);
   const closeModal = () => setModalVisible(false);
+
+  const handleGoToJobsDirectly = () => {
+    navigation.navigate("JobsScreen");
+  };
 
   const handleOpenNewJob = () => {
     closeModal();
@@ -96,7 +95,24 @@ const CategoryScreen = ({ navigation }: any) => {
     <View style={{ flex: 1, backgroundColor: "#f8f9fa" }}>
       <Header />
       <View style={{ padding: 20 }}>
-        <Text style={styles.titleText}>Select a Category</Text>
+        <Text style={styles.titleText}>Select a Category To Upload</Text>
+
+        {paramKey && (
+          <Text style={styles.propertyAddressText}>
+            {`Selected Property Address: ${paramKey}`}
+          </Text>
+        )}
+
+        <View style={styles.uploadSection}>
+          <Text style={styles.uploadSectionTitle}>Upload for A Job</Text>
+          <TouchableOpacity
+            style={styles.uploadSectionButton}
+            onPress={handleGoToJobsDirectly}
+          >
+            <Text style={styles.uploadSectionButtonText}>Go To Jobs</Text>
+          </TouchableOpacity>
+        </View>
+
         {categories.map((category) => (
           <TouchableOpacity
             key={category.id}
@@ -115,17 +131,14 @@ const CategoryScreen = ({ navigation }: any) => {
         ))}
       </View>
 
-      {/* Floating button to proceed */}
       <TouchableOpacity style={styles.floatingIcon} onPress={handleNavigate}>
         <Ionicons name="arrow-forward" size={24} color="#fff" />
       </TouchableOpacity>
 
-      {/* "Report A Problem" button at bottom */}
       <TouchableOpacity style={styles.reportButton} onPress={openModal}>
         <Text style={styles.reportButtonText}>Report A Problem</Text>
       </TouchableOpacity>
 
-      {/* Modal for "Report A Problem" */}
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -164,8 +177,44 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 20,
+    marginBottom: 10,
     color: "#333",
+  },
+  propertyAddressText: {
+    fontSize: 18,
+    marginVertical: 20,
+    fontWeight: "bold",
+    fontVariant: ["small-caps"],
+    color: "#555",
+    textDecorationLine: "underline",
+  },
+
+  uploadSection: {
+    margin: 30,
+    alignItems: "center",
+    width: "100%",
+    alignSelf: "center",
+  },
+
+  uploadSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 5,
+    color: "#333",
+    textAlign: "center",
+  },
+  uploadSectionButton: {
+    backgroundColor: "#347ab8",
+    paddingHorizontal: 10,
+    width: "60%",
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  uploadSectionButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
   },
   categoryContainer: {
     paddingVertical: 15,
