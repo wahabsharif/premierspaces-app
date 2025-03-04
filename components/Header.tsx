@@ -2,10 +2,24 @@ import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
+
+// Define your route types.
+type RootStackParamList = {
+  Home: undefined;
+  SettingScreen: undefined;
+  // add other routes if necessary
+};
+
+// Optionally, define a specific navigation prop type for this component.
+type HeaderNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
 const Header = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [userName, setUserName] = useState("Profile"); // Default text
+  const [userName, setUserName] = useState("Profile");
+  // Use the generic type to type the navigation object.
+  const navigation = useNavigation<HeaderNavigationProp>();
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -33,6 +47,11 @@ const Header = () => {
 
   const handleOptionSelect = (option: string) => {
     setDropdownVisible(false);
+    if (option === "Settings") {
+      // This now works because the navigation type is properly defined.
+      navigation.navigate("SettingScreen");
+    }
+    // Add navigation logic for other options as needed.
   };
 
   return (
@@ -52,6 +71,7 @@ const Header = () => {
           />
         </View>
 
+        {/* Right Side - Username */}
         <View style={styles.right}>
           <Text style={styles.rightText}>{userName}</Text>
         </View>
