@@ -1,11 +1,14 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import Header from "../components/Header";
+import AppLockToggle from "../components/AppLockToggle";
 
 const SettingScreen = () => {
   return (
     <View style={styles.container}>
+      <Header />
       <Text style={styles.title}>Settings</Text>
-      {/* Add your settings components here */}
+      <AppLockToggle />
     </View>
   );
 };
@@ -14,11 +17,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
   },
   title: {
     fontSize: 24,
+    marginLeft: 20,
+    marginVertical: 20,
     fontWeight: "bold",
   },
 });

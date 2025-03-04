@@ -43,5 +43,6 @@ export const AppNavigator = ({
     <Stack.Screen name="PropertyListScreen" component={PropertyListScreen} />
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />
+    <Stack.Screen name="SettingScreen" component={SettingScreen} />
   </Stack.Navigator>
 );

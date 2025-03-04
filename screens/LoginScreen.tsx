@@ -10,12 +10,12 @@ import {
 } from "react-native";
 import { loginUser } from "../data/userLoginData";
 
-const LoginScreen = ({ navigation }: any) => {
+const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
 
   const handleLogin = async () => {
-    const response = loginUser(initials.toLowerCase(), pin);
+    const response = await loginUser(initials.toLowerCase(), pin);
     if (response.status === 1) {
       try {
         await AsyncStorage.setItem(
@@ -25,13 +25,14 @@ const LoginScreen = ({ navigation }: any) => {
       } catch (error) {
         console.error("Error storing user data:", error);
       }
-      navigation.replace("SearchPropertyScreen");
+      onLoginSuccess();
+      Alert.alert("Success", "You are logged in!");
     } else {
-      if ("message" in response.payload) {
-        Alert.alert("Invalid Credentials", response.payload.message);
-      } else {
-        Alert.alert("Invalid Credentials", "Unknown error occurred");
-      }
+      const message =
+        "message" in response.payload
+          ? response.payload.message
+          : "Unknown error occurred";
+      Alert.alert("Invalid Credentials", message);
     }
   };
 

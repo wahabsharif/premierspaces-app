@@ -1,4 +1,3 @@
-// App.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
@@ -38,9 +37,32 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleAppStateChange = (nextAppState: string) => {
-      if (nextAppState === "background" && !isPickingImage) {
-        setIsUnlocked(false);
+    const checkAppLockStatus = async () => {
+      try {
+        const appLockEnabled = await AsyncStorage.getItem("app_lock_enabled");
+        if (appLockEnabled === "false" || appLockEnabled === null) {
+          setIsUnlocked(true);
+        }
+      } catch (error) {
+        console.error("Error checking app lock status:", error);
+      }
+    };
+    checkAppLockStatus();
+  }, []);
+
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: string) => {
+      try {
+        const appLockEnabled = await AsyncStorage.getItem("app_lock_enabled");
+        if (
+          nextAppState === "background" &&
+          appLockEnabled === "true" &&
+          !isPickingImage
+        ) {
+          setIsUnlocked(false);
+        }
+      } catch (error) {
+        console.error("Error handling app state change:", error);
       }
     };
 
@@ -69,7 +91,7 @@ export default function App() {
             {isLoggedIn ? (
               <AppNavigator setIsPickingImage={setIsPickingImage} />
             ) : (
-              <LoginScreen />
+              <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />
             )}
           </NavigationContainer>
         ) : (

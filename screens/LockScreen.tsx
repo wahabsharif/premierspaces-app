@@ -83,9 +83,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     } else {
       const storedPin = await SecureStore.getItemAsync("app_pin");
       if (pin === storedPin) {
-        // Set success state to show green dots
         setPinSuccess(true);
-        // Delay unlock to allow user to see the green dots
         setTimeout(() => {
           onUnlock();
           setPinSuccess(false);
@@ -101,15 +99,27 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     <View style={styles.container}>
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.title}>
-            {isSettingPin ? "Set a 4-Digit PIN" : "Enter Your PIN"}
-          </Text>
-          <PinInput
-            onSubmit={handlePinSubmit}
-            onBiometric={attemptBiometricAuth}
-            error={pinError}
-            success={pinSuccess}
-          />
+          {isSettingPin ? (
+            <>
+              <Text style={styles.title}>Setup Lock</Text>
+              <Text style={styles.subtitle}>Please set a 4-digit PIN</Text>
+              <PinInput
+                onSubmit={handlePinSubmit}
+                error={pinError}
+                success={pinSuccess}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>Enter Your PIN</Text>
+              <PinInput
+                onSubmit={handlePinSubmit}
+                onBiometric={attemptBiometricAuth}
+                error={pinError}
+                success={pinSuccess}
+              />
+            </>
+          )}
         </Card.Content>
       </Card>
     </View>
@@ -134,8 +144,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "600",
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 10,
     color: "#333",
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 30,
+    color: "#666",
   },
 });
 
