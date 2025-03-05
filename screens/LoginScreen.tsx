@@ -1,18 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useState } from "react";
-import {
-  Alert,
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Portal, Dialog, Button } from "react-native-paper";
 import { loginUser } from "../data/userLoginData";
 
 const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
+
+  // Custom Alert State
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertCallback, setAlertCallback] = useState<(() => void) | null>(null);
 
   const handleLogin = async () => {
     const response = await loginUser(initials.toLowerCase(), pin);
@@ -25,15 +25,22 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
       } catch (error) {
         console.error("Error storing user data:", error);
       }
-      onLoginSuccess();
-      Alert.alert("Success", "You are logged in!");
+      showAlert("Success", "You are logged in!", onLoginSuccess);
     } else {
       const message =
         "message" in response.payload
           ? response.payload.message
           : "Unknown error occurred";
-      Alert.alert("Invalid Credentials", message);
+      showAlert("Invalid Credentials", message);
     }
+  };
+
+  // Custom Alert Function
+  const showAlert = (title: string, message: string, callback?: () => void) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertCallback(() => callback || null);
+    setAlertVisible(true);
   };
 
   return (
@@ -132,6 +139,26 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
           Login
         </Text>
       </TouchableOpacity>
+
+      {/* Custom Alert Dialog */}
+      <Portal>
+        <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
+          <Dialog.Title>{alertTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{alertMessage}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setAlertVisible(false);
+                if (alertCallback) alertCallback();
+              }}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };

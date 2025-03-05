@@ -12,11 +12,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Portal, Dialog, Button } from "react-native-paper";
 
 interface UploadScreenProps {
   route: any;
   navigation: any;
 }
+
 const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
 
@@ -26,6 +28,17 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
+
+  // Custom Alert State
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+
+  const showAlert = (title: string, message: string) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
 
   const pickImage = async () => {
     try {
@@ -41,6 +54,8 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       if (!result.canceled) {
         setMedia([...media, ...result.assets.map((asset) => asset.uri)]);
       }
+    } catch (error) {
+      showAlert("Error", "Failed to pick an image. Please try again.");
     } finally {
       navigation.setParams({ isPickingImage: false });
     }
@@ -50,13 +65,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     if (!permission?.granted) {
       const { status } = await requestPermission();
       if (status !== "granted") {
-        alert("Camera permission is required!");
+        showAlert("Permission Required", "Camera permission is required!");
         return;
       }
     }
 
     try {
-      // Set global picking state to true via navigation params
       navigation.setParams({ isPickingImage: true });
 
       let result = await ImagePicker.launchCameraAsync({
@@ -67,8 +81,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       if (!result.canceled) {
         setMedia([...media, result.assets[0].uri]);
       }
+    } catch (error) {
+      showAlert("Error", "Failed to take a photo. Please try again.");
     } finally {
-      // Reset picking state
       navigation.setParams({ isPickingImage: false });
     }
   };
@@ -148,6 +163,19 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           />
         </View>
       </Modal>
+
+      {/* Custom Alert Dialog */}
+      <Portal>
+        <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
+          <Dialog.Title>{alertTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{alertMessage}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAlertVisible(false)}>OK</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };

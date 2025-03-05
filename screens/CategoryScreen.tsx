@@ -1,14 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useState } from "react";
-import {
-  Alert,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { categories } from "../data/categoryData";
 
@@ -19,6 +13,17 @@ const CategoryScreen = ({ navigation, route }: any) => {
   const [selectedSubCategory, setSelectedSubCategory] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  // Custom Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+
+  const showAlert = (title: string, message: string) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
 
   const toggleCategory = (id: number) => {
     setExpandedCategory((prev) => (prev === id ? null : id));
@@ -54,7 +59,7 @@ const CategoryScreen = ({ navigation, route }: any) => {
 
   const handleNavigate = async () => {
     if (!selectedCategory || !selectedSubCategory) {
-      Alert.alert("Selection Required", "Please select a subcategory");
+      showAlert("Selection Required", "Please select a subcategory");
       return;
     }
     try {
@@ -149,8 +154,8 @@ const CategoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Reporting A Problem</Text>
             <Text style={styles.modalMessage}>
-              To report a problem, please open a new job or find existing job
-              and upload files from job-detail view
+              To report a problem, please open a new job or find an existing job
+              and upload files from job-detail view.
             </Text>
             <View style={styles.modalButtonRow}>
               <TouchableOpacity
@@ -169,6 +174,19 @@ const CategoryScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Alert Dialog */}
+      <Portal>
+        <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
+          <Dialog.Title>{alertTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{alertMessage}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAlertVisible(false)}>OK</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };
@@ -188,14 +206,12 @@ const styles = StyleSheet.create({
     color: "#555",
     textDecorationLine: "underline",
   },
-
   uploadSection: {
     margin: 30,
     alignItems: "center",
     width: "100%",
     alignSelf: "center",
   },
-
   uploadSectionTitle: {
     fontSize: 16,
     fontWeight: "600",
@@ -241,7 +257,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#347ab8",
     borderWidth: 1,
     borderColor: "#7e57c2",
-    color: "white",
   },
   subCategoryText: {
     fontSize: 16,

@@ -1,7 +1,7 @@
 // ChangeAppPinScreen.tsx
 import React, { useState } from "react";
-import { View, StyleSheet, Alert } from "react-native";
-import { Card, Text } from "react-native-paper";
+import { View, StyleSheet } from "react-native";
+import { Card, Text, Portal, Dialog, Button } from "react-native-paper";
 import * as SecureStore from "expo-secure-store";
 import PinInput from "../../components/Common/PinInput";
 
@@ -17,6 +17,19 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   const [newPin, setNewPin] = useState<string>("");
   const [pinError, setPinError] = useState<boolean>(false);
   const [pinSuccess, setPinSuccess] = useState<boolean>(false);
+
+  // Custom Dialog state
+  const [dialogVisible, setDialogVisible] = useState<boolean>(false);
+  const [dialogTitle, setDialogTitle] = useState<string>("");
+  const [dialogMessage, setDialogMessage] = useState<string>("");
+  const [dialogOnOk, setDialogOnOk] = useState<() => void>(() => {});
+
+  const showDialog = (title: string, message: string, onOk: () => void) => {
+    setDialogTitle(title);
+    setDialogMessage(message);
+    setDialogOnOk(() => onOk);
+    setDialogVisible(true);
+  };
 
   const handlePinSubmit = async (pin: string) => {
     if (step === 1) {
@@ -37,20 +50,18 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
       if (pin === newPin) {
         await SecureStore.setItemAsync("app_pin", newPin);
         setPinSuccess(true);
-        Alert.alert("Success", "Your PIN has been updated successfully!", [
-          {
-            text: "OK",
-            onPress: () => {
-              if (navigation) {
-                navigation.goBack(); // return to AppLockSettingScreen
-              }
-            },
-          },
-        ]);
+        showDialog("Success", "Your PIN has been updated successfully!", () => {
+          if (navigation) {
+            navigation.goBack(); // return to AppLockSettingScreen
+          }
+          setDialogVisible(false);
+        });
       } else {
         setPinError(true);
-        Alert.alert("Error", "PINs do not match. Please try again.");
-        setStep(2);
+        showDialog("Error", "PINs do not match. Please try again.", () => {
+          setStep(2);
+          setDialogVisible(false);
+        });
         setTimeout(() => setPinError(false), 500);
       }
     }
@@ -83,6 +94,22 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
           />
         </Card.Content>
       </Card>
+
+      {/* Custom Dialog */}
+      <Portal>
+        <Dialog
+          visible={dialogVisible}
+          onDismiss={() => setDialogVisible(false)}
+        >
+          <Dialog.Title>{dialogTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{dialogMessage}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={dialogOnOk}>OK</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };

@@ -1,8 +1,8 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { Card, Text } from "react-native-paper";
+import { StyleSheet, View } from "react-native";
+import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
 import PinInput from "../components/Common/PinInput";
 
 interface LockScreenProps {
@@ -15,6 +15,12 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [isSettingPin, setIsSettingPin] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [pinSuccess, setPinSuccess] = useState(false);
+
+  // Custom Alert State
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertCallback, setAlertCallback] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -52,7 +58,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         onUnlock();
       }
     } catch (error) {
-      Alert.alert("Error", "Biometric authentication failed.");
+      showAlert("Error", "Biometric authentication failed.");
     }
   };
 
@@ -61,21 +67,16 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       await SecureStore.setItemAsync("app_pin", pin);
       setIsPinSet(true);
       setIsSettingPin(false);
+
       if (await isBiometricSupported()) {
-        Alert.alert(
+        showAlert(
           "Enable Biometrics?",
           "Would you like to use fingerprint or Face ID?",
-          [
-            { text: "No", style: "cancel" },
-            {
-              text: "Yes",
-              onPress: async () => {
-                await SecureStore.setItemAsync("biometrics_enabled", "true");
-                setIsBiometricsEnabled(true);
-                attemptBiometricAuth();
-              },
-            },
-          ]
+          async () => {
+            await SecureStore.setItemAsync("biometrics_enabled", "true");
+            setIsBiometricsEnabled(true);
+            attemptBiometricAuth();
+          }
         );
       } else {
         onUnlock();
@@ -93,6 +94,14 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         setTimeout(() => setPinError(false), 500);
       }
     }
+  };
+
+  // Custom Alert Function
+  const showAlert = (title: string, message: string, callback?: () => void) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertCallback(() => callback || null);
+    setAlertVisible(true);
   };
 
   return (
@@ -122,6 +131,26 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           )}
         </Card.Content>
       </Card>
+
+      {/* Custom Alert Dialog */}
+      <Portal>
+        <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
+          <Dialog.Title>{alertTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{alertMessage}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setAlertVisible(false);
+                if (alertCallback) alertCallback();
+              }}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };

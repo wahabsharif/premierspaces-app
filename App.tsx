@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Provider as PaperProvider } from "react-native-paper";
 
 import { AppNavigator } from "./components/Common/AppNavigator";
 import LockScreen from "./screens/LockScreen";
@@ -84,21 +85,23 @@ export default function App() {
   }
 
   return (
-    <ImageBackground source={backgroundImage} style={styles.background}>
-      <SafeAreaView style={styles.container}>
-        {isUnlocked ? (
-          <NavigationContainer>
-            {isLoggedIn ? (
-              <AppNavigator setIsPickingImage={setIsPickingImage} />
-            ) : (
-              <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />
-            )}
-          </NavigationContainer>
-        ) : (
-          <LockScreen onUnlock={() => setIsUnlocked(true)} />
-        )}
-      </SafeAreaView>
-    </ImageBackground>
+    <PaperProvider>
+      <ImageBackground source={backgroundImage} style={styles.background}>
+        <SafeAreaView style={styles.container}>
+          {isUnlocked ? (
+            <NavigationContainer>
+              {isLoggedIn ? (
+                <AppNavigator setIsPickingImage={setIsPickingImage} />
+              ) : (
+                <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />
+              )}
+            </NavigationContainer>
+          ) : (
+            <LockScreen onUnlock={() => setIsUnlocked(true)} />
+          )}
+        </SafeAreaView>
+      </ImageBackground>
+    </PaperProvider>
   );
 }
 
