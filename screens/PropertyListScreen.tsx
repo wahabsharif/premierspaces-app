@@ -11,11 +11,7 @@ import {
 } from "react-native";
 import Header from "../components/Header";
 import { propertyListData } from "../data/propertyListData";
-
-// Define your route parameters
-type RootStackParamList = {
-  CategoryScreen: { paramKey: string };
-};
+import { RootStackParamList } from "../types";
 
 const PropertyListScreen = () => {
   const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(

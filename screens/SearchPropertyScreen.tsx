@@ -10,11 +10,7 @@ import {
   View,
 } from "react-native";
 import Header from "../components/Header";
-
-type RootStackParamList = {
-  SearchPropertyScreen: undefined;
-  PropertyListScreen: { door_num: string } | undefined;
-};
+import { RootStackParamList } from "../types";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
