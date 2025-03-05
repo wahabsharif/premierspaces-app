@@ -6,4 +6,5 @@ export type RootStackParamList = {
   CategoryScreen: { paramKey: string };
   SearchPropertyScreen: undefined;
   PropertyListScreen: { door_num: string } | undefined;
+  ChangeAppPinScreen: undefined;
 };

@@ -1,13 +1,13 @@
-// AppNavigator.tsx
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-// Import your screens
 import SearchPropertyScreen from "../screens/SearchPropertyScreen";
 import PropertyListScreen from "../screens/PropertyListScreen";
 import CategoryScreen from "../screens/CategoryScreen";
 import UploadScreen from "../screens/UploadScreen";
-import SettingScreen from "../screens/SettingScreen";
+import SettingScreen from "../screens/Settings/SettingScreen";
+import AppLockSettingScreen from "../screens/Settings/AppLockSettingScreen";
+import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
@@ -44,5 +44,10 @@ export const AppNavigator = ({
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />
     <Stack.Screen name="SettingScreen" component={SettingScreen} />
+    <Stack.Screen
+      name="AppLockSettingScreen"
+      component={AppLockSettingScreen}
+    />
+    <Stack.Screen name="ChangeAppPinScreen" component={ChangeAppPinScreen} />
   </Stack.Navigator>
 );

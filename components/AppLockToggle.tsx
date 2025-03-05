@@ -39,7 +39,7 @@ const AppLockToggle: React.FC<AppLockToggleProps> = ({ onLockEnable }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>App Lock</Text>
+      <Text style={styles.label}>Enable App Lock</Text>
       <Switch onValueChange={toggleSwitch} value={isAppLockEnabled} />
     </View>
   );
