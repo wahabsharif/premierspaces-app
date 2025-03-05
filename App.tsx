@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AppNavigator } from "./components/AppNavigator";
+import { AppNavigator } from "./components/Common/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 

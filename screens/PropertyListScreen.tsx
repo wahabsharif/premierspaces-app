@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Header from "../components/Header";
+import Header from "../components/Common/Header";
 import { propertyListData } from "../data/propertyListData";
 import { RootStackParamList } from "../types";
 

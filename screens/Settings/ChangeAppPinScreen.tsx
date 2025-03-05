@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { View, StyleSheet, Alert } from "react-native";
 import { Card, Text } from "react-native-paper";
 import * as SecureStore from "expo-secure-store";
-import PinInput from "../../components/PinInput";
+import PinInput from "../../components/Common/PinInput";
 
 interface ChangeAppPinScreenProps {
   navigation: any;

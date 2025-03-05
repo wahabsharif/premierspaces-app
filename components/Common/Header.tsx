@@ -1,17 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../types";
+import React, { useEffect, useState } from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { RootStackParamList } from "../../types";
 
 type HeaderNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
 const Header = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [userName, setUserName] = useState("Profile");
-  // Use the generic type to type the navigation object.
   const navigation = useNavigation<HeaderNavigationProp>();
 
   useEffect(() => {
@@ -41,36 +40,30 @@ const Header = () => {
   const handleOptionSelect = (option: string) => {
     setDropdownVisible(false);
     if (option === "Settings") {
-      // This now works because the navigation type is properly defined.
       navigation.navigate("SettingScreen");
     }
-    // Add navigation logic for other options as needed.
   };
 
   return (
     <>
       <View style={styles.headerContainer}>
-        {/* Left Side - Hamburger Icon */}
         <TouchableOpacity onPress={handleDropdownPress} style={styles.left}>
           <MaterialCommunityIcons name="menu" size={24} color="black" />
         </TouchableOpacity>
 
-        {/* Center - Logo */}
         <View style={styles.center}>
           <Image
-            source={require("../assets/icon.png")}
+            source={require("../../assets/icon.png")}
             style={styles.logo}
             resizeMode="contain"
           />
         </View>
 
-        {/* Right Side - Username */}
         <View style={styles.right}>
           <Text style={styles.rightText}>{userName}</Text>
         </View>
       </View>
 
-      {/* Dropdown List */}
       {dropdownVisible && (
         <View style={styles.dropdownContainer}>
           {dropdownOptions.map((option) => (
@@ -91,10 +84,9 @@ const Header = () => {
 const styles = StyleSheet.create({
   headerContainer: {
     height: 60,
-    backgroundColor: "#fff",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: 20,
     justifyContent: "space-between",
     elevation: 3,
     shadowColor: "#000",

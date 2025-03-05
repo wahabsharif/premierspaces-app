@@ -1,13 +1,13 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import SearchPropertyScreen from "../screens/SearchPropertyScreen";
-import PropertyListScreen from "../screens/PropertyListScreen";
-import CategoryScreen from "../screens/CategoryScreen";
-import UploadScreen from "../screens/UploadScreen";
-import SettingScreen from "../screens/Settings/SettingScreen";
-import AppLockSettingScreen from "../screens/Settings/AppLockSettingScreen";
-import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
+import SearchPropertyScreen from "../../screens/SearchPropertyScreen";
+import PropertyListScreen from "../../screens/PropertyListScreen";
+import CategoryScreen from "../../screens/CategoryScreen";
+import UploadScreen from "../../screens/UploadScreen";
+import SettingScreen from "../../screens/Settings/SettingScreen";
+import AppLockSettingScreen from "../../screens/Settings/AppLockSettingScreen";
+import ChangeAppPinScreen from "../../screens/Settings/ChangeAppPinScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;

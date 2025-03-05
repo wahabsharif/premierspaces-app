@@ -5,8 +5,8 @@ import { Button } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../../types";
-import AppLockToggle from "../../components/AppLockToggle";
-import Header from "../../components/Header";
+import AppLockToggle from "../../components/AppLock/AppLockToggle";
+import Header from "../../components/Common/Header";
 
 // Define the type for the navigation prop
 type AppLockSettingScreenNavigationProp = StackNavigationProp<

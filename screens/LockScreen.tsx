@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { Card, Text } from "react-native-paper";
-import PinInput from "../components/PinInput";
+import PinInput from "../components/Common/PinInput";
 
 interface LockScreenProps {
   onUnlock: () => void;
