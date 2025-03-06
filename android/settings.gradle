@@ -21,7 +21,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'Premier Gallery'
+rootProject.name = 'Premier Spaces'
 
 dependencyResolutionManagement {
   versionCatalogs {
