@@ -1,23 +1,38 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
-import { categories } from "../data/categoryData";
+import axios from "axios";
 
 const CategoryScreen = ({ navigation, route }: any) => {
   const { paramKey } = route.params;
-
+  const [categories, setCategories] = useState<any[]>([]);
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // Custom Alert state
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+
+  useEffect(() => {
+    axios
+      .get("http://premierspaces.uk/mapp/fileuploadcats.php")
+      .then((response) => {
+        if (response.data.status === 1) {
+          setCategories(response.data.payload);
+        } else {
+          showAlert("Error", "Failed to load categories");
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching categories", error);
+        showAlert("Error", "An error occurred while fetching categories");
+      });
+  }, []);
 
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
@@ -49,7 +64,7 @@ const CategoryScreen = ({ navigation, route }: any) => {
             <Text
               style={[styles.subCategoryText, isSelected && { color: "#fff" }]}
             >
-              {subCategory.name}
+              {subCategory.sub_category}
             </Text>
           </TouchableOpacity>
         );
