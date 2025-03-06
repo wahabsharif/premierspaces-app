@@ -32,7 +32,7 @@ const SearchPropertyScreen: React.FC = () => {
   const handleSearch = async () => {
     setError("");
     setLoading(true);
-    setSelectedId(null); // reset any selection on new search
+    setSelectedId(null);
     try {
       const url = `http://premierspaces.uk/mapp/searchproperty.php?userid=1&door_num=${door_num}`;
       const response = await axios.get(url);
@@ -72,6 +72,17 @@ const SearchPropertyScreen: React.FC = () => {
     }
   };
 
+  const handleNavigate = () => {
+    const selectedProperty = results.find((item) => item.id === selectedId);
+    if (selectedProperty) {
+      navigation.navigate("CategoryScreen", {
+        paramKey: selectedProperty.address,
+      });
+    } else {
+      console.warn("No property selected");
+    }
+  };
+
   const renderResultItem = ({ item }: { item: any }) => {
     const isSelected = item.id === selectedId;
     return (
@@ -101,9 +112,7 @@ const SearchPropertyScreen: React.FC = () => {
               style={styles.input}
               placeholder="Enter door number (e.g., 33, 32B)"
               value={door_num}
-              onChangeText={(text) => {
-                setdoor_num(text);
-              }}
+              onChangeText={(text) => setdoor_num(text)}
             />
           </View>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -125,6 +134,14 @@ const SearchPropertyScreen: React.FC = () => {
               contentContainerStyle={styles.resultsContainer}
             />
           </View>
+        )}
+        {selectedId && (
+          <TouchableOpacity
+            style={styles.navigateButton}
+            onPress={handleNavigate}
+          >
+            <Ionicons name="arrow-forward" size={24} color="#fff" />
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -184,6 +201,19 @@ const styles = StyleSheet.create({
   floatingIcon: {
     position: "absolute",
     bottom: 20,
+    right: 20,
+    backgroundColor: "#347ab8",
+    padding: 16,
+    borderRadius: 50,
+    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 1,
+  },
+  navigateButton: {
+    position: "absolute",
+    bottom: 90,
     right: 20,
     backgroundColor: "#347ab8",
     padding: 16,
