@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 16,
   },
   item: {

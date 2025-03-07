@@ -3,7 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View } from "react-native";
+import styles from "../../Constants/styles";
 import { RootStackParamList } from "../../types";
 
 type HeaderNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
@@ -80,67 +81,5 @@ const Header = () => {
     </>
   );
 };
-
-const styles = StyleSheet.create({
-  headerContainer: {
-    height: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    justifyContent: "space-between",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  left: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  center: {
-    flex: 2,
-    alignItems: "center",
-  },
-  logo: {
-    width: 100,
-    height: 40,
-  },
-  right: {
-    flex: 1,
-    alignItems: "flex-end",
-  },
-  rightText: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "bold",
-    flexShrink: 1,
-    textAlign: "right",
-  },
-  dropdownContainer: {
-    position: "absolute",
-    top: 90,
-    left: 10,
-    width: 150,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 5,
-    zIndex: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  dropdownItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: "#333",
-  },
-});
 
 export default Header;

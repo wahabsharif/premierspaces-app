@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { StyleSheet, View, TouchableOpacity, Animated } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { color } from "../../Constants/theme";
 
 interface PinInputProps {
   onSubmit: (pin: string) => void;
@@ -153,7 +154,7 @@ const styles = StyleSheet.create({
     width: 15,
     height: 15,
     borderRadius: 8,
-    backgroundColor: "#ccc",
+    backgroundColor: color.secondary,
     marginHorizontal: 10,
   },
   numpad: {
@@ -168,16 +169,16 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: "#fff",
+    backgroundColor: color.white,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: color.secondary,
     justifyContent: "center",
     alignItems: "center",
     elevation: 3,
   },
   numpadButtonText: {
     fontSize: 24,
-    color: "#333",
+    color: color.gray,
   },
 });
 

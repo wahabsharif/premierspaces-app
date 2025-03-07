@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Button } from "react-native-paper";
 import AppLockToggle from "../../components/AppLock/AppLockToggle";
 import Header from "../../components/Common/Header";
+import { color, fontSize } from "../../Constants/theme";
 import LockScreen from "../../screens/LockScreen";
 import { RootStackParamList } from "../../types";
 
@@ -49,11 +50,11 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   title: {
-    fontSize: 24,
+    fontSize: fontSize.xl,
     margin: 20,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 20,
-    color: "#333",
+    color: color.gray,
     textAlign: "left",
   },
   button: {
@@ -62,9 +63,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#347ab8",
-    color: "#fff",
-    fontWeight: "bold",
+    backgroundColor: color.primary,
+    color: color.white,
+    fontWeight: "600",
     textAlign: "center",
   },
 });

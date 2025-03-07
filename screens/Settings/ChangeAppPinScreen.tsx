@@ -1,10 +1,9 @@
-// ChangeAppPinScreen.tsx
-import React, { useState } from "react";
-import { View, StyleSheet } from "react-native";
-import { Card, Text, Portal, Dialog, Button } from "react-native-paper";
 import * as SecureStore from "expo-secure-store";
+import React, { useState } from "react";
+import { Image, View } from "react-native";
+import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
 import PinInput from "../../components/Common/PinInput";
-
+import styles from "../../Constants/styles";
 interface ChangeAppPinScreenProps {
   navigation: any;
 }
@@ -12,13 +11,11 @@ interface ChangeAppPinScreenProps {
 const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   navigation,
 }) => {
-  // Step 1: Verify current PIN, Step 2: Enter new PIN, Step 3: Confirm new PIN
   const [step, setStep] = useState<number>(1);
   const [newPin, setNewPin] = useState<string>("");
   const [pinError, setPinError] = useState<boolean>(false);
   const [pinSuccess, setPinSuccess] = useState<boolean>(false);
 
-  // Custom Dialog state
   const [dialogVisible, setDialogVisible] = useState<boolean>(false);
   const [dialogTitle, setDialogTitle] = useState<string>("");
   const [dialogMessage, setDialogMessage] = useState<string>("");
@@ -33,7 +30,6 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
 
   const handlePinSubmit = async (pin: string) => {
     if (step === 1) {
-      // Verify the current PIN
       const storedPin = await SecureStore.getItemAsync("app_pin");
       if (pin === storedPin) {
         setStep(2);
@@ -42,17 +38,15 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
         setTimeout(() => setPinError(false), 500);
       }
     } else if (step === 2) {
-      // Store new PIN temporarily and move to confirmation step
       setNewPin(pin);
       setStep(3);
     } else if (step === 3) {
-      // Confirm the new PIN matches the previously entered value
       if (pin === newPin) {
         await SecureStore.setItemAsync("app_pin", newPin);
         setPinSuccess(true);
         showDialog("Success", "Your PIN has been updated successfully!", () => {
           if (navigation) {
-            navigation.goBack(); // return to AppLockSettingScreen
+            navigation.goBack();
           }
           setDialogVisible(false);
         });
@@ -67,7 +61,6 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
     }
   };
 
-  // Update the title and subtitle based on the current step
   let title = "";
   let subtitle = "";
   if (step === 1) {
@@ -82,7 +75,12 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.pinContainer}>
+      <Image
+        source={require("../../assets/icon.png")}
+        style={styles.pinLogo}
+        resizeMode="contain"
+      />
       <Card style={styles.card}>
         <Card.Content>
           <Text style={styles.title}>{title}</Text>
@@ -95,7 +93,6 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
         </Card.Content>
       </Card>
 
-      {/* Custom Dialog */}
       <Portal>
         <Dialog
           visible={dialogVisible}
@@ -113,34 +110,5 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f6fa",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  card: {
-    width: "85%",
-    padding: 25,
-    elevation: 8,
-    borderRadius: 15,
-    backgroundColor: "#fff",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 10,
-    color: "#333",
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 30,
-    color: "#666",
-  },
-});
 
 export default ChangeAppPinScreen;

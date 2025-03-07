@@ -209,14 +209,14 @@ const CategoryScreen = ({ navigation, route }: any) => {
 const styles = StyleSheet.create({
   titleText: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 10,
     color: "#333",
   },
   propertyAddressText: {
     fontSize: 18,
     marginVertical: 20,
-    fontWeight: "bold",
+    fontWeight: "600",
     fontVariant: ["small-caps"],
     color: "#555",
     textDecorationLine: "underline",
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 10,
     color: "#333",
   },

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import Header from "../components/Common/Header";
 import { RootStackParamList } from "../types";
+import styles from "../Constants/styles";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -147,119 +148,5 @@ const SearchPropertyScreen: React.FC = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    padding: 16,
-    position: "relative",
-  },
-  headingContainer: {
-    alignItems: "flex-start",
-    marginTop: 16,
-  },
-  heading: {
-    fontSize: 30,
-    fontWeight: "bold",
-    marginBottom: 16,
-    textAlign: "left",
-  },
-  subHeading: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginVertical: 12,
-    textAlign: "center",
-  },
-  inputWrapper: {
-    flex: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 20,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-  },
-  label: {
-    marginRight: 8,
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  input: {
-    flex: 1,
-    height: 50,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-  },
-  floatingIcon: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    backgroundColor: "#347ab8",
-    padding: 16,
-    borderRadius: 50,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 1,
-  },
-  navigateButton: {
-    position: "absolute",
-    bottom: 90,
-    right: 20,
-    backgroundColor: "#347ab8",
-    padding: 16,
-    borderRadius: 50,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 1,
-  },
-  errorText: {
-    color: "red",
-    marginTop: 10,
-    fontSize: 16,
-  },
-  resultsContainer: {
-    paddingVertical: 20,
-  },
-  resultItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  selectedItem: {
-    backgroundColor: "#347ab8",
-    borderRadius: 5,
-  },
-  resultText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  selectedText: {
-    color: "#fff",
-  },
-  resultCompany: {
-    fontSize: 14,
-    color: "#555",
-  },
-  list: {
-    flex: 1,
-    marginTop: 16,
-    marginBottom: 20,
-    paddingBottom: 20,
-    borderTopWidth: 4,
-    borderTopColor: "#ccc",
-  },
-});
 
 export default SearchPropertyScreen;

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import Header from "../../components/Common/Header";
 import { RootStackParamList } from "../../types";
+import { fontSize } from "../../Constants/theme";
 
 type SettingScreenNavigationProp = NavigationProp<
   RootStackParamList,
@@ -29,21 +30,20 @@ const SettingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   title: {
-    fontSize: 24,
+    fontSize: fontSize.xl,
     marginLeft: 20,
     marginVertical: 20,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
   menuItem: {
     padding: 15,
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: "#ddd",
   },
   menuText: {
-    fontSize: 18,
+    fontSize: fontSize.medium,
   },
 });
 

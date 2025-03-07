@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Switch, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { color, fontSize } from "../../Constants/theme";
 
 interface AppLockToggleProps {
   onLockEnable?: () => void;
@@ -52,12 +53,12 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 20,
     justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderColor: "#ccc",
+    borderWidth: 2,
+    borderColor: color.secondary,
   },
   label: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: fontSize.medium,
+    color: color.gray,
   },
 });
 

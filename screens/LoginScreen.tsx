@@ -1,14 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useState } from "react";
 import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { Portal, Dialog, Button } from "react-native-paper";
+import { Button, Dialog, Portal } from "react-native-paper";
+import styles from "../Constants/styles";
 import { loginUser } from "../data/userLoginData";
 
 const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
-
-  // Custom Alert State
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
@@ -44,20 +43,13 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   };
 
   return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 50,
-      }}
-    >
+    <View style={styles.container}>
       <Image
         source={require("../assets/icon.png")}
-        style={{ width: 200, height: 200, marginBottom: 30 }}
+        style={styles.image}
         resizeMode="contain"
       />
-      <View style={{ width: "100%" }}>
+      <View style={styles.inputContainer}>
         <View
           style={{
             flexDirection: "row",
@@ -65,33 +57,17 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
             marginBottom: 10,
           }}
         >
-          <Text
-            style={{
-              width: "30%",
-              fontSize: 16,
-              fontWeight: "bold",
-              color: "#333",
-            }}
-          >
-            Initials:
-          </Text>
+          <Text style={styles.label}>Initials:</Text>
           <TextInput
             placeholder="Enter Initials"
             value={initials}
             autoCapitalize="none"
-            onChangeText={(text) => setInitials(text)}
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: "#ccc",
-              padding: 12,
-              borderRadius: 5,
-              backgroundColor: "#fff",
-            }}
+            onChangeText={setInitials}
+            style={styles.input}
           />
         </View>
       </View>
-      <View style={{ width: "100%" }}>
+      <View style={styles.inputContainer}>
         <View
           style={{
             flexDirection: "row",
@@ -99,48 +75,20 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
             marginBottom: 20,
           }}
         >
-          <Text
-            style={{
-              width: "30%",
-              fontSize: 16,
-              fontWeight: "bold",
-              color: "#333",
-            }}
-          >
-            Pin:
-          </Text>
+          <Text style={styles.label}>Pin:</Text>
           <TextInput
             placeholder="Enter Pin"
             value={pin}
             onChangeText={setPin}
             secureTextEntry
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: "#ccc",
-              padding: 12,
-              borderRadius: 5,
-              backgroundColor: "#fff",
-            }}
+            style={styles.input}
           />
         </View>
       </View>
-      <TouchableOpacity
-        onPress={handleLogin}
-        style={{
-          backgroundColor: "#347ab8",
-          padding: 14,
-          borderRadius: 5,
-          width: "100%",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "bold" }}>
-          Login
-        </Text>
+      <TouchableOpacity onPress={handleLogin} style={styles.button}>
+        <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
 
-      {/* Custom Alert Dialog */}
       <Portal>
         <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
           <Dialog.Title>{alertTitle}</Dialog.Title>

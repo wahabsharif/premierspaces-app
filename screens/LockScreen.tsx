@@ -1,10 +1,10 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
 import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
 import PinInput from "../components/Common/PinInput";
-
+import styles from "../Constants/styles";
 interface LockScreenProps {
   onUnlock: () => void;
 }
@@ -105,7 +105,12 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.pinContainer}>
+      <Image
+        source={require("../assets/icon.png")}
+        style={styles.pinLogo}
+        resizeMode="contain"
+      />
       <Card style={styles.card}>
         <Card.Content>
           {isSettingPin ? (
@@ -154,34 +159,5 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f6fa",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  card: {
-    width: "85%",
-    padding: 25,
-    elevation: 8,
-    borderRadius: 15,
-    backgroundColor: "#fff",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 10,
-    color: "#333",
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 30,
-    color: "#666",
-  },
-});
 
 export default LockScreen;
