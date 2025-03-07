@@ -65,9 +65,11 @@ const SearchPropertyScreen: React.FC = () => {
   };
 
   const handleSelectProperty = async (item: any) => {
+    console.log("handleSelectProperty called with item:", item);
     setSelectedId(item.id);
     try {
       await AsyncStorage.setItem("selectedProperty", JSON.stringify(item));
+      console.log("Property saved to AsyncStorage:", item);
     } catch (error) {
       console.error("Error saving property:", error);
     }

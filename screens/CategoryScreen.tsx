@@ -78,15 +78,27 @@ const CategoryScreen = ({ navigation, route }: any) => {
       return;
     }
     try {
-      await AsyncStorage.setItem(
-        "selectedData",
-        JSON.stringify({
-          category: selectedCategory,
-          subCategory: selectedSubCategory,
-        })
-      );
+      const dataToStore = JSON.stringify({
+        category: {
+          id: selectedCategory.id,
+          category: selectedCategory.category,
+        },
+        subCategory: selectedSubCategory,
+      });
+
+      console.log("Data being stored in AsyncStorage:", dataToStore);
+
+      await AsyncStorage.setItem("selectedData", dataToStore);
+
+      // Verify the stored data
+      const storedData = await AsyncStorage.getItem("selectedData");
+      console.log("Data retrieved from AsyncStorage:", storedData);
+
+      if (storedData !== dataToStore) {
+        console.warn("Stored data doesn't match the original data");
+      }
     } catch (error) {
-      console.error("Error storing selected data", error);
+      console.error("Error storing or retrieving selected data", error);
     }
     navigation.navigate("UploadScreen", {
       category: selectedCategory,
@@ -112,7 +124,7 @@ const CategoryScreen = ({ navigation, route }: any) => {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f8f9fa" }}>
+    <View style={{ flex: 1 }}>
       <Header />
       <View style={{ padding: 20 }}>
         <Text style={styles.titleText}>Select a Category To Upload</Text>
