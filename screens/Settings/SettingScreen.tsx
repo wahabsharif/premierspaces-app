@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import Header from "../../components/Common/Header";
-import { RootStackParamList } from "../../types"; // adjust the path as necessary
+import { RootStackParamList } from "../../types";
 
 type SettingScreenNavigationProp = NavigationProp<
   RootStackParamList,

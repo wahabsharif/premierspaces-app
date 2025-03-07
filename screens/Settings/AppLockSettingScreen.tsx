@@ -1,14 +1,14 @@
 // AppLockSettingScreen.tsx
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Button } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../../types";
+import React, { useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { Button } from "react-native-paper";
 import AppLockToggle from "../../components/AppLock/AppLockToggle";
 import Header from "../../components/Common/Header";
+import LockScreen from "../../screens/LockScreen";
+import { RootStackParamList } from "../../types";
 
-// Define the type for the navigation prop
 type AppLockSettingScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
   "AppLockSettingScreen"
@@ -16,12 +16,22 @@ type AppLockSettingScreenNavigationProp = StackNavigationProp<
 
 const AppLockSettingScreen = () => {
   const navigation = useNavigation<AppLockSettingScreenNavigationProp>();
+  const [showSetupLock, setShowSetupLock] = useState(false);
+
+  const handleLockEnable = () => {
+    setShowSetupLock(true);
+  };
+
+  const handleUnlock = () => {
+    setShowSetupLock(false);
+  };
 
   return (
     <View style={styles.container}>
       <Header />
       <Text style={styles.title}>App Lock Settings</Text>
-      <AppLockToggle />
+      <AppLockToggle onLockEnable={handleLockEnable} />
+      {showSetupLock && <LockScreen onUnlock={handleUnlock} />}
       <Button
         style={styles.button}
         mode="contained"
