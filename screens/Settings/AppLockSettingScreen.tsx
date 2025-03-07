@@ -9,6 +9,7 @@ import Header from "../../components/Common/Header";
 import { color, fontSize } from "../../Constants/theme";
 import LockScreen from "../../screens/LockScreen";
 import { RootStackParamList } from "../../types";
+import { Modal } from "react-native";
 
 type AppLockSettingScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -32,7 +33,15 @@ const AppLockSettingScreen = () => {
       <Header />
       <Text style={styles.title}>App Lock Settings</Text>
       <AppLockToggle onLockEnable={handleLockEnable} />
-      {showSetupLock && <LockScreen onUnlock={handleUnlock} />}
+      {showSetupLock && (
+        <Modal
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleUnlock}
+        >
+          <LockScreen onUnlock={handleUnlock} />
+        </Modal>
+      )}
       <Button
         style={styles.button}
         mode="contained"
