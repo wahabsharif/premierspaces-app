@@ -187,6 +187,7 @@ export default StyleSheet.create({
     width: 200,
     height: 200,
     marginBottom: 30,
+    alignItems: "center",
   },
   input: {
     flex: 1,

@@ -1,9 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  StyleSheet,
+} from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import styles from "../Constants/styles";
 import { loginUser } from "../data/userLoginData";
+import { fontSize } from "../Constants/theme";
 
 const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   const [initials, setInitials] = useState("");
@@ -43,7 +51,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={internalstyles.container}>
       <Image
         source={require("../assets/icon.png")}
         style={styles.image}
@@ -57,7 +65,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
             marginBottom: 10,
           }}
         >
-          <Text style={styles.label}>Initials:</Text>
+          <Text style={internalstyles.label}>Initials:</Text>
           <TextInput
             placeholder="Enter Initials"
             value={initials}
@@ -75,7 +83,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
             marginBottom: 20,
           }}
         >
-          <Text style={styles.label}>Pin:</Text>
+          <Text style={internalstyles.label}>Pin:</Text>
           <TextInput
             placeholder="Enter Pin"
             value={pin}
@@ -110,5 +118,18 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
     </View>
   );
 };
-
+const internalstyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  label: {
+    width: "20%",
+    marginRight: 8,
+    fontSize: fontSize.large,
+    fontWeight: "600",
+  },
+});
 export default LoginScreen;
