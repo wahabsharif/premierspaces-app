@@ -20,7 +20,7 @@ const CategoryScreen = ({ navigation, route }: any) => {
 
   useEffect(() => {
     axios
-      .get("http://premierspaces.uk/mapp/fileuploadcats.php")
+      .get("http://easyhomz.co.uk/mapp/fileuploadcats.php")
       .then((response) => {
         if (response.data.status === 1) {
           setCategories(response.data.payload);

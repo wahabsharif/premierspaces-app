@@ -35,7 +35,7 @@ const SearchPropertyScreen: React.FC = () => {
     setLoading(true);
     setSelectedId(null);
     try {
-      const url = `http://premierspaces.uk/mapp/searchproperty.php?userid=1&door_num=${door_num}`;
+      const url = `http://easyhomz.co.uk/mapp/searchproperty.php?userid=lxtf1nulw3&door_num=${door_num}`;
       const response = await axios.get(url);
       const data = response.data;
 
