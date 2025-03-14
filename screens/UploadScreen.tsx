@@ -5,6 +5,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as Camera from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -134,10 +136,39 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     updatedMedia.splice(index, 1);
     setMedia(updatedMedia);
   };
+  const getFileHeader = async (uri: string) => {
+    try {
+      const base64Data = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const mimeType = uri.endsWith(".png") ? "image/png" : "image/jpeg";
+      return `data:${mimeType};base64,${base64Data.slice(0, 50)}...`;
+    } catch (error) {
+      console.error("Error reading file as base64:", error);
+      return "";
+    }
+  };
 
   const openImage = (uri: string) => {
     setSelectedImage(uri);
     setModalVisible(true);
+  };
+
+  const getFileSize = async (uri: string): Promise<number | null> => {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
+
+      if (!fileInfo.exists) {
+        console.error("File does not exist:", uri);
+        return null;
+      }
+
+      return fileInfo.size; // fileInfo.size should now be available
+    } catch (error) {
+      console.error("Error getting file size:", error);
+      return null;
+    }
   };
 
   const uploadImages = async () => {
@@ -156,6 +187,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
     setUploading(true);
     setUploadedCount(0);
+
     const fileId = getFileId();
     console.log(`Generated file ID: ${fileId}`);
 
@@ -164,21 +196,26 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
     try {
       const uploadPromises = media.map(async (uri, index) => {
+        const fileSize = await getFileSize(uri);
+        if (fileSize === null) return;
+
         const formData = new FormData();
         const fileName = uri.split("/").pop() || `image_${index}.jpg`;
         const fileType = fileName.endsWith(".png") ? "image/png" : "image/jpeg";
+        const fileHeaderValue = await getFileHeader(uri);
 
         formData.append("id", fileId);
         formData.append("total_segments", totalFiles.toString());
         formData.append("segment_number", (index + 1).toString());
-        formData.append("main_category", category?.category || "");
-        formData.append("category_level_1", subCategory?.sub_category || "");
+        formData.append("main_category", category?.id?.toString() || "");
+        formData.append("category_level_1", subCategory?.id?.toString() || "");
         formData.append("property_id", storedProperty.id || "");
         formData.append("job_id", storedProperty.job_id || "");
+        formData.append("file_header", fileHeaderValue);
         formData.append("file_name", fileName);
         formData.append("file_type", fileType);
+        formData.append("file_size", fileSize.toString()); // Add file size
 
-        // Append the file
         formData.append("content", {
           uri: uri,
           type: fileType,
@@ -237,6 +274,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       setUploading(false);
     }
   };
+
   return (
     <View style={{ flex: 1 }}>
       <Header />
