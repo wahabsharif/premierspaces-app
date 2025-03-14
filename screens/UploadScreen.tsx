@@ -26,6 +26,11 @@ interface UploadScreenProps {
   route: any;
   navigation: any;
 }
+interface ProgressBarProps {
+  progress: number;
+  uploadedCount: number;
+  totalCount: number;
+}
 
 const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
@@ -48,6 +53,22 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+  const [uploadedCount, setUploadedCount] = useState(0);
+
+  const ProgressBar: React.FC<ProgressBarProps> = ({
+    progress,
+    uploadedCount,
+    totalCount,
+  }) => (
+    <View style={progressStyles.container}>
+      <View style={progressStyles.barContainer}>
+        <View style={[progressStyles.bar, { width: `${progress}%` }]} />
+      </View>
+      <Text style={progressStyles.text}>
+        {`${uploadedCount}/${totalCount} (${progress}%)`}
+      </Text>
+    </View>
+  );
 
   useEffect(() => {
     const fetchStoredProperty = async () => {
@@ -163,6 +184,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
 
     setUploading(true);
+    setUploadedCount(0);
     const fileId = getFileId();
     console.log(`Generated file ID: ${fileId}`);
 
@@ -214,6 +236,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
           newUploadProgress[uri] = "Complete";
           setUploadProgress({ ...newUploadProgress });
+          setUploadedCount((prevCount) => prevCount + 1);
           return response.data;
         } catch (error) {
           console.error(`Error uploading image ${index + 1}:`, error);
@@ -243,7 +266,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       setUploading(false);
     }
   };
-
   return (
     <View style={{ flex: 1 }}>
       <Header />
@@ -287,7 +309,13 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             </Text>
           </TouchableOpacity>
         </View>
-
+        {uploading && (
+          <ProgressBar
+            progress={Math.round((uploadedCount / media.length) * 100)}
+            uploadedCount={uploadedCount}
+            totalCount={media.length}
+          />
+        )}
         {/* Image Grid */}
         <FlatList
           data={media}
@@ -535,5 +563,26 @@ const internalStyle = StyleSheet.create({
     marginVertical: 10,
   },
 });
-
+const progressStyles = StyleSheet.create({
+  container: {
+    marginVertical: 10,
+    alignItems: "center",
+  },
+  barContainer: {
+    width: "100%",
+    height: 20,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  bar: {
+    height: "100%",
+    backgroundColor: color.primary,
+  },
+  text: {
+    marginTop: 5,
+    fontSize: fontSize.medium,
+    color: color.gray,
+  },
+});
 export default UploadScreen;
