@@ -1,8 +1,13 @@
 import { AntDesign } from "@expo/vector-icons";
+import Entypo from "@expo/vector-icons/Entypo";
+import Feather from "@expo/vector-icons/Feather";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import * as Camera from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -11,25 +16,17 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from "react-native";
 import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
-import style from "../Constants/styles";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { color, fontSize } from "../Constants/theme";
-import Entypo from "@expo/vector-icons/Entypo";
-import Feather from "@expo/vector-icons/Feather";
 import Header from "../components/Common/Header";
-import axios from "axios";
+import { ProgressBar } from "../components/Common/ProgressBar";
+import style from "../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
+import { getFileId } from "../helper";
 
 interface UploadScreenProps {
   route: any;
   navigation: any;
-}
-interface ProgressBarProps {
-  progress: number;
-  uploadedCount: number;
-  totalCount: number;
 }
 
 const screenWidth = Dimensions.get("window").width;
@@ -54,21 +51,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [uploadedCount, setUploadedCount] = useState(0);
-
-  const ProgressBar: React.FC<ProgressBarProps> = ({
-    progress,
-    uploadedCount,
-    totalCount,
-  }) => (
-    <View style={progressStyles.container}>
-      <View style={progressStyles.barContainer}>
-        <View style={[progressStyles.bar, { width: `${progress}%` }]} />
-      </View>
-      <Text style={progressStyles.text}>
-        {`${uploadedCount}/${totalCount} (${progress}%)`}
-      </Text>
-    </View>
-  );
 
   useEffect(() => {
     const fetchStoredProperty = async () => {
@@ -158,17 +140,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setModalVisible(true);
   };
 
-  // Generate a random file ID similar to the web app
-  const getFileId = () => {
-    const chars = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
-    return (
-      chars[Math.floor(Math.random() * 10)] +
-      Math.floor(Math.random() * 1000) +
-      chars[Math.floor(Math.random() * 10)]
-    );
-  };
-
-  // Function to upload images to the server
   const uploadImages = async () => {
     if (media.length === 0) {
       showAlert("Error", "Please select at least one image to upload.");
@@ -563,26 +534,5 @@ const internalStyle = StyleSheet.create({
     marginVertical: 10,
   },
 });
-const progressStyles = StyleSheet.create({
-  container: {
-    marginVertical: 10,
-    alignItems: "center",
-  },
-  barContainer: {
-    width: "100%",
-    height: 20,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  bar: {
-    height: "100%",
-    backgroundColor: color.primary,
-  },
-  text: {
-    marginTop: 5,
-    fontSize: fontSize.medium,
-    color: color.gray,
-  },
-});
+
 export default UploadScreen;
