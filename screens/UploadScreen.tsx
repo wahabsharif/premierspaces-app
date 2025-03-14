@@ -432,7 +432,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         <Snackbar
           visible={snackbarVisible}
           onDismiss={() => setSnackbarVisible(false)}
-          duration={3000}
+          duration={4000}
           action={{
             label: "OK",
             onPress: () => setSnackbarVisible(false),
