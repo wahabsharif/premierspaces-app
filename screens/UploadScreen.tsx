@@ -11,14 +11,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
-import { Button, Dialog, Portal } from "react-native-paper";
+import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
 import style from "../Constants/styles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { color, fontSize } from "../Constants/theme";
 import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import Header from "../components/Common/Header";
+import axios from "axios";
+
 interface UploadScreenProps {
   route: any;
   navigation: any;
@@ -34,6 +37,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const [storedProperty, setStoredProperty] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    [key: string]: string;
+  }>({});
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
 
   // Custom Alert State
   const [alertVisible, setAlertVisible] = useState(false);
@@ -57,10 +66,16 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
     fetchStoredProperty();
   }, []);
+
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertVisible(true);
+  };
+
+  const showSnackbar = (message: string) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
   };
 
   const pickImage = async () => {
@@ -122,6 +137,113 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setModalVisible(true);
   };
 
+  // Generate a random file ID similar to the web app
+  const getFileId = () => {
+    const chars = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+    return (
+      chars[Math.floor(Math.random() * 10)] +
+      Math.floor(Math.random() * 1000) +
+      chars[Math.floor(Math.random() * 10)]
+    );
+  };
+
+  // Function to upload images to the server
+  const uploadImages = async () => {
+    if (media.length === 0) {
+      showAlert("Error", "Please select at least one image to upload.");
+      return;
+    }
+
+    if (!storedProperty) {
+      showAlert(
+        "Error",
+        "No property selected. Please select a property first."
+      );
+      return;
+    }
+
+    setUploading(true);
+    const fileId = getFileId();
+    console.log(`Generated file ID: ${fileId}`);
+
+    const totalFiles = media.length;
+    const newUploadProgress = { ...uploadProgress };
+
+    try {
+      const uploadPromises = media.map(async (uri, index) => {
+        const formData = new FormData();
+        const fileName = uri.split("/").pop() || `image_${index}.jpg`;
+        const fileType = fileName.endsWith(".png") ? "image/png" : "image/jpeg";
+
+        formData.append("id", fileId);
+        formData.append("total_segments", totalFiles.toString());
+        formData.append("segment_number", (index + 1).toString());
+        formData.append("main_category", category?.category || "");
+        formData.append("category_level_1", subCategory?.sub_category || "");
+        formData.append("property_id", storedProperty.id || "");
+        formData.append("job_id", storedProperty.job_id || "");
+        formData.append("file_name", fileName);
+        formData.append("file_type", fileType);
+
+        // Append the file
+        formData.append("content", {
+          uri: uri,
+          type: fileType,
+          name: fileName,
+        } as any);
+
+        try {
+          const response = await axios.post(
+            "http://192.168.18.45:8000/api/upload.php",
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+              onUploadProgress: (progressEvent) => {
+                if (progressEvent.total) {
+                  const percentCompleted = Math.round(
+                    (progressEvent.loaded * 100) / progressEvent.total
+                  );
+                  newUploadProgress[uri] = `${percentCompleted}%`;
+                  setUploadProgress({ ...newUploadProgress });
+                }
+              },
+            }
+          );
+
+          newUploadProgress[uri] = "Complete";
+          setUploadProgress({ ...newUploadProgress });
+          return response.data;
+        } catch (error) {
+          console.error(`Error uploading image ${index + 1}:`, error);
+          if (axios.isAxiosError(error)) {
+            console.error("Error details:", error.response?.data);
+          }
+          newUploadProgress[uri] = "Failed";
+          setUploadProgress({ ...newUploadProgress });
+          throw error;
+        }
+      });
+
+      await Promise.all(uploadPromises);
+      showSnackbar("All images uploaded successfully!");
+      setMedia([]); // Clear the images after successful upload
+    } catch (error) {
+      console.error("Error uploading images:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("Network error details:", error.message);
+        console.error("Error config:", error.config);
+      }
+      showAlert(
+        "Upload Error",
+        "Some images failed to upload. Please check your network connection and try again."
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <Header />
@@ -149,6 +271,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[internalStyle.button, { backgroundColor: color.gray }]}
             onPress={pickImage}
+            disabled={uploading}
           >
             <Text style={internalStyle.buttonText}>
               <Entypo name="images" size={24} color="white" /> Gallery
@@ -157,6 +280,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[internalStyle.button, { backgroundColor: color.primary }]}
             onPress={takePhoto}
+            disabled={uploading}
           >
             <Text style={internalStyle.buttonText}>
               <Feather name="camera" size={24} color="white" /> Camera
@@ -173,17 +297,46 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             <TouchableOpacity onPress={() => openImage(item)}>
               <View style={internalStyle.imageContainer}>
                 <Image source={{ uri: item }} style={internalStyle.image} />
-                <TouchableOpacity
-                  style={internalStyle.removeButton}
-                  onPress={() => removeImage(index)}
-                >
-                  <AntDesign name="closecircle" size={24} color="red" />
-                </TouchableOpacity>
+                {uploadProgress[item] && (
+                  <View style={internalStyle.progressOverlay}>
+                    <Text style={internalStyle.progressText}>
+                      {uploadProgress[item]}
+                    </Text>
+                  </View>
+                )}
+                {!uploading && (
+                  <TouchableOpacity
+                    style={internalStyle.removeButton}
+                    onPress={() => removeImage(index)}
+                  >
+                    <AntDesign name="closecircle" size={24} color="red" />
+                  </TouchableOpacity>
+                )}
               </View>
             </TouchableOpacity>
           )}
           contentContainerStyle={internalStyle.grid}
         />
+
+        {/* Upload Button */}
+        {media.length > 0 && (
+          <TouchableOpacity
+            style={[
+              internalStyle.uploadButton,
+              uploading && internalStyle.disabledButton,
+            ]}
+            onPress={uploadImages}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Text style={internalStyle.uploadButtonText}>
+                Upload {media.length} Image{media.length > 1 ? "s" : ""}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Image Modal */}
         <Modal visible={modalVisible} transparent={true} animationType="slide">
@@ -210,7 +363,10 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
                 <TouchableOpacity onPress={() => setSelectedImage(item)}>
                   <Image
                     source={{ uri: item }}
-                    style={internalStyle.thumbnail}
+                    style={[
+                      internalStyle.thumbnail,
+                      selectedImage === item && internalStyle.selectedThumbnail,
+                    ]}
                   />
                 </TouchableOpacity>
               )}
@@ -234,6 +390,19 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             </Dialog.Actions>
           </Dialog>
         </Portal>
+
+        {/* Snackbar for notifications */}
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={3000}
+          action={{
+            label: "OK",
+            onPress: () => setSnackbarVisible(false),
+          }}
+        >
+          {snackbarMessage}
+        </Snackbar>
       </View>
     </View>
   );
@@ -262,6 +431,7 @@ const internalStyle = StyleSheet.create({
   },
   grid: {
     marginTop: 20,
+    paddingBottom: 80,
     alignItems: "center",
   },
   imageContainer: {
@@ -280,6 +450,18 @@ const internalStyle = StyleSheet.create({
     backgroundColor: color.secondary,
     borderRadius: 12,
     padding: 2,
+  },
+  progressOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  progressText: {
+    color: color.white,
+    fontSize: fontSize.medium,
+    fontWeight: "bold",
   },
   modalContainer: {
     flex: 1,
@@ -305,6 +487,9 @@ const internalStyle = StyleSheet.create({
     marginTop: 20,
     justifyContent: "center",
   },
+  selectedThumbnail: {
+    borderColor: color.primary,
+  },
   thumbnail: {
     width: 60,
     height: 60,
@@ -312,6 +497,21 @@ const internalStyle = StyleSheet.create({
     marginHorizontal: 5,
     borderWidth: 2,
     borderColor: "white",
+  },
+  uploadButton: {
+    backgroundColor: color.primary,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  uploadButtonText: {
+    color: color.white,
+    fontSize: fontSize.medium,
+    fontWeight: "bold",
+  },
+  disabledButton: {
+    backgroundColor: color.gray,
   },
   propertyInfo: {
     padding: 5,
