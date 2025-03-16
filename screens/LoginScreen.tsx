@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import styles from "../Constants/styles";
-import { loginUser } from "../data/userLoginData";
 import { fontSize } from "../Constants/theme";
 
 const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
@@ -22,27 +21,41 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
   const [alertCallback, setAlertCallback] = useState<(() => void) | null>(null);
 
   const handleLogin = async () => {
-    const response = await loginUser(initials.toLowerCase(), pin);
-    if (response.status === 1) {
-      try {
-        await AsyncStorage.setItem(
-          "userData",
-          JSON.stringify(response.payload)
-        );
-      } catch (error) {
-        console.error("Error storing user data:", error);
+    try {
+      const response = await fetch("http://www.easyhomz.co.uk/mapp/login.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userid: 0,
+          payload: {
+            initials: initials,
+            pin: pin,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 1) {
+        // Store user data in AsyncStorage
+        await AsyncStorage.setItem("userData", JSON.stringify(data.payload));
+        console.log("User Data Stored in Storage:", data);
+        showAlert("Success", "You are logged in!", onLoginSuccess);
+      } else {
+        console.log("Login failed:", data);
+        showAlert("Invalid Credentials", "Unable to login, please try again.");
       }
-      showAlert("Success", "You are logged in!", onLoginSuccess);
-    } else {
-      const message =
-        "message" in response.payload
-          ? response.payload.message
-          : "Unknown error occurred";
-      showAlert("Invalid Credentials", message);
+    } catch (error) {
+      console.error("Login Error:", error);
+      showAlert(
+        "Error",
+        "An unexpected error occurred. Please try again later."
+      );
     }
   };
 
-  // Custom Alert Function
   const showAlert = (title: string, message: string, callback?: () => void) => {
     setAlertTitle(title);
     setAlertMessage(message);
@@ -118,6 +131,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
     </View>
   );
 };
+
 const internalstyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -132,4 +146,5 @@ const internalstyles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
 export default LoginScreen;
