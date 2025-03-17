@@ -170,8 +170,8 @@ const OpenNewJobScreen = ({
     const jobData = {
       property_id: propertyData?.id,
       job_type: selectedJobType?.id,
-      tasks: jobTasks,
       invoice_no: 0,
+      ...jobTasks,
     };
 
     try {
@@ -195,7 +195,6 @@ const OpenNewJobScreen = ({
     }
   };
 
-  // Get the position of the dropdown element to position the modal correctly
   const measureDropdown = () => {
     if (dropdownRef.current) {
       dropdownRef.current.measure((x, y, width, height, pageX, pageY) => {
@@ -253,7 +252,6 @@ const OpenNewJobScreen = ({
             </View>
           </TouchableOpacity>
 
-          {/* Using Modal for dropdown instead of nesting FlatList in ScrollView */}
           <Modal
             visible={dropdownOpen}
             transparent={true}
@@ -297,7 +295,6 @@ const OpenNewJobScreen = ({
           </Modal>
         </View>
 
-        {/* Input fields for tasks */}
         <Text style={styles.label}>Job Tasks:</Text>
         {Object.keys(jobTasks).map((key) => (
           <TextInput
@@ -395,8 +392,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     maxHeight: 200,
     zIndex: 1000,
-    elevation: 5, // for Android shadow
-    shadowColor: "#000", // for iOS shadow
+    elevation: 5,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
