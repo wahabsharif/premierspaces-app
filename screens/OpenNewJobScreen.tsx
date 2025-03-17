@@ -2,7 +2,7 @@ import AntDesign from "@expo/vector-icons/AntDesign";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import axios from "axios";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -22,6 +22,9 @@ import commonStyles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
 
+// API base URL constant for easier maintenance
+const API_BASE_URL = "http://192.168.18.45:8000/api";
+
 interface PropertyData {
   address: string;
   company: string;
@@ -33,6 +36,12 @@ interface JobType {
   type: string;
   color: string;
 }
+
+interface TasksState {
+  [key: string]: string;
+}
+
+const TASK_KEYS = Array.from({ length: 10 }, (_, i) => `task${i + 1}`);
 
 const OpenNewJobScreen = ({
   navigation,
@@ -49,91 +58,68 @@ const OpenNewJobScreen = ({
   const dropdownRef = useRef<View>(null);
   const [loading, setLoading] = useState(false);
 
-  const emptyTasks = {
-    task1: "",
-    task2: "",
-    task3: "",
-    task4: "",
-    task5: "",
-    task6: "",
-    task7: "",
-    task8: "",
-    task9: "",
-    task10: "",
-  };
+  // Create empty tasks state dynamically
+  const emptyTasks = TASK_KEYS.reduce((acc, key) => {
+    acc[key] = "";
+    return acc;
+  }, {} as TasksState);
 
-  const [jobTasks, setJobTasks] = useState({ ...emptyTasks });
+  const [jobTasks, setJobTasks] = useState(emptyTasks);
 
-  // State to hold dynamic heights for each input field
-  const [inputHeights, setInputHeights] = useState<Record<string, number>>({
-    task1: 40,
-    task2: 40,
-    task3: 40,
-    task4: 40,
-    task5: 40,
-    task6: 40,
-    task7: 40,
-    task8: 40,
-    task9: 40,
-    task10: 40,
-  });
+  // Initialize input heights dynamically
+  const initialHeights = TASK_KEYS.reduce((acc, key) => {
+    acc[key] = 40;
+    return acc;
+  }, {} as Record<string, number>);
 
+  const [inputHeights, setInputHeights] = useState(initialHeights);
+
+  // Combined fetch function for initial data
   useEffect(() => {
-    const fetchPropertyData = async () => {
+    const fetchInitialData = async () => {
       try {
-        const storedProperty = await AsyncStorage.getItem("selectedProperty");
-        if (storedProperty) {
-          setPropertyData(JSON.parse(storedProperty));
+        // Fetch all data in parallel
+        const [propertyResult, jobTypesResult, jobTypeResult] =
+          await Promise.all([
+            AsyncStorage.getItem("selectedProperty"),
+            axios.get(`${API_BASE_URL}/job-types.php`),
+            AsyncStorage.getItem("selectedJobType"),
+          ]);
+
+        if (propertyResult) {
+          setPropertyData(JSON.parse(propertyResult));
+        }
+
+        setJobTypes(jobTypesResult.data);
+
+        if (jobTypeResult) {
+          setSelectedJobType(JSON.parse(jobTypeResult));
         }
       } catch (error) {
-        console.error("Error retrieving property data", error);
+        console.error("Error fetching initial data", error);
       }
     };
 
-    const fetchJobTypes = async () => {
-      try {
-        const response = await axios.get(
-          "http://192.168.18.45:8000/api/job-types.php"
-        );
-        setJobTypes(response.data);
-      } catch (error) {
-        console.error("Error fetching job types", error);
-      }
-    };
-
-    const fetchSelectedJobType = async () => {
-      try {
-        const storedJobType = await AsyncStorage.getItem("selectedJobType");
-        if (storedJobType) {
-          setSelectedJobType(JSON.parse(storedJobType));
-        }
-      } catch (error) {
-        console.error("Error retrieving selected job type", error);
-      }
-    };
-
-    fetchPropertyData();
-    fetchJobTypes();
-    fetchSelectedJobType();
+    fetchInitialData();
   }, []);
 
-  const handleSelectJobType = async (job: JobType) => {
+  const handleSelectJobType = useCallback(async (job: JobType) => {
     setSelectedJobType(job);
     setDropdownOpen(false);
     try {
       await AsyncStorage.setItem("selectedJobType", JSON.stringify(job));
-      console.log("Selected job type", job);
+      console.log("Stored Job Type:", job);
     } catch (error) {
       console.error("Error storing selected job type", error);
     }
-  };
+  }, []);
 
-  // Handler for text input changes
-  const handleTaskChange = (key: keyof typeof jobTasks, value: string) => {
-    setJobTasks((prevTasks) => ({ ...prevTasks, [key]: value }));
-  };
+  // Optimized task change handler
+  const handleTaskChange = useCallback((key: string, value: string) => {
+    setJobTasks((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
-  const showToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
     if (Platform.OS === "android") {
       ToastAndroid.showWithGravityAndOffset(
         message,
@@ -145,21 +131,15 @@ const OpenNewJobScreen = ({
     } else {
       Alert.alert("Success", message, [{ text: "OK" }], { cancelable: true });
     }
-  };
+  }, []);
 
-  const resetForm = () => {
-    setJobTasks({ ...emptyTasks });
+  const resetForm = useCallback(() => {
+    setJobTasks(emptyTasks);
     setSelectedJobType(null);
+    setInputHeights(initialHeights);
+  }, [emptyTasks, initialHeights]);
 
-    const resetHeights = Object.keys(inputHeights).reduce((acc, key) => {
-      acc[key] = 40;
-      return acc;
-    }, {} as Record<string, number>);
-
-    setInputHeights(resetHeights);
-  };
-
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!propertyData?.id || !selectedJobType?.id) {
       showToast("Please select property and job type");
       return;
@@ -175,27 +155,20 @@ const OpenNewJobScreen = ({
     };
 
     try {
-      const response = await axios.post(
-        "http://192.168.18.45:8000/api/jobs.php",
-        jobData
-      );
-      console.log("Job posted successfully:", response.data);
-
-      // Show success toast
+      await axios.post(`${API_BASE_URL}/jobs.php`, jobData);
       showToast("Job created successfully!");
 
-      setTimeout(() => {
-        resetForm();
-      }, 500);
+      // Use setTimeout to ensure the toast is visible before resetting
+      setTimeout(resetForm, 500);
     } catch (error) {
       console.error("Error posting job", error);
       showToast("Failed to create job. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [propertyData, selectedJobType, jobTasks, showToast, resetForm]);
 
-  const measureDropdown = () => {
+  const measureDropdown = useCallback(() => {
     if (dropdownRef.current) {
       dropdownRef.current.measure((x, y, width, height, pageX, pageY) => {
         setDropdownPosition({
@@ -205,20 +178,43 @@ const OpenNewJobScreen = ({
         });
       });
     }
-  };
+  }, []);
 
-  const openDropdown = () => {
+  const openDropdown = useCallback(() => {
     measureDropdown();
     setDropdownOpen(true);
-  };
+  }, [measureDropdown]);
+
+  // Memoized handler for content size changes
+  const handleContentSizeChange = useCallback((key: string, event: any) => {
+    const height = event.nativeEvent.contentSize.height;
+    setInputHeights((prev) => ({
+      ...prev,
+      [key]: Math.max(40, height),
+    }));
+  }, []);
+
+  // Memoized render item for dropdown
+  const renderDropdownItem = useCallback(
+    ({ item }: { item: JobType }) => (
+      <TouchableOpacity
+        style={styles.dropdownItem}
+        onPress={() => handleSelectJobType(item)}
+      >
+        <Text style={styles.dropdownItemText}>{item.type}</Text>
+      </TouchableOpacity>
+    ),
+    [handleSelectJobType]
+  );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.flex}>
       <Header />
       <ScrollView contentContainerStyle={styles.container}>
         <View style={commonStyles.headingContainer}>
           <Text style={commonStyles.heading}>Create New Job</Text>
         </View>
+
         {propertyData && (
           <View style={styles.propertyContainer}>
             <Text style={styles.propertyLabel}>Selected Property:</Text>
@@ -228,6 +224,7 @@ const OpenNewJobScreen = ({
             </View>
           </View>
         )}
+
         <Text style={styles.label}>Job Category:</Text>
         <View style={styles.dropdownContainer}>
           <TouchableOpacity
@@ -281,14 +278,9 @@ const OpenNewJobScreen = ({
                 <FlatList
                   data={jobTypes}
                   keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => handleSelectJobType(item)}
-                    >
-                      <Text style={styles.dropdownItemText}>{item.type}</Text>
-                    </TouchableOpacity>
-                  )}
+                  renderItem={renderDropdownItem}
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={10}
                 />
               </View>
             </TouchableOpacity>
@@ -296,28 +288,20 @@ const OpenNewJobScreen = ({
         </View>
 
         <Text style={styles.label}>Job Tasks:</Text>
-        {Object.keys(jobTasks).map((key) => (
+        {TASK_KEYS.map((key) => (
           <TextInput
             key={key}
             multiline
-            onContentSizeChange={(event) => {
-              const height = event.nativeEvent.contentSize.height;
-              setInputHeights((prevHeights) => ({
-                ...prevHeights,
-                [key]: Math.max(40, height),
-              }));
-            }}
+            onContentSizeChange={(event) => handleContentSizeChange(key, event)}
             style={[styles.input, { height: inputHeights[key] }]}
             placeholder={`Enter ${key}`}
-            value={(jobTasks as any)[key]}
-            onChangeText={(text) =>
-              handleTaskChange(key as keyof typeof jobTasks, text)
-            }
+            value={jobTasks[key]}
+            onChangeText={(text) => handleTaskChange(key, text)}
           />
         ))}
 
         <TouchableOpacity
-          style={[styles.button, loading ? styles.buttonDisabled : null]}
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleSubmit}
           disabled={loading}
         >
@@ -331,6 +315,9 @@ const OpenNewJobScreen = ({
 };
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   container: {
     flexGrow: 1,
     padding: 20,
