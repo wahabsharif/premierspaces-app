@@ -7,8 +7,7 @@ import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { color, fontSize } from "../Constants/theme";
 
-const CategoryScreen = ({ navigation, route }: any) => {
-  const { paramKey } = route.params;
+const CategoryScreen = ({ navigation }: any) => {
   const [categories, setCategories] = useState<any[]>([]);
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<any>(null);
@@ -146,7 +145,7 @@ const CategoryScreen = ({ navigation, route }: any) => {
 
   const handleOpenNewJob = () => {
     closeModal();
-    // navigation.navigate("NewJobScreen");
+    // navigation.navigate("NewJobsScreen");
   };
 
   const handleGoToJobs = () => {
@@ -254,7 +253,7 @@ const styles = StyleSheet.create({
     color: color.black,
   },
   uploadSection: {
-    margin: 30,
+    marginBottom: 30,
     alignItems: "center",
     width: "100%",
     alignSelf: "center",
