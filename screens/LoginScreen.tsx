@@ -12,7 +12,7 @@ import { Button, Dialog, Portal } from "react-native-paper";
 import styles from "../Constants/styles";
 import { fontSize } from "../Constants/theme";
 
-const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
+const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
   const [alertVisible, setAlertVisible] = useState(false);
@@ -42,7 +42,20 @@ const LoginScreen = ({ navigation, onLoginSuccess }: any) => {
         // Store user data in AsyncStorage
         await AsyncStorage.setItem("userData", JSON.stringify(data.payload));
         console.log("User Data Stored in Storage:", data);
-        showAlert("Success", "You are logged in!", onLoginSuccess);
+
+        // Handle login success
+        if (onLoginSuccess) {
+          // If called from App.js with onLoginSuccess prop
+          showAlert("Success", "You are logged in!", onLoginSuccess);
+        } else if (navigation) {
+          // If called from navigation stack
+          showAlert("Success", "You are logged in!", () => {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "SearchPropertyScreen" }],
+            });
+          });
+        }
       } else {
         console.log("Login failed:", data);
         showAlert("Invalid Credentials", "Unable to login, please try again.");

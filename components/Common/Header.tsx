@@ -7,7 +7,10 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 import styles from "../../Constants/styles";
 import { RootStackParamList } from "../../types";
 
-type HeaderNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
+type HeaderNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  "SearchPropertyScreen"
+>;
 
 const Header = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -38,10 +41,27 @@ const Header = () => {
     setDropdownVisible((prev) => !prev);
   };
 
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.clear();
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "LoginScreen" }],
+      });
+    } catch (error) {
+      console.error("Error during logout:", error);
+    }
+  };
+
   const handleOptionSelect = (option: string) => {
     setDropdownVisible(false);
     if (option === "Settings") {
       navigation.navigate("SettingScreen");
+    } else if (option === "Home") {
+      navigation.navigate("SearchPropertyScreen");
+    } else if (option === "Logout") {
+      handleLogout();
     }
   };
 

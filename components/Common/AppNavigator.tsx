@@ -8,6 +8,7 @@ import UploadScreen from "../../screens/UploadScreen";
 import SettingScreen from "../../screens/Settings/SettingScreen";
 import AppLockSettingScreen from "../../screens/Settings/AppLockSettingScreen";
 import ChangeAppPinScreen from "../../screens/Settings/ChangeAppPinScreen";
+import LoginScreen from "../../screens/LoginScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
@@ -40,6 +41,7 @@ export const AppNavigator = ({
       name="SearchPropertyScreen"
       component={SearchPropertyScreen}
     />
+    <Stack.Screen name="LoginScreen" component={LoginScreen} />
     <Stack.Screen name="PropertyListScreen" component={PropertyListScreen} />
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />

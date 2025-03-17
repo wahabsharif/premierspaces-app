@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Provider as PaperProvider } from "react-native-paper";
+import ToastManager, { Toast } from "toastify-react-native";
 
 import { AppNavigator } from "./components/Common/AppNavigator";
 import LockScreen from "./screens/LockScreen";
@@ -26,9 +27,11 @@ export default function App() {
         const userData = await AsyncStorage.getItem("userData");
         if (userData) {
           setIsLoggedIn(true);
+          Toast.success("Welcome back!");
         }
       } catch (error) {
         console.error("Error checking login status:", error);
+        Toast.error("Failed to check login status");
       } finally {
         setIsLoading(false);
       }
@@ -46,6 +49,7 @@ export default function App() {
         }
       } catch (error) {
         console.error("Error checking app lock status:", error);
+        Toast.error("Failed to check app lock status");
       }
     };
     checkAppLockStatus();
@@ -61,9 +65,11 @@ export default function App() {
           !isPickingImage
         ) {
           setIsUnlocked(false);
+          Toast.info("App locked for security");
         }
       } catch (error) {
         console.error("Error handling app state change:", error);
+        Toast.error("Error handling app state");
       }
     };
 
@@ -86,6 +92,7 @@ export default function App() {
 
   return (
     <PaperProvider>
+      <ToastManager />
       <ImageBackground source={backgroundImage} style={styles.background}>
         <SafeAreaView style={styles.container}>
           {isUnlocked ? (
@@ -93,11 +100,21 @@ export default function App() {
               {isLoggedIn ? (
                 <AppNavigator setIsPickingImage={setIsPickingImage} />
               ) : (
-                <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />
+                <LoginScreen
+                  onLoginSuccess={() => {
+                    setIsLoggedIn(true);
+                    Toast.success("Login successful!");
+                  }}
+                />
               )}
             </NavigationContainer>
           ) : (
-            <LockScreen onUnlock={() => setIsUnlocked(true)} />
+            <LockScreen
+              onUnlock={() => {
+                setIsUnlocked(true);
+                Toast.success("Unlocked!");
+              }}
+            />
           )}
         </SafeAreaView>
       </ImageBackground>

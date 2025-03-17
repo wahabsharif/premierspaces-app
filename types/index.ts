@@ -7,4 +7,5 @@ export type RootStackParamList = {
   SearchPropertyScreen: undefined;
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
+  LoginScreen: undefined;
 };
