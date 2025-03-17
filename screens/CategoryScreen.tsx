@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
+import { color, fontSize } from "../Constants/theme";
 
 const CategoryScreen = ({ navigation, route }: any) => {
   const { paramKey } = route.params;
@@ -16,6 +17,10 @@ const CategoryScreen = ({ navigation, route }: any) => {
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+  const [propertyData, setPropertyData] = useState<{
+    address: string;
+    company: string;
+  } | null>(null);
 
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
@@ -51,6 +56,20 @@ const CategoryScreen = ({ navigation, route }: any) => {
     };
 
     fetchCategories();
+  }, []);
+  useEffect(() => {
+    const fetchPropertyData = async () => {
+      try {
+        const storedProperty = await AsyncStorage.getItem("selectedProperty");
+        if (storedProperty) {
+          setPropertyData(JSON.parse(storedProperty));
+        }
+      } catch (error) {
+        console.error("Error retrieving property data", error);
+      }
+    };
+
+    fetchPropertyData();
   }, []);
 
   const toggleCategory = (id: number) => {
@@ -140,11 +159,16 @@ const CategoryScreen = ({ navigation, route }: any) => {
       <Header />
       <View style={{ padding: 20 }}>
         <Text style={styles.titleText}>Select a Category To Upload</Text>
-        {paramKey && (
-          <Text style={styles.propertyAddressText}>
-            {`Selected Property Address: ${paramKey}`}
-          </Text>
+        {propertyData && (
+          <View style={styles.propertyContainer}>
+            <Text style={styles.propertyLabel}>Selected Property:</Text>
+            <View style={styles.propertyDetails}>
+              <Text style={styles.propertyItem}>{propertyData.address}</Text>
+              <Text style={styles.propertyItem}>{propertyData.company}</Text>
+            </View>
+          </View>
         )}
+
         <View style={styles.uploadSection}>
           <Text style={styles.uploadSectionTitle}>Upload for A Job</Text>
           <TouchableOpacity
@@ -227,15 +251,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "600",
     marginBottom: 10,
-    color: "#333",
-  },
-  propertyAddressText: {
-    fontSize: 18,
-    marginVertical: 20,
-    fontWeight: "600",
-    fontVariant: ["small-caps"],
-    color: "#555",
-    textDecorationLine: "underline",
+    color: color.black,
   },
   uploadSection: {
     margin: 30,
@@ -244,22 +260,22 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   uploadSectionTitle: {
-    fontSize: 16,
+    fontSize: fontSize.medium,
     fontWeight: "600",
     marginBottom: 5,
-    color: "#333",
+    color: color.gray,
     textAlign: "center",
   },
   uploadSectionButton: {
-    backgroundColor: "#347ab8",
+    backgroundColor: color.primary,
     paddingHorizontal: 10,
     width: "60%",
     paddingVertical: 10,
     borderRadius: 5,
   },
   uploadSectionButtonText: {
-    color: "#fff",
-    fontSize: 16,
+    color: color.white,
+    fontSize: fontSize.medium,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -267,7 +283,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
+    borderBottomColor: color.secondary,
   },
   categoryHeader: {
     flexDirection: "row",
@@ -275,8 +291,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   categoryText: {
-    fontSize: 18,
-    color: "#347ab8",
+    fontSize: fontSize.large,
+    color: color.primary,
   },
   subCategoryItem: {
     paddingVertical: 8,
@@ -285,22 +301,22 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   selectedSubCategoryItem: {
-    backgroundColor: "#347ab8",
+    backgroundColor: color.primary,
     borderWidth: 1,
-    borderColor: "#7e57c2",
+    borderColor: color.secondary,
   },
   subCategoryText: {
-    fontSize: 16,
-    color: "#347ab8",
+    fontSize: fontSize.medium,
+    color: color.primary,
   },
   floatingIcon: {
     position: "absolute",
     bottom: 80,
     right: 20,
-    backgroundColor: "#347ab8",
+    backgroundColor: color.primary,
     padding: 15,
     borderRadius: 30,
-    shadowColor: "#000",
+    shadowColor: color.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -311,19 +327,19 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 20,
     right: 20,
-    backgroundColor: "#347ab8",
+    backgroundColor: color.primary,
     padding: 15,
     borderRadius: 5,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: color.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
   },
   reportButtonText: {
-    color: "#fff",
-    fontSize: 16,
+    color: color.white,
+    fontSize: fontSize.medium,
     fontWeight: "600",
   },
   modalOverlay: {
@@ -334,7 +350,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: "80%",
-    backgroundColor: "#fff",
+    backgroundColor: color.white,
     borderRadius: 8,
     padding: 20,
     alignItems: "center",
@@ -343,27 +359,51 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 10,
-    color: "#333",
+    color: color.gray,
   },
   modalMessage: {
-    fontSize: 16,
+    fontSize: fontSize.medium,
     textAlign: "center",
     marginBottom: 20,
-    color: "#555",
+    color: color.gray,
   },
   modalButtonRow: {
     flexDirection: "row",
   },
   modalButton: {
-    backgroundColor: "#347ab8",
+    backgroundColor: color.primary,
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 5,
   },
   modalButtonText: {
-    color: "#fff",
-    fontSize: 14,
+    color: color.white,
+    fontSize: fontSize.small,
     fontWeight: "600",
+  },
+  propertyContainer: {
+    backgroundColor: color.white,
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: color.secondary,
+  },
+
+  propertyLabel: {
+    fontSize: fontSize.medium,
+    fontWeight: "600",
+    color: color.black,
+    marginBottom: 5,
+  },
+
+  propertyDetails: {
+    paddingLeft: 10,
+  },
+
+  propertyItem: {
+    fontSize: fontSize.medium,
+    color: color.gray,
   },
 });
 
