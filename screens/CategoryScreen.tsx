@@ -6,6 +6,7 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { color, fontSize } from "../Constants/theme";
+import commonStyles from "../Constants/styles";
 
 const CategoryScreen = ({ navigation }: any) => {
   const [categories, setCategories] = useState<any[]>([]);
@@ -157,7 +158,9 @@ const CategoryScreen = ({ navigation }: any) => {
     <View style={{ flex: 1 }}>
       <Header />
       <View style={{ padding: 20 }}>
-        <Text style={styles.titleText}>Select a Category To Upload</Text>
+        <View style={commonStyles.headingContainer}>
+          <Text style={commonStyles.heading}>Select a Category To Upload</Text>
+        </View>
         {propertyData && (
           <View style={styles.propertyContainer}>
             <Text style={styles.propertyLabel}>Selected Property:</Text>
@@ -167,7 +170,6 @@ const CategoryScreen = ({ navigation }: any) => {
             </View>
           </View>
         )}
-
         <View style={styles.uploadSection}>
           <Text style={styles.uploadSectionTitle}>Upload for A Job</Text>
           <TouchableOpacity
@@ -246,12 +248,6 @@ const CategoryScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  titleText: {
-    fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 10,
-    color: color.black,
-  },
   uploadSection: {
     marginBottom: 30,
     alignItems: "center",

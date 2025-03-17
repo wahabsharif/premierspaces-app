@@ -92,11 +92,13 @@ export default StyleSheet.create({
     marginTop: 16,
   },
   heading: {
-    fontSize: fontSize.xl,
-    fontWeight: "600",
+    fontSize: fontSize.large,
+    fontWeight: "900",
     marginBottom: 16,
-    textAlign: "left",
+    alignSelf: "center",
+    textTransform: "uppercase",
   },
+
   subHeading: {
     fontSize: fontSize.large,
     fontWeight: "600",

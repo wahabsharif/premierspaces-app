@@ -5,6 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Header from "../components/Common/Header";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
+import commonStyles from "../Constants/styles";
 
 const JobsScreen = ({
   navigation,
@@ -33,6 +34,9 @@ const JobsScreen = ({
     <View style={{ flex: 1 }}>
       <Header />
       <View style={styles.container}>
+        <View style={commonStyles.headingContainer}>
+          <Text style={commonStyles.heading}>Jobs Lists</Text>
+        </View>
         {propertyData && (
           <View style={styles.propertyContainer}>
             <Text style={styles.propertyLabel}>Selected Property:</Text>
