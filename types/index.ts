@@ -8,6 +8,7 @@ export type RootStackParamList = {
   SearchPropertyScreen: undefined;
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
+  OpenNewJobScreen: undefined;
   JobsScreen: undefined;
   JobDetail: {
     job: { id: string; title: string; company: string; location: string };
