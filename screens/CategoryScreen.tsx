@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useState, useEffect } from "react";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
-import axios from "axios";
 
 const CategoryScreen = ({ navigation, route }: any) => {
   const { paramKey } = route.params;
@@ -13,32 +13,45 @@ const CategoryScreen = ({ navigation, route }: any) => {
   const [selectedSubCategory, setSelectedSubCategory] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
-
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
-
-  useEffect(() => {
-    axios
-      .get("http://easyhomz.co.uk/mapp/fileuploadcats.php")
-      .then((response) => {
-        if (response.data.status === 1) {
-          setCategories(response.data.payload);
-        } else {
-          showAlert("Error", "Failed to load categories");
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching categories", error);
-        showAlert("Error", "An error occurred while fetching categories");
-      });
-  }, []);
 
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertVisible(true);
   };
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        // Retrieve user data from AsyncStorage
+        const userDataJson = await AsyncStorage.getItem("userData");
+        const userData = userDataJson ? JSON.parse(userDataJson) : null;
+        const userid = userData?.userid;
+
+        if (!userid) {
+          showAlert("Error", "User ID not found. Please log in again.");
+          return;
+        }
+
+        // Call the API using the retrieved userid
+        const url = `http://easyhomz.co.uk/mapp/fileuploadcats.php?userid=${userid}`;
+        const response = await axios.get(url);
+        if (response.data.status === 1) {
+          setCategories(response.data.payload);
+        } else {
+          showAlert("Error", "Failed to load categories");
+        }
+      } catch (error) {
+        console.error("Error fetching categories", error);
+        showAlert("Error", "An error occurred while fetching categories");
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   const toggleCategory = (id: number) => {
     setExpandedCategory((prev) => (prev === id ? null : id));
@@ -87,7 +100,6 @@ const CategoryScreen = ({ navigation, route }: any) => {
       });
 
       console.log("Data being stored in AsyncStorage:", dataToStore);
-
       await AsyncStorage.setItem("selectedData", dataToStore);
 
       // Verify the stored data
@@ -128,13 +140,11 @@ const CategoryScreen = ({ navigation, route }: any) => {
       <Header />
       <View style={{ padding: 20 }}>
         <Text style={styles.titleText}>Select a Category To Upload</Text>
-
         {paramKey && (
           <Text style={styles.propertyAddressText}>
             {`Selected Property Address: ${paramKey}`}
           </Text>
         )}
-
         <View style={styles.uploadSection}>
           <Text style={styles.uploadSectionTitle}>Upload for A Job</Text>
           <TouchableOpacity
@@ -144,7 +154,6 @@ const CategoryScreen = ({ navigation, route }: any) => {
             <Text style={styles.uploadSectionButtonText}>Go To Jobs</Text>
           </TouchableOpacity>
         </View>
-
         {categories.map((category) => (
           <TouchableOpacity
             key={category.id}
@@ -162,15 +171,12 @@ const CategoryScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
         ))}
       </View>
-
       <TouchableOpacity style={styles.floatingIcon} onPress={handleNavigate}>
         <Ionicons name="arrow-forward" size={24} color="#fff" />
       </TouchableOpacity>
-
       <TouchableOpacity style={styles.reportButton} onPress={openModal}>
         <Text style={styles.reportButtonText}>Report A Problem</Text>
       </TouchableOpacity>
-
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -201,8 +207,6 @@ const CategoryScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
-
-      {/* Custom Alert Dialog */}
       <Portal>
         <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
           <Dialog.Title>{alertTitle}</Dialog.Title>

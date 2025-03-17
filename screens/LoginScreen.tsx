@@ -11,6 +11,7 @@ import {
 import { Button, Dialog, Portal } from "react-native-paper";
 import styles from "../Constants/styles";
 import { fontSize } from "../Constants/theme";
+import axios from "axios";
 
 const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [initials, setInitials] = useState("");
@@ -22,33 +23,31 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
 
   const handleLogin = async () => {
     try {
-      const response = await fetch("http://www.easyhomz.co.uk/mapp/login.php", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const response = await axios.post(
+        "http://www.easyhomz.co.uk/mapp/login.php",
+        {
           userid: 0,
           payload: {
             initials: initials,
             pin: pin,
           },
-        }),
-      });
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.status === 1) {
-        // Store user data in AsyncStorage
         await AsyncStorage.setItem("userData", JSON.stringify(data.payload));
         console.log("User Data Stored in Storage:", data);
 
-        // Handle login success
         if (onLoginSuccess) {
-          // If called from App.js with onLoginSuccess prop
           showAlert("Success", "You are logged in!", onLoginSuccess);
         } else if (navigation) {
-          // If called from navigation stack
           showAlert("Success", "You are logged in!", () => {
             navigation.reset({
               index: 0,
@@ -115,6 +114,7 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
             value={pin}
             onChangeText={setPin}
             secureTextEntry
+            keyboardType="numeric"
             style={styles.input}
           />
         </View>

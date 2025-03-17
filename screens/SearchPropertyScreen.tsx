@@ -35,7 +35,18 @@ const SearchPropertyScreen: React.FC = () => {
     setLoading(true);
     setSelectedId(null);
     try {
-      const url = `http://easyhomz.co.uk/mapp/searchproperty.php?userid=lxtf1nulw3&door_num=${door_num}`;
+      // Retrieve userid from AsyncStorage
+      const userDataJson = await AsyncStorage.getItem("userData");
+      const userData = userDataJson ? JSON.parse(userDataJson) : null;
+      const userid = userData?.userid;
+
+      if (!userid) {
+        setError("User ID not found. Please log in again.");
+        setLoading(false);
+        return;
+      }
+
+      const url = `http://easyhomz.co.uk/mapp/searchproperty.php?userid=${userid}&door_num=${door_num}`;
       const response = await axios.get(url);
       const data = response.data;
 
