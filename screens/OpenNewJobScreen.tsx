@@ -21,9 +21,7 @@ import Header from "../components/Common/Header";
 import commonStyles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
-
-// API base URL constant for easier maintenance
-const API_BASE_URL = "http://192.168.18.45:8000/api";
+import { baseApiUrl } from "../Constants/env";
 
 interface PropertyData {
   address: string;
@@ -82,7 +80,7 @@ const OpenNewJobScreen = ({
         const [propertyResult, jobTypesResult, jobTypeResult] =
           await Promise.all([
             AsyncStorage.getItem("selectedProperty"),
-            axios.get(`${API_BASE_URL}/job-types.php`),
+            axios.get(`${baseApiUrl}/jobtypes.php`),
             AsyncStorage.getItem("selectedJobType"),
           ]);
 
@@ -150,15 +148,13 @@ const OpenNewJobScreen = ({
     const jobData = {
       property_id: propertyData?.id,
       job_type: selectedJobType?.id,
-      invoice_no: 0,
       ...jobTasks,
     };
 
     try {
-      await axios.post(`${API_BASE_URL}/jobs.php`, jobData);
+      await axios.post(`${baseApiUrl}/newjob.php`, jobData);
       showToast("Job created successfully!");
 
-      // Use setTimeout to ensure the toast is visible before resetting
       setTimeout(resetForm, 500);
     } catch (error) {
       console.error("Error posting job", error);

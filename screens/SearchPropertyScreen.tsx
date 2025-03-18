@@ -16,6 +16,7 @@ import {
 import Header from "../components/Common/Header";
 import { RootStackParamList } from "../types";
 import styles from "../Constants/styles";
+import { baseApiUrl } from "../Constants/env";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -46,7 +47,7 @@ const SearchPropertyScreen: React.FC = () => {
         return;
       }
 
-      const url = `http://easyhomz.co.uk/mapp/searchproperty.php?userid=${userid}&door_num=${door_num}`;
+      const url = `${baseApiUrl}/searchproperty.php?userid=${userid}&door_num=${door_num}`;
       const response = await axios.get(url);
       const data = response.data;
 

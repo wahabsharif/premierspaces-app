@@ -7,6 +7,7 @@ import { Button, Dialog, Portal } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { color, fontSize } from "../Constants/theme";
 import commonStyles from "../Constants/styles";
+import { baseApiUrl } from "../Constants/env";
 
 const CategoryScreen = ({ navigation }: any) => {
   const [categories, setCategories] = useState<any[]>([]);
@@ -42,7 +43,7 @@ const CategoryScreen = ({ navigation }: any) => {
         }
 
         // Call the API using the retrieved userid
-        const url = `http://easyhomz.co.uk/mapp/fileuploadcats.php?userid=${userid}`;
+        const url = `${baseApiUrl}/fileuploadcats.php?userid=${userid}`;
         const response = await axios.get(url);
         if (response.data.status === 1) {
           setCategories(response.data.payload);

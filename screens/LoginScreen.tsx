@@ -12,6 +12,7 @@ import { Button, Dialog, Portal } from "react-native-paper";
 import styles from "../Constants/styles";
 import { fontSize } from "../Constants/theme";
 import axios from "axios";
+import { baseApiUrl } from "../Constants/env";
 
 const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [initials, setInitials] = useState("");
@@ -24,7 +25,7 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const handleLogin = async () => {
     try {
       const response = await axios.post(
-        "http://www.easyhomz.co.uk/mapp/login.php",
+        `${baseApiUrl}/login.php`,
         {
           userid: 0,
           payload: {
