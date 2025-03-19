@@ -20,24 +20,13 @@ import {
 import Header from "../components/Common/Header";
 import commonStyles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import { RootStackParamList } from "../types";
+import {
+  RootStackParamList,
+  PropertyData,
+  JobType,
+  TasksState,
+} from "../types";
 import { baseApiUrl } from "../Constants/env";
-
-interface PropertyData {
-  address: string;
-  company: string;
-  id: string;
-}
-
-interface JobType {
-  id: number;
-  type: string;
-  color: string;
-}
-
-interface TasksState {
-  [key: string]: string;
-}
 
 const TASK_KEYS = Array.from({ length: 10 }, (_, i) => `task${i + 1}`);
 
@@ -61,7 +50,6 @@ const OpenNewJobScreen = ({
     acc[key] = "";
     return acc;
   }, {} as TasksState);
-
   const [jobTasks, setJobTasks] = useState(emptyTasks);
 
   // Initialize input heights dynamically
@@ -69,18 +57,17 @@ const OpenNewJobScreen = ({
     acc[key] = 40;
     return acc;
   }, {} as Record<string, number>);
-
   const [inputHeights, setInputHeights] = useState(initialHeights);
 
   // Combined fetch function for initial data
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        // Fetch all data in parallel
-        const [propertyResult, jobTypesResult, jobTypeResult] =
+        // Retrieve property and user data from storage first
+        const [propertyResult, storedUserData, jobTypeResult] =
           await Promise.all([
             AsyncStorage.getItem("selectedProperty"),
-            axios.get(`${baseApiUrl}/jobtypes.php`),
+            AsyncStorage.getItem("userData"), // Ensure this key is correct
             AsyncStorage.getItem("selectedJobType"),
           ]);
 
@@ -88,7 +75,27 @@ const OpenNewJobScreen = ({
           setPropertyData(JSON.parse(propertyResult));
         }
 
-        setJobTypes(jobTypesResult.data);
+        if (!storedUserData) {
+          console.error("User data not found in storage.");
+          return;
+        }
+
+        // Parse and verify user data structure
+        const parsedUserData = JSON.parse(storedUserData);
+
+        const userId =
+          (parsedUserData.payload && parsedUserData.payload.userid) ||
+          parsedUserData.userid;
+        if (!userId) {
+          console.error("User ID not found in the parsed user data.");
+          return;
+        }
+
+        // Use the retrieved user ID in the API URL
+        const jobTypesResult = await axios.get(
+          `${baseApiUrl}/jobtypes.php?userid=${userId}`
+        );
+        setJobTypes(jobTypesResult.data.payload);
 
         if (jobTypeResult) {
           setSelectedJobType(JSON.parse(jobTypeResult));
@@ -142,19 +149,15 @@ const OpenNewJobScreen = ({
       showToast("Please select property and job type");
       return;
     }
-
     setLoading(true);
-
     const jobData = {
-      property_id: propertyData?.id,
-      job_type: selectedJobType?.id,
+      property_id: propertyData.id,
+      job_type: selectedJobType.id,
       ...jobTasks,
     };
-
     try {
       await axios.post(`${baseApiUrl}/newjob.php`, jobData);
       showToast("Job created successfully!");
-
       setTimeout(resetForm, 500);
     } catch (error) {
       console.error("Error posting job", error);
@@ -197,7 +200,7 @@ const OpenNewJobScreen = ({
         style={styles.dropdownItem}
         onPress={() => handleSelectJobType(item)}
       >
-        <Text style={styles.dropdownItemText}>{item.type}</Text>
+        <Text style={styles.dropdownItemText}>{item.job_type}</Text>
       </TouchableOpacity>
     ),
     [handleSelectJobType]
@@ -231,7 +234,7 @@ const OpenNewJobScreen = ({
             <View style={styles.dropdownInner}>
               <Text style={styles.dropdownText}>
                 {selectedJobType
-                  ? selectedJobType.type
+                  ? selectedJobType.job_type
                   : "Select a job type..."}
               </Text>
               <AntDesign
