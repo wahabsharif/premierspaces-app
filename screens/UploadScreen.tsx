@@ -4,8 +4,9 @@ import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as Camera from "expo-camera";
-import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
+import { baseApiUrl } from "../Constants/env";
 
 import React, { useEffect, useState } from "react";
 import {
@@ -224,7 +225,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
         try {
           const response = await axios.post(
-            "http://192.168.18.45:8000/api/upload.php",
+            `${baseApiUrl}/upload.php`,
             formData,
             {
               headers: {
