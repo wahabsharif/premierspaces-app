@@ -28,3 +28,18 @@ export interface JobType {
 export interface TasksState {
   [key: string]: string;
 }
+
+export interface ProgressBarProps {
+  progress: number;
+  uploadedCount: number;
+  totalCount: number;
+}
+
+export interface UploadScreenProps {
+  route: any;
+  navigation: any;
+}
+
+export interface ChangeAppPinScreenProps {
+  navigation: any;
+}

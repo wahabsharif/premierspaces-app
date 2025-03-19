@@ -4,10 +4,7 @@ import { Image, View } from "react-native";
 import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
 import PinInput from "../../components/Common/PinInput";
 import styles from "../../Constants/styles";
-interface ChangeAppPinScreenProps {
-  navigation: any;
-}
-
+import { ChangeAppPinScreenProps } from "../../types";
 const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   navigation,
 }) => {

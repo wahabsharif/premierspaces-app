@@ -7,7 +7,7 @@ import * as Camera from "expo-camera";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { baseApiUrl } from "../Constants/env";
-
+import { UploadScreenProps } from "../types";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,11 +26,6 @@ import { ProgressBar } from "../components/Common/ProgressBar";
 import style from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { getFileId } from "../helper";
-
-interface UploadScreenProps {
-  route: any;
-  navigation: any;
-}
 
 const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
