@@ -43,8 +43,13 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
       const data = response.data;
 
       if (data.status === 1) {
+        // Clear old user data before storing new data
+        await AsyncStorage.removeItem("userData");
+
+        // Store latest user data
         await AsyncStorage.setItem("userData", JSON.stringify(data.payload));
-        console.log("User Data Stored in Storage:", data);
+
+        console.log("Latest User Data Stored in Storage:", data);
 
         if (onLoginSuccess) {
           showAlert("Success", "You are logged in!", onLoginSuccess);

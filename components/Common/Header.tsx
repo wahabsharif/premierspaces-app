@@ -81,7 +81,9 @@ const Header = () => {
         </View>
 
         <View style={styles.right}>
-          <Text style={styles.rightText}>{userName}</Text>
+          <Text style={styles.rightText} numberOfLines={1} ellipsizeMode="tail">
+            {userName}
+          </Text>
         </View>
       </View>
 

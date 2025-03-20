@@ -53,16 +53,19 @@ export default StyleSheet.create({
     height: 40,
   },
   right: {
-    flex: 1,
-    alignItems: "flex-end",
+    maxWidth: 100,
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
   },
+
   rightText: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-    fontWeight: "600",
-    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "black",
     textAlign: "right",
   },
+
   dropdownContainer: {
     position: "absolute",
     top: 90,
