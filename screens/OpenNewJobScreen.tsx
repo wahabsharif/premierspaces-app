@@ -44,8 +44,8 @@ const OpenNewJobScreen = ({
   });
   const dropdownRef = useRef<View>(null);
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string>("");
 
-  // Create empty tasks state dynamically
   const emptyTasks = TASK_KEYS.reduce((acc, key) => {
     acc[key] = "";
     return acc;
@@ -63,7 +63,6 @@ const OpenNewJobScreen = ({
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        // Retrieve property and user data from storage first
         const [propertyResult, storedUserData, jobTypeResult] =
           await Promise.all([
             AsyncStorage.getItem("selectedProperty"),
@@ -82,6 +81,14 @@ const OpenNewJobScreen = ({
 
         // Parse and verify user data structure
         const parsedUserData = JSON.parse(storedUserData);
+        const extractedUserId =
+          (parsedUserData.payload && parsedUserData.payload.userid) ||
+          parsedUserData.userid;
+        if (!extractedUserId) {
+          console.error("User ID not found in the parsed user data.");
+          return;
+        }
+        setUserId(extractedUserId);
 
         const userId =
           (parsedUserData.payload && parsedUserData.payload.userid) ||
@@ -119,7 +126,6 @@ const OpenNewJobScreen = ({
     }
   }, []);
 
-  // Optimized task change handler
   const handleTaskChange = useCallback((key: string, value: string) => {
     setJobTasks((prev) => ({ ...prev, [key]: value }));
   }, []);
@@ -149,14 +155,27 @@ const OpenNewJobScreen = ({
       showToast("Please select property and job type");
       return;
     }
+    if (!userId) {
+      console.error("User ID not available");
+      showToast("User ID missing. Please try again later.");
+      return;
+    }
     setLoading(true);
     const jobData = {
       property_id: propertyData.id,
       job_type: selectedJobType.id,
       ...jobTasks,
     };
+    const postData = {
+      userid: userId,
+      payload: jobData,
+    };
     try {
-      await axios.post(`${baseApiUrl}/newjob.php`, jobData);
+      const response = await axios.post(
+        `${baseApiUrl}/newjob.php?userid=${userId}`,
+        postData
+      );
+      console.log("Server Response:", response.data);
       showToast("Job created successfully!");
       setTimeout(resetForm, 500);
     } catch (error) {
@@ -165,7 +184,7 @@ const OpenNewJobScreen = ({
     } finally {
       setLoading(false);
     }
-  }, [propertyData, selectedJobType, jobTasks, showToast, resetForm]);
+  }, [propertyData, selectedJobType, jobTasks, showToast, resetForm, userId]);
 
   const measureDropdown = useCallback(() => {
     if (dropdownRef.current) {
