@@ -1,11 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Header from "../components/Common/Header";
-import { color, fontSize } from "../Constants/theme";
-import { RootStackParamList } from "../types";
+import { baseApiUrl } from "../Constants/env";
 import commonStyles from "../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
+import { Job, RootStackParamList } from "../types";
 
 const JobsScreen = ({
   navigation,
@@ -13,29 +20,101 @@ const JobsScreen = ({
   const [propertyData, setPropertyData] = useState<{
     address: string;
     company: string;
+    id: string;
   } | null>(null);
+  const [userData, setUserData] = useState<any>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Retrieve stored property and user data from AsyncStorage
   useEffect(() => {
-    const fetchPropertyData = async () => {
+    const fetchStoredData = async () => {
       try {
         const storedProperty = await AsyncStorage.getItem("selectedProperty");
+        const storedUser = await AsyncStorage.getItem("userData");
         if (storedProperty) {
-          setPropertyData(JSON.parse(storedProperty));
+          const parsedProperty = JSON.parse(storedProperty);
+          setPropertyData(parsedProperty);
         }
-      } catch (error) {
-        console.error("Error retrieving property data", error);
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          setUserData(parsedUser);
+        }
+      } catch (err) {
+        console.error("Error retrieving stored data", err);
       }
     };
-
-    fetchPropertyData();
+    fetchStoredData();
   }, []);
+
+  // Once we have both user and property data, fetch the jobs data
+  useEffect(() => {
+    const fetchJobs = async () => {
+      if (!userData || !propertyData) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const userid = userData.payload
+          ? userData.payload.userid
+          : userData.userid;
+        const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
+        const response = await fetch(endpoint);
+        const json = await response.json();
+        console.log("Jobs response:", json);
+        if (json.status === 1) {
+          setJobs(json.payload);
+        } else {
+          setError("No jobs found or session expired.");
+        }
+      } catch (err) {
+        console.error("Error fetching jobs", err);
+        setError("Error fetching jobs.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchJobs();
+  }, [userData, propertyData]);
+
+  const renderJob = ({ item }: { item: Job }) => {
+    const tasks = [
+      item.task1,
+      item.task2,
+      item.task3,
+      item.task4,
+      item.task5,
+      item.task6,
+      item.task7,
+      item.task8,
+      item.task9,
+      item.task10,
+    ].filter((task) => task && task.trim().length > 0);
+
+    return (
+      <View style={styles.jobContainer}>
+        <View style={styles.jobDetails}>
+          <Text style={styles.jobNum}>{item.job_num}</Text>
+          <Text>{item.date_created}</Text>
+          <Text>{item.job_type}</Text>
+        </View>
+        <View style={styles.taskListContainer}>
+          {tasks.map((task, index) => (
+            <Text key={index} style={styles.taskItem}>
+              {"\u2022"} {task}
+            </Text>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={{ flex: 1 }}>
       <Header />
       <View style={styles.container}>
         <View style={commonStyles.headingContainer}>
-          <Text style={commonStyles.heading}>Jobs Lists</Text>
+          <Text style={commonStyles.heading}>Jobs List</Text>
         </View>
         {propertyData && (
           <View style={styles.propertyContainer}>
@@ -52,6 +131,16 @@ const JobsScreen = ({
         >
           <Text style={styles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
+        {loading && <Text style={styles.statusText}>Loading jobs...</Text>}
+        {error && <Text style={styles.statusText}>{error}</Text>}
+        {!loading && jobs.length > 0 && (
+          <FlatList
+            data={jobs}
+            keyExtractor={(item) => item.id}
+            renderItem={renderJob}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          />
+        )}
       </View>
     </View>
   );
@@ -90,12 +179,46 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 5,
     alignSelf: "center",
+    marginBottom: 20,
   },
   buttonText: {
     color: color.white,
     fontSize: fontSize.medium,
     fontWeight: "600",
     textAlign: "center",
+  },
+  statusText: {
+    textAlign: "center",
+    color: color.black,
+    marginBottom: 10,
+  },
+  jobContainer: {
+    flexDirection: "row",
+    backgroundColor: color.white,
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: color.secondary,
+    marginBottom: 15,
+  },
+  jobDetails: {
+    flex: 0.3,
+  },
+  jobNum: {
+    fontSize: fontSize.medium,
+    color: color.primary,
+    fontWeight: "600",
+    marginBottom: 5,
+  },
+  taskListContainer: {
+    flex: 0.7,
+    paddingLeft: 10,
+    borderLeftWidth: 1,
+    borderColor: color.secondary,
+  },
+  taskItem: {
+    fontSize: fontSize.medium,
+    color: color.gray,
   },
 });
 
