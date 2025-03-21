@@ -9,9 +9,7 @@ export type RootStackParamList = {
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;
   JobsScreen: undefined;
-  JobDetail: {
-    job: { id: string; title: string; company: string; location: string };
-  };
+  JobDetailScreen: { id: string };
 };
 
 export interface PropertyData {

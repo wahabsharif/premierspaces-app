@@ -61,7 +61,6 @@ const JobsScreen = ({
         const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
         const response = await fetch(endpoint);
         const json = await response.json();
-        console.log("Jobs response:", json);
         if (json.status === 1) {
           setJobs(json.payload);
         } else {
@@ -92,7 +91,13 @@ const JobsScreen = ({
     ].filter((task) => task && task.trim().length > 0);
 
     return (
-      <View style={styles.jobContainer}>
+      <TouchableOpacity
+        style={styles.jobContainer}
+        onPress={() =>
+          // Pass job id instead of job_num
+          navigation.navigate("JobDetailScreen", { id: item.id })
+        }
+      >
         <View style={styles.jobDetails}>
           <Text style={styles.jobNum}>{item.job_num}</Text>
           <Text>{item.date_created}</Text>
@@ -105,7 +110,7 @@ const JobsScreen = ({
             </Text>
           ))}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 

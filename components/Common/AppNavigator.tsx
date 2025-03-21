@@ -11,6 +11,7 @@ import ChangeAppPinScreen from "../../screens/Settings/ChangeAppPinScreen";
 import LoginScreen from "../../screens/LoginScreen";
 import JobsScreen from "../../screens/JobsScreen";
 import OpenNewJobScreen from "../../screens/OpenNewJobScreen";
+import JobDetailScreen from "../../screens/JobDetailScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
@@ -60,6 +61,10 @@ export const AppNavigator = ({
     <Stack.Screen
       name="OpenNewJobScreen"
       component={OpenNewJobScreen as React.ComponentType<any>}
+    />
+    <Stack.Screen
+      name="JobDetailScreen"
+      component={JobDetailScreen as React.ComponentType<any>}
     />
   </Stack.Navigator>
 );
