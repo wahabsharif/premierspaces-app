@@ -1,24 +1,25 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-} from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Header from "../components/Common/Header";
 import { baseApiUrl } from "../Constants/env";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
-import Header from "../components/Common/Header";
 
 const JobDetailScreen = ({
   route,
   navigation,
 }: NativeStackScreenProps<RootStackParamList, "JobDetailScreen">) => {
-  const { id } = route.params; // Retrieve the job id passed from JobsScreen
+  const { id } = route.params;
+  console.log("JobDetailScreen id:", id);
   const [userData, setUserData] = useState<any>(null);
   const [propertyData, setPropertyData] = useState<{
     address: string;
@@ -26,6 +27,8 @@ const JobDetailScreen = ({
     id: string;
   } | null>(null);
   const [jobDetail, setJobDetail] = useState<any>(null);
+  const [contractorData, setContractorData] = useState<any[]>([]);
+  const [totalAmount, setTotalAmount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +64,6 @@ const JobDetailScreen = ({
     fetchPropertyData();
   }, []);
 
-  // Once userData is available, fetch job detail by id
   useEffect(() => {
     if (!userData) return;
     const fetchJobDetail = async () => {
@@ -71,12 +73,10 @@ const JobDetailScreen = ({
         const userid = userData.payload
           ? userData.payload.userid
           : userData.userid;
-        // Fetch job detail using the job id instead of job_num
         const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&id=${id}`;
         const response = await fetch(endpoint);
         const json = await response.json();
         if (json.status === 1) {
-          // Handle payload that might be an array or an object.
           const detail =
             Array.isArray(json.payload) && json.payload.length > 0
               ? json.payload[0]
@@ -94,6 +94,43 @@ const JobDetailScreen = ({
     };
     fetchJobDetail();
   }, [userData, id]);
+
+  useEffect(() => {
+    if (!userData || !jobDetail) return;
+
+    const fetchContractorData = async () => {
+      try {
+        const userid = userData.payload
+          ? userData.payload.userid
+          : userData.userid;
+        const endpoint = `${baseApiUrl}/get-contractor-data.php?userid=${userid}&job_id=${id}`;
+        const response = await fetch(endpoint);
+        const json = await response.json();
+
+        if (json.status === 1 && json.payload) {
+          const contractors = Array.isArray(json.payload)
+            ? json.payload
+            : [json.payload];
+
+          setContractorData(contractors);
+          const total = contractors.reduce(
+            (sum: number, contractor: { amount: string }) => {
+              return sum + (parseFloat(contractor.amount) || 0);
+            },
+            0
+          );
+
+          setTotalAmount(total);
+        } else {
+          console.log("No contractor data available or error in response");
+        }
+      } catch (err) {
+        console.error("Error fetching contractor data", err);
+      }
+    };
+
+    fetchContractorData();
+  }, [userData, jobDetail, id]);
 
   if (loading) {
     return (
@@ -159,24 +196,33 @@ const JobDetailScreen = ({
             </Text>
           ))}
         <Text style={styles.label}>Costs:</Text>
-        {[
-          jobDetail.task1_cost,
-          jobDetail.task2_cost,
-          jobDetail.task3_cost,
-          jobDetail.task4_cost,
-          jobDetail.task5_cost,
-          jobDetail.task6_cost,
-          jobDetail.task7_cost,
-          jobDetail.task8_cost,
-          jobDetail.task9_cost,
-          jobDetail.task10_cost,
-        ]
-          .filter((cost) => cost && cost.trim().length > 0)
-          .map((cost, index) => (
-            <Text key={index} style={styles.taskItem}>
-              {"\u2022"} {cost}
-            </Text>
-          ))}
+
+        {/* Display contractor costs */}
+        <View style={styles.costsContainer}>
+          {contractorData.length > 0 ? (
+            <>
+              {contractorData.map((contractor, index) => (
+                <View key={index} style={styles.costItem}>
+                  <Text style={styles.contractorName}>{contractor.name}</Text>
+                  <Text style={styles.contractorAmount}>
+                    £ {contractor.amount}
+                  </Text>
+                </View>
+              ))}
+
+              {/* Display total amount */}
+              <View style={styles.totalContainer}>
+                <Text style={styles.totalLabel}>Total Cost</Text>
+                <Text style={styles.totalAmount}>
+                  £ {totalAmount.toFixed(2)}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <Text style={styles.noDataText}>No cost data available</Text>
+          )}
+        </View>
+
         {/* Display file counts with icons */}
         <View style={styles.countsContainer}>
           <View style={styles.countContainer}>
@@ -282,6 +328,53 @@ const styles = StyleSheet.create({
   countContainer: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  costsContainer: {
+    marginLeft: 10,
+    marginTop: 5,
+  },
+  costItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 5,
+  },
+  contractorName: {
+    fontSize: fontSize.medium,
+    color: "#FF0000",
+    flex: 2,
+  },
+  contractorAmount: {
+    fontSize: fontSize.medium,
+    color: "#FF0000",
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "right",
+  },
+  noDataText: {
+    fontSize: fontSize.medium,
+    color: color.gray,
+    fontStyle: "italic",
+  },
+  totalContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    marginTop: 5,
+    borderTopWidth: 2,
+    borderTopColor: color.secondary,
+  },
+  totalLabel: {
+    fontSize: fontSize.medium,
+    fontWeight: "bold",
+    color: color.primary,
+    flex: 2,
+  },
+  totalAmount: {
+    fontSize: fontSize.large,
+    fontWeight: "bold",
+    color: color.primary,
+    flex: 1,
+    textAlign: "right",
   },
 });
 
