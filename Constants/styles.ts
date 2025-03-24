@@ -32,8 +32,9 @@ export default StyleSheet.create({
     height: 60,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
     justifyContent: "space-between",
+    paddingHorizontal: 20,
+    position: "relative",
     elevation: 3,
     shadowColor: color.black,
     shadowOffset: { width: 0, height: 2 },
@@ -41,24 +42,23 @@ export default StyleSheet.create({
     shadowRadius: 2,
   },
   left: {
-    flex: 1,
     justifyContent: "center",
   },
   center: {
-    flex: 2,
+    position: "absolute",
+    left: 0,
+    right: 0,
     alignItems: "center",
+  },
+  right: {
+    maxWidth: 100,
+    justifyContent: "center",
+    alignItems: "flex-end",
   },
   logo: {
     width: 100,
     height: 40,
   },
-  right: {
-    maxWidth: 100,
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
   rightText: {
     fontSize: 16,
     fontWeight: "bold",
@@ -68,7 +68,7 @@ export default StyleSheet.create({
 
   dropdownContainer: {
     position: "absolute",
-    top: 90,
+    top: 60,
     left: 10,
     width: 150,
     backgroundColor: color.white,
