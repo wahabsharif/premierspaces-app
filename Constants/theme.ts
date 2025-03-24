@@ -5,6 +5,8 @@ export const color = {
   white: "#fff",
   black: "#000",
   red: "#ff0000",
+  orange: "#f39c12",
+  green: "#008000",
 };
 
 export const fontSize = {

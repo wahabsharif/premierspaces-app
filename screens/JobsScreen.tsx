@@ -90,17 +90,50 @@ const JobsScreen = ({
       item.task10,
     ].filter((task) => task && task.trim().length > 0);
 
+    const getStatusBackground = (status: number) => {
+      switch (status) {
+        case 1:
+          return color.orange;
+        case 2:
+          return color.green;
+        case 3:
+          return color.red;
+        default:
+          return color.gray;
+      }
+    };
+
+    const handleJobPress = async () => {
+      try {
+        await AsyncStorage.setItem("selectedJob", JSON.stringify(item));
+        console.log("Job saved to AsyncStorage:", item);
+        navigation.navigate("JobDetailScreen", { id: item.id });
+      } catch (err) {
+        console.error("Error storing job data", err);
+      }
+    };
+
     return (
-      <TouchableOpacity
-        style={styles.jobContainer}
-        onPress={() =>
-          // Pass job id instead of job_num
-          navigation.navigate("JobDetailScreen", { id: item.id })
-        }
-      >
+      <TouchableOpacity style={styles.jobContainer} onPress={handleJobPress}>
         <View style={styles.jobDetails}>
           <Text style={styles.jobNum}>{item.job_num}</Text>
           <Text>{item.date_created}</Text>
+
+          <View
+            style={[
+              styles.statusContainer,
+              { backgroundColor: getStatusBackground(Number(item.status)) },
+            ]}
+          >
+            <Text style={styles.statusText}>
+              {Number(item.status) === 1
+                ? "Open"
+                : Number(item.status) === 2
+                ? "Completed"
+                : "Closed"}
+            </Text>
+          </View>
+
           <Text>{item.job_type}</Text>
         </View>
         <View style={styles.taskListContainer}>
@@ -192,11 +225,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
-  statusText: {
-    textAlign: "center",
-    color: color.black,
-    marginBottom: 10,
-  },
   jobContainer: {
     flexDirection: "row",
     backgroundColor: color.white,
@@ -224,6 +252,17 @@ const styles = StyleSheet.create({
   taskItem: {
     fontSize: fontSize.medium,
     color: color.gray,
+  },
+  statusContainer: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+    alignSelf: "flex-start",
+    marginTop: 5,
+  },
+  statusText: {
+    color: color.white,
+    fontWeight: "bold",
   },
 });
 

@@ -19,7 +19,6 @@ const JobDetailScreen = ({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, "JobDetailScreen">) => {
   const { id } = route.params;
-  console.log("JobDetailScreen id:", id);
   const [userData, setUserData] = useState<any>(null);
   const [propertyData, setPropertyData] = useState<{
     address: string;
