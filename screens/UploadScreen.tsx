@@ -31,7 +31,7 @@ const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
 
 const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
-  const { category, subCategory } = route.params;
+  const { category = {}, subCategory = {} } = route.params || {};
   const [media, setMedia] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -43,6 +43,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   }>({});
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [jobData, setJobData] = useState<any>(null);
 
   // Custom Alert State
   const [alertVisible, setAlertVisible] = useState(false);
@@ -68,6 +69,29 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     fetchStoredProperty();
   }, []);
 
+  useEffect(() => {
+    const fetchJobData = async () => {
+      try {
+        const storedJob = await AsyncStorage.getItem("jobData");
+
+        if (storedJob) {
+          try {
+            const parsedJob = JSON.parse(storedJob);
+            setJobData(parsedJob);
+          } catch (parseError) {
+            console.error("Error parsing job data:", parseError);
+          }
+        } else {
+          console.log("No job data found in AsyncStorage");
+        }
+      } catch (error) {
+        console.error("Error retrieving job data", error);
+      }
+    };
+
+    fetchJobData();
+  }, []);
+
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
     setAlertMessage(message);
@@ -82,14 +106,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const pickImage = async () => {
     try {
       navigation.setParams({ isPickingImage: true });
-
       let result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         allowsEditing: true,
         quality: 1,
       });
-
       if (!result.canceled) {
         setMedia([...media, ...result.assets.map((asset) => asset.uri)]);
       }
@@ -108,15 +130,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         return;
       }
     }
-
     try {
       navigation.setParams({ isPickingImage: true });
-
       let result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         quality: 1,
       });
-
       if (!result.canceled) {
         setMedia([...media, result.assets[0].uri]);
       }
@@ -132,12 +151,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     updatedMedia.splice(index, 1);
     setMedia(updatedMedia);
   };
+
   const getFileHeader = async (uri: string) => {
     try {
       const base64Data = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-
       const mimeType = uri.endsWith(".png") ? "image/png" : "image/jpeg";
       return `data:${mimeType};base64,${base64Data.slice(0, 50)}...`;
     } catch (error) {
@@ -154,30 +173,21 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const getFileSize = async (uri: string): Promise<number | null> => {
     try {
       const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
-
       if (!fileInfo.exists) {
         console.error("File does not exist:", uri);
         return null;
       }
-
-      return fileInfo.size; // fileInfo.size should now be available
+      return fileInfo.size;
     } catch (error) {
       console.error("Error getting file size:", error);
       return null;
     }
   };
 
+  // In UploadScreen.tsx, inside uploadImages:
   const uploadImages = async () => {
     if (media.length === 0) {
       showAlert("Error", "Please select at least one image to upload.");
-      return;
-    }
-
-    if (!storedProperty) {
-      showAlert(
-        "Error",
-        "No property selected. Please select a property first."
-      );
       return;
     }
 
@@ -194,23 +204,30 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       const uploadPromises = media.map(async (uri, index) => {
         const fileSize = await getFileSize(uri);
         if (fileSize === null) return;
-
         const formData = new FormData();
         const fileName = uri.split("/").pop() || `image_${index}.jpg`;
         const fileType = fileName.endsWith(".png") ? "image/png" : "image/jpeg";
         const fileHeaderValue = await getFileHeader(uri);
 
-        formData.append("id", fileId);
-        formData.append("total_segments", totalFiles.toString());
-        formData.append("segment_number", (index + 1).toString());
+        const propertyId = storedProperty ? storedProperty.id : "";
+        const jobId =
+          route.params?.source === "CategoryScreen"
+            ? ""
+            : jobData
+            ? jobData.id
+            : "";
+
+        formData.append("id", fileId || "");
+        formData.append("total_segments", totalFiles.toString() || "");
+        formData.append("segment_number", (index + 1).toString() || "");
         formData.append("main_category", category?.id?.toString() || "");
         formData.append("category_level_1", subCategory?.id?.toString() || "");
-        formData.append("property_id", storedProperty.id || "");
-        formData.append("job_id", storedProperty.job_id || "");
-        formData.append("file_header", fileHeaderValue);
-        formData.append("file_name", fileName);
-        formData.append("file_type", fileType);
-        formData.append("file_size", fileSize.toString()); // Add file size
+        formData.append("property_id", propertyId);
+        formData.append("job_id", jobId);
+        formData.append("file_header", fileHeaderValue || "");
+        formData.append("file_name", fileName || "");
+        formData.append("file_type", fileType || "");
+        formData.append("file_size", fileSize.toString() || "");
 
         formData.append("content", {
           uri: uri,
@@ -237,16 +254,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
               },
             }
           );
-
           newUploadProgress[uri] = "Complete";
           setUploadProgress({ ...newUploadProgress });
           setUploadedCount((prevCount) => prevCount + 1);
           return response.data;
         } catch (error) {
           console.error(`Error uploading image ${index + 1}:`, error);
-          if (axios.isAxiosError(error)) {
-            console.error("Error details:", error.response?.data);
-          }
           newUploadProgress[uri] = "Failed";
           setUploadProgress({ ...newUploadProgress });
           throw error;
@@ -255,13 +268,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
       await Promise.all(uploadPromises);
       showSnackbar("All images uploaded successfully!");
-      setMedia([]); // Clear the images after successful upload
+      setMedia([]);
     } catch (error) {
       console.error("Error uploading images:", error);
-      if (axios.isAxiosError(error)) {
-        console.error("Network error details:", error.message);
-        console.error("Error config:", error.config);
-      }
       showAlert(
         "Upload Error",
         "Some images failed to upload. Please check your network connection and try again."
@@ -293,7 +302,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           {subCategory ? ` - ${subCategory.sub_category}` : ""}
         </Text>
         <Text style={internalStyle.buttonHeading}>Choose Image From</Text>
-
         <View style={internalStyle.buttonContainer}>
           <TouchableOpacity
             style={[internalStyle.button, { backgroundColor: color.gray }]}
@@ -350,7 +358,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           )}
           contentContainerStyle={internalStyle.grid}
         />
-
         {/* Upload Button */}
         {media.length > 0 && (
           <TouchableOpacity
@@ -370,7 +377,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             )}
           </TouchableOpacity>
         )}
-
         {/* Image Modal */}
         <Modal visible={modalVisible} transparent={true} animationType="slide">
           <View style={internalStyle.modalContainer}>
@@ -386,7 +392,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
                 style={internalStyle.fullImage}
               />
             )}
-
             {/* Thumbnail Preview */}
             <FlatList
               data={media}
@@ -407,7 +412,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             />
           </View>
         </Modal>
-
         {/* Custom Alert Dialog */}
         <Portal>
           <Dialog
@@ -423,7 +427,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             </Dialog.Actions>
           </Dialog>
         </Portal>
-
         {/* Snackbar for notifications */}
         <Snackbar
           visible={snackbarVisible}

@@ -105,8 +105,8 @@ const JobsScreen = ({
 
     const handleJobPress = async () => {
       try {
-        await AsyncStorage.setItem("selectedJob", JSON.stringify(item));
-        console.log("Job saved to AsyncStorage:", item);
+        await AsyncStorage.setItem("jobData", JSON.stringify(item));
+        console.log("jobData saved to AsyncStorage:", item);
         navigation.navigate("JobDetailScreen", { id: item.id });
       } catch (err) {
         console.error("Error storing job data", err);
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   statusText: {
-    color: color.white,
+    color: color.gray,
     fontWeight: "bold",
   },
 });

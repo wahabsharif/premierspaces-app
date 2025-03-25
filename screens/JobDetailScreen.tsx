@@ -164,7 +164,7 @@ const JobDetailScreen = ({
             {/* Upload Files Button aligned to the right */}
             <TouchableOpacity
               style={styles.uploadButton}
-              //   onPress={() => navigation.navigate("UploadScreen")}
+              onPress={() => navigation.navigate("UploadScreen")}
             >
               <Text style={styles.uploadButtonText}>Upload Files</Text>
             </TouchableOpacity>

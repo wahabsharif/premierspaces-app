@@ -105,6 +105,7 @@ const CategoryScreen = ({ navigation }: any) => {
     </View>
   );
 
+  // In CategoryScreen.tsx, update handleNavigate:
   const handleNavigate = async () => {
     if (!selectedCategory || !selectedSubCategory) {
       showAlert("Selection Required", "Please select a subcategory");
@@ -125,16 +126,14 @@ const CategoryScreen = ({ navigation }: any) => {
       // Verify the stored data
       const storedData = await AsyncStorage.getItem("selectedData");
       console.log("Data retrieved from AsyncStorage:", storedData);
-
-      if (storedData !== dataToStore) {
-        console.warn("Stored data doesn't match the original data");
-      }
     } catch (error) {
       console.error("Error storing or retrieving selected data", error);
     }
+    // Pass an extra parameter to indicate navigation from CategoryScreen.
     navigation.navigate("UploadScreen", {
       category: selectedCategory,
       subCategory: selectedSubCategory,
+      source: "CategoryScreen",
     });
   };
 
