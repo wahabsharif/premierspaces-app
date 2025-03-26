@@ -8,14 +8,16 @@
       "distribution": "store",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "production"
     },
     "development": {
       "releaseChannel": "development",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "development"
     }
   }
 }
