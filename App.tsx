@@ -26,8 +26,22 @@ export default function App() {
       try {
         const userData = await AsyncStorage.getItem("userData");
         if (userData) {
-          setIsLoggedIn(true);
-          Toast.success("Welcome back!");
+          // Parse the stored data
+          const parsedData = JSON.parse(userData);
+          // Check if payload and userid exist
+          if (parsedData?.payload?.userid) {
+            setIsLoggedIn(true);
+            Toast.success("Welcome back!");
+            console.log("Latest User Data Stored in Storage:", parsedData);
+          } else {
+            // If no valid userid is present, ensure the login page is shown
+            setIsLoggedIn(false);
+            console.log("No userid found in storage.");
+          }
+        } else {
+          // No userData stored at all
+          setIsLoggedIn(false);
+          console.log("No user data found in storage.");
         }
       } catch (error) {
         console.error("Error checking login status:", error);
