@@ -87,7 +87,7 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   return (
     <View style={internalstyles.container}>
       <Image
-        source={require("../assets/icon.png")}
+        source={require("../assets/logo.png")}
         style={styles.image}
         resizeMode="contain"
       />

@@ -107,7 +107,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   return (
     <View style={styles.pinContainer}>
       <Image
-        source={require("../assets/icon.png")}
+        source={require("../assets/logo.png")}
         style={styles.pinLogo}
         resizeMode="contain"
       />

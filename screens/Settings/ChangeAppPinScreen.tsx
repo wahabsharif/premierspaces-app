@@ -74,7 +74,7 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   return (
     <View style={styles.pinContainer}>
       <Image
-        source={require("../../assets/icon.png")}
+        source={require("../../assets/logo.png")}
         style={styles.pinLogo}
         resizeMode="contain"
       />
