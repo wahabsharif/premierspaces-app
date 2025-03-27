@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -48,33 +49,48 @@ const JobsScreen = ({
     fetchStoredData();
   }, []);
 
-  // Once we have both user and property data, fetch the jobs data
-  useEffect(() => {
-    const fetchJobs = async () => {
-      if (!userData || !propertyData) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const userid = userData.payload
-          ? userData.payload.userid
-          : userData.userid;
-        const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
-        const response = await fetch(endpoint);
-        const json = await response.json();
-        if (json.status === 1) {
-          setJobs(json.payload);
-        } else {
-          setError("No jobs found or session expired.");
-        }
-      } catch (err) {
-        console.error("Error fetching jobs", err);
-        setError("Error fetching jobs.");
-      } finally {
-        setLoading(false);
+  // Define fetchJobs as a callback function
+  const fetchJobs = useCallback(async () => {
+    if (!userData || !propertyData) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const userid = userData.payload
+        ? userData.payload.userid
+        : userData.userid;
+      const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
+      const response = await fetch(endpoint);
+      const json = await response.json();
+      if (json.status === 1) {
+        // Sort jobs by date_created in descending order
+        const sortedJobs = json.payload.sort(
+          (a: Job, b: Job) =>
+            new Date(b.date_created).getTime() -
+            new Date(a.date_created).getTime()
+        );
+        setJobs(sortedJobs);
+      } else {
+        setError("No jobs found or session expired.");
       }
-    };
-    fetchJobs();
+    } catch (err) {
+      console.error("Error fetching jobs", err);
+      setError("Error fetching jobs.");
+    } finally {
+      setLoading(false);
+    }
   }, [userData, propertyData]);
+
+  // Initial fetch when jobs or property/user data changes
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
+
+  // Re-fetch jobs whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [fetchJobs])
+  );
 
   const renderJob = ({ item }: { item: Job }) => {
     const tasks = [

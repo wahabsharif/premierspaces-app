@@ -177,6 +177,9 @@ const OpenNewJobScreen = ({
       );
       console.log("Server Response:", response.data);
       showToast("Job created successfully!");
+      // Option 1: Navigate back to JobsScreen
+      navigation.navigate("JobsScreen");
+      // Optionally reset the form if needed:
       setTimeout(resetForm, 500);
     } catch (error) {
       console.error("Error posting job", error);

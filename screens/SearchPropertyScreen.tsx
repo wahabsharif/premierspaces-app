@@ -39,7 +39,7 @@ const SearchPropertyScreen: React.FC = () => {
       // Retrieve userid from AsyncStorage
       const userDataJson = await AsyncStorage.getItem("userData");
       const userData = userDataJson ? JSON.parse(userDataJson) : null;
-      const userid = userData?.userid;
+      const userid = userData?.payload?.userid;
 
       if (!userid) {
         setError("User ID not found. Please log in again.");
@@ -60,6 +60,7 @@ const SearchPropertyScreen: React.FC = () => {
     } catch (err: any) {
       console.error("Error occurred during fetch:", err);
       if (err.response) {
+        console.error("Error response data:", err.response.data);
         if (err.response.status === 503) {
           setError(
             "Service is temporarily unavailable. Please try again later."

@@ -23,8 +23,8 @@ const Header = () => {
         const userDataJson = await AsyncStorage.getItem("userData");
         if (userDataJson !== null) {
           const userData = JSON.parse(userDataJson);
-          if (userData.name) {
-            setUserName(userData.name);
+          if (userData?.payload?.name) {
+            setUserName(userData.payload.name);
           }
         }
       } catch (error) {

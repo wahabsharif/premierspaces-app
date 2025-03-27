@@ -35,7 +35,7 @@ const CategoryScreen = ({ navigation }: any) => {
         // Retrieve user data from AsyncStorage
         const userDataJson = await AsyncStorage.getItem("userData");
         const userData = userDataJson ? JSON.parse(userDataJson) : null;
-        const userid = userData?.userid;
+        const userid = userData?.payload?.userid;
 
         if (!userid) {
           showAlert("Error", "User ID not found. Please log in again.");
