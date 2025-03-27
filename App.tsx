@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Provider as PaperProvider } from "react-native-paper";
 import ToastManager, { Toast } from "toastify-react-native";
+import * as Application from "expo-application";
 
 import { AppNavigator } from "./components/Common/AppNavigator";
 import LockScreen from "./screens/LockScreen";
@@ -20,12 +21,17 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
-    const checkLoginStatus = async () => {
+    const initializeApp = async () => {
       try {
-        const userData = await AsyncStorage.getItem("userData");
+        const [userData, appLockEnabled, storedVersion] = await Promise.all([
+          AsyncStorage.getItem("userData"),
+          AsyncStorage.getItem("app_lock_enabled"),
+          AsyncStorage.getItem("app_version"),
+        ]);
+
+        // Check if user data exists
         if (userData) {
           setIsLoggedIn(true);
           Toast.success("Welcome back!");
@@ -33,31 +39,26 @@ export default function App() {
         } else {
           setIsLoggedIn(false);
         }
+
+        setIsUnlocked(appLockEnabled === "false" || appLockEnabled === null);
+
+        const currentVersion = Application.nativeApplicationVersion || "0.0.0";
+
+        if (storedVersion !== currentVersion) {
+          await AsyncStorage.removeItem("userData");
+          setIsLoggedIn(false);
+          Toast.info("App updated, please log in again.");
+          await AsyncStorage.setItem("app_version", currentVersion);
+        }
       } catch (error) {
-        console.error("Error checking login status:", error);
-        Toast.error("Failed to check login status");
-        setIsLoggedIn(false);
+        console.error("Error initializing app:", error);
+        Toast.error("Failed to initialize app");
       } finally {
         setIsLoading(false);
       }
     };
 
-    checkLoginStatus();
-  }, []);
-
-  useEffect(() => {
-    const checkAppLockStatus = async () => {
-      try {
-        const appLockEnabled = await AsyncStorage.getItem("app_lock_enabled");
-        if (appLockEnabled === "false" || appLockEnabled === null) {
-          setIsUnlocked(true);
-        }
-      } catch (error) {
-        console.error("Error checking app lock status:", error);
-        Toast.error("Failed to check app lock status");
-      }
-    };
-    checkAppLockStatus();
+    initializeApp();
   }, []);
 
   useEffect(() => {
