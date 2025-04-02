@@ -2,7 +2,7 @@
   "expo": {
     "name": "Premier Spaces",
     "slug": "premier-spaces",
-    "version": "1.0.0",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/touch-icon.png",
     "userInterfaceStyle": "light",
@@ -39,12 +39,11 @@
         "foregroundImage": "./assets/touch-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "usesCleartextTraffic": true,
       "package": "com.anonymous.premierspaces",
       "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/logo.png"
     },
     "extra": {
       "eas": {

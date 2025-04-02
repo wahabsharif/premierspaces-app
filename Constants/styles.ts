@@ -26,8 +26,8 @@ export default StyleSheet.create({
   pinLogo: {
     width: 100,
     height: 100,
-    marginBottom: 40,
   },
+
   headerContainer: {
     height: 60,
     flexDirection: "row",
@@ -191,7 +191,6 @@ export default StyleSheet.create({
   image: {
     width: 200,
     height: 200,
-    marginBottom: 30,
     alignItems: "center",
   },
   input: {

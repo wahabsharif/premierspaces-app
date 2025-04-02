@@ -10,9 +10,10 @@ import {
 } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import styles from "../Constants/styles";
-import { fontSize } from "../Constants/theme";
+import { color, fontSize } from "../Constants/theme";
 import axios from "axios";
 import { baseApiUrl } from "../Constants/env";
+import Constants from "expo-constants";
 
 const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [initials, setInitials] = useState("");
@@ -91,6 +92,9 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
         style={styles.image}
         resizeMode="contain"
       />
+      <Text style={localStyles.versionText}>
+        Version: {Constants.expoConfig?.version || "N/A"}
+      </Text>
       <View style={styles.inputContainer}>
         <View
           style={{
@@ -169,4 +173,12 @@ const internalstyles = StyleSheet.create({
   },
 });
 
+const localStyles = StyleSheet.create({
+  versionText: {
+    fontSize: 14,
+    color: color.gray,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+});
 export default LoginScreen;

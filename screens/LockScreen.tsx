@@ -1,10 +1,13 @@
+import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
-import { Image, View } from "react-native";
-import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { Button, Card, Dialog, Portal } from "react-native-paper";
 import PinInput from "../components/Common/PinInput";
 import styles from "../Constants/styles";
+import { color } from "../Constants/theme";
+
 interface LockScreenProps {
   onUnlock: () => void;
 }
@@ -111,6 +114,10 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         style={styles.pinLogo}
         resizeMode="contain"
       />
+      <Text style={localStyles.versionText}>
+        Version: {Constants.expoConfig?.version || "N/A"}
+      </Text>
+
       <Card style={styles.card}>
         <Card.Content>
           {isSettingPin ? (
@@ -137,7 +144,6 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         </Card.Content>
       </Card>
 
-      {/* Custom Alert Dialog */}
       <Portal>
         <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
           <Dialog.Title>{alertTitle}</Dialog.Title>
@@ -159,5 +165,14 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     </View>
   );
 };
+
+const localStyles = StyleSheet.create({
+  versionText: {
+    fontSize: 14,
+    color: color.gray,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+});
 
 export default LockScreen;
