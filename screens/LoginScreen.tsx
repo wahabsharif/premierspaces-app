@@ -1,29 +1,32 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import Constants from "expo-constants";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  StyleSheet,
 } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
+import { baseApiUrl } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import axios from "axios";
-import { baseApiUrl } from "../Constants/env";
-import Constants from "expo-constants";
 
 const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [alertCallback, setAlertCallback] = useState<(() => void) | null>(null);
 
   const handleLogin = async () => {
+    setIsLoading(true);
     try {
       const response = await axios.post(
         `${baseApiUrl}/login.php`,
@@ -75,6 +78,8 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
         "Error",
         "An unexpected error occurred. Please try again later."
       );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -132,8 +137,13 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
           />
         </View>
       </View>
+
       <TouchableOpacity onPress={handleLogin} style={styles.button}>
-        <Text style={styles.buttonText}>Login</Text>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={color.white} />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <Portal>
@@ -181,4 +191,5 @@ const localStyles = StyleSheet.create({
     marginBottom: 20,
   },
 });
+
 export default LoginScreen;
