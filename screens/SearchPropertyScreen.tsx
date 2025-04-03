@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +18,7 @@ import Header from "../components/Common/Header";
 import { RootStackParamList } from "../types";
 import styles from "../Constants/styles";
 import { baseApiUrl } from "../Constants/env";
+import { color, fontSize } from "../Constants/theme";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -29,6 +31,7 @@ const SearchPropertyScreen: React.FC = () => {
   const [error, setError] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
   const navigation = useNavigation<SearchPropertyScreenNavigationProp>();
 
   const handleSearch = async () => {
@@ -50,6 +53,13 @@ const SearchPropertyScreen: React.FC = () => {
       const url = `${baseApiUrl}/searchproperty.php?userid=${userid}&door_num=${door_num}`;
       const response = await axios.get(url);
       const data = response.data;
+
+      // Check for session expiration and show a custom modal
+      if (data.status === 0 && data.payload?.message === "Session expired") {
+        setShowSessionExpired(true);
+        setLoading(false);
+        return;
+      }
 
       if (data.status === 1 && data.payload && data.payload.length > 0) {
         setResults(data.payload);
@@ -135,9 +145,9 @@ const SearchPropertyScreen: React.FC = () => {
         </View>
         <TouchableOpacity style={styles.floatingIcon} onPress={handleSearch}>
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={color.white} />
           ) : (
-            <Ionicons name="search" size={24} color="#fff" />
+            <Ionicons name="search" size={24} color={color.white} />
           )}
         </TouchableOpacity>
         {results.length > 0 && (
@@ -156,12 +166,82 @@ const SearchPropertyScreen: React.FC = () => {
             style={styles.navigateButton}
             onPress={handleNavigate}
           >
-            <Ionicons name="arrow-forward" size={24} color="#fff" />
+            <Ionicons name="arrow-forward" size={24} color={color.white} />
           </TouchableOpacity>
         )}
       </View>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showSessionExpired}
+        onRequestClose={() => {
+          setShowSessionExpired(false);
+          navigation.navigate("LoginScreen");
+        }}
+      >
+        <View style={modalStyles.centeredView}>
+          <View style={modalStyles.modalView}>
+            <Text style={modalStyles.modalText}>
+              Session expired. Please log in again.
+            </Text>
+            <TouchableOpacity
+              style={[modalStyles.button, modalStyles.buttonClose]}
+              onPress={() => {
+                setShowSessionExpired(false);
+                navigation.navigate("LoginScreen");
+              }}
+            >
+              <Text style={modalStyles.textStyle}>LOGIN</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
+
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: color.white,
+    borderRadius: 15,
+    padding: 35,
+    alignItems: "center",
+    shadowColor: color.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  button: {
+    borderRadius: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+    elevation: 2,
+  },
+  buttonClose: {
+    backgroundColor: color.primary,
+    marginTop: 30,
+  },
+  textStyle: {
+    color: color.white,
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: fontSize.medium,
+  },
+  modalText: {
+    marginVertical: 15,
+    textAlign: "center",
+    fontSize: fontSize.large,
+    fontWeight: "bold",
+  },
+});
 
 export default SearchPropertyScreen;
