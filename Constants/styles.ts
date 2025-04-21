@@ -35,12 +35,11 @@ export default StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     position: "relative",
-    elevation: 3,
-    shadowColor: color.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    backgroundColor: color.white,
+    elevation: 5,
+    zIndex: 1,
   },
+
   left: {
     justifyContent: "center",
   },
@@ -69,7 +68,7 @@ export default StyleSheet.create({
   dropdownContainer: {
     position: "absolute",
     top: 60,
-    left: 10,
+    right: 10,
     width: 150,
     backgroundColor: color.white,
     borderWidth: 1,

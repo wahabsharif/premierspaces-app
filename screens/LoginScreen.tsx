@@ -21,9 +21,7 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [pin, setPin] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
-  const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
-  const [alertCallback, setAlertCallback] = useState<(() => void) | null>(null);
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -49,44 +47,35 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
       if (data.status === 1) {
         const userInfo = {
           token: data.token,
-          userId: data.userId, // or whatever field uniquely identifies the user
+          userId: data.userId,
         };
         await AsyncStorage.setItem("userData", JSON.stringify(userInfo));
-
-        // Store latest user data
         await AsyncStorage.setItem("userData", JSON.stringify(data));
 
         console.log("Latest userData Stored in Storage:", data);
 
         if (onLoginSuccess) {
-          showAlert("Success", "You are logged in!", onLoginSuccess);
+          onLoginSuccess();
         } else if (navigation) {
-          showAlert("Success", "You are logged in!", () => {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "SearchPropertyScreen" }],
-            });
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "SearchPropertyScreen" }],
           });
         }
       } else {
         console.log("Login failed:", data);
-        showAlert("Invalid Credentials", "Unable to login, please try again.");
+        showError("Invalid Credentials", "Unable to login, please try again.");
       }
     } catch (error) {
       console.error("Login Error:", error);
-      showAlert(
-        "Error",
-        "An unexpected error occurred. Please try again later."
-      );
+      showError("An unexpected error occurred.", "Please try again later.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const showAlert = (title: string, message: string, callback?: () => void) => {
-    setAlertTitle(title);
+  const showError = (message: string, p0: string) => {
     setAlertMessage(message);
-    setAlertCallback(() => callback || null);
     setAlertVisible(true);
   };
 
@@ -148,19 +137,12 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
 
       <Portal>
         <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
-          <Dialog.Title>{alertTitle}</Dialog.Title>
+          <Dialog.Title>Error</Dialog.Title>
           <Dialog.Content>
             <Text>{alertMessage}</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button
-              onPress={() => {
-                setAlertVisible(false);
-                if (alertCallback) alertCallback();
-              }}
-            >
-              OK
-            </Button>
+            <Button onPress={() => setAlertVisible(false)}>OK</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

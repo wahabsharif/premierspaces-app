@@ -68,10 +68,6 @@ const Header = () => {
   return (
     <>
       <View style={styles.headerContainer}>
-        <TouchableOpacity onPress={handleDropdownPress} style={styles.left}>
-          <MaterialCommunityIcons name="menu" size={24} color="black" />
-        </TouchableOpacity>
-
         <View style={styles.center}>
           <Image
             source={require("../../assets/logo.png")}
@@ -85,6 +81,9 @@ const Header = () => {
             {userName}
           </Text>
         </View>
+        <TouchableOpacity onPress={handleDropdownPress} style={styles.left}>
+          <MaterialCommunityIcons name="menu" size={24} color="black" />
+        </TouchableOpacity>
       </View>
 
       {dropdownVisible && (

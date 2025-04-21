@@ -98,7 +98,14 @@ export default function App() {
 
   return (
     <PaperProvider>
-      <ToastManager />
+      <ToastManager
+        position="bottom" // container at bottom
+        style={{
+          flexDirection: "column-reverse", // reverse the default bottom→up ordering :contentReference[oaicite:2]{index=2}
+          justifyContent: "flex-end", // align to the bottom edge
+        }}
+      />
+
       <ImageBackground source={backgroundImage} style={styles.background}>
         <SafeAreaView style={styles.container}>
           {isUnlocked ? (

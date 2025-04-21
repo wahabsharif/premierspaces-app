@@ -54,23 +54,31 @@ const JobsScreen = ({
     if (!userData || !propertyData) return;
     setLoading(true);
     setError(null);
+
     try {
-      const userid = userData.payload
-        ? userData.payload.userid
-        : userData.userid;
+      const userid = userData.payload?.userid ?? userData.userid;
       const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
       const response = await fetch(endpoint);
       const json = await response.json();
+
       if (json.status === 1) {
-        // Sort jobs by date_created in descending order
         const sortedJobs = json.payload.sort(
           (a: Job, b: Job) =>
             new Date(b.date_created).getTime() -
             new Date(a.date_created).getTime()
         );
-        setJobs(sortedJobs);
+
+        if (sortedJobs.length > 0) {
+          setJobs(sortedJobs);
+        } else {
+          // API says “OK” but no jobs found
+          setJobs([]);
+          setError("No jobs found with the selected property.");
+        }
       } else {
-        setError("No jobs found or session expired.");
+        // status !== 1 => treat as “no jobs” rather than generic error
+        setJobs([]);
+        setError("No jobs found with the selected property.");
       }
     } catch (err) {
       console.error("Error fetching jobs", err);
@@ -186,8 +194,10 @@ const JobsScreen = ({
           <Text style={styles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
         {loading && <Text style={styles.statusText}>Loading jobs...</Text>}
-        {error && <Text style={styles.statusText}>{error}</Text>}
-        {!loading && jobs.length > 0 && (
+        {!loading && error && (
+          <Text style={[styles.statusText, { color: color.red }]}>{error}</Text>
+        )}
+        {!loading && !error && jobs.length > 0 && (
           <FlatList
             data={jobs}
             keyExtractor={(item) => item.id}
