@@ -73,6 +73,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [jobData, setJobData] = useState<any>(null);
   const [loadingMedia, setLoadingMedia] = useState(false);
+  const [userData, setUserData] = useState<any>(null);
 
   // Custom Alert State
   const [alertVisible, setAlertVisible] = useState(false);
@@ -99,6 +100,21 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const storedUserData = await AsyncStorage.getItem("userData");
+        if (storedUserData) {
+          const parsedUserData = JSON.parse(storedUserData);
+          setUserData(parsedUserData);
+          console.log("Retrieved user data:", parsedUserData);
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    };
+    fetchUserData();
+  }, []);
   useEffect(() => {
     const fetchStoredProperty = async () => {
       try {
@@ -319,6 +335,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           : jobData
           ? jobData.id
           : "";
+      const userName = userData?.payload?.name || "";
       formData.append("id", fileId || "");
       formData.append("total_segments", totalFiles.toString());
       formData.append("segment_number", (index + 1).toString());
@@ -330,6 +347,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       formData.append("file_name", fileName);
       formData.append("file_type", fileType);
       formData.append("file_size", fileSize.toString());
+      formData.append("user_name", userName);
       formData.append("content", {
         uri: file.uri,
         type: fileType,
@@ -337,7 +355,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       } as any);
       try {
         const response = await axios.post(
-          `${baseApiUrl}/upload.php`,
+          `${baseApiUrl}/media-uploader.php`,
           formData,
           {
             headers: { "Content-Type": "multipart/form-data" },
