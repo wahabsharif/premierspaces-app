@@ -68,21 +68,24 @@ const Header = () => {
   return (
     <>
       <View style={styles.headerContainer}>
-        <View style={styles.center}>
-          <Image
-            source={require("../../assets/logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
-
-        <View style={styles.right}>
-          <Text style={styles.rightText} numberOfLines={1} ellipsizeMode="tail">
+        <View style={styles.headerTextContainer}>
+          <Text
+            style={styles.headerText}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {userName}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleDropdownPress} style={styles.left}>
-          <MaterialCommunityIcons name="menu" size={24} color="black" />
+        <View style={styles.headerLogoContainer}>
+          <Image
+            source={require("../../assets/logo.png")}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+        </View>
+        <TouchableOpacity onPress={handleDropdownPress}>
+          <MaterialCommunityIcons name="menu" size={30} color="black" />
         </TouchableOpacity>
       </View>
 

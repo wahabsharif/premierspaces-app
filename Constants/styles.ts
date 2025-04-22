@@ -40,29 +40,25 @@ export default StyleSheet.create({
     zIndex: 1,
   },
 
-  left: {
-    justifyContent: "center",
-  },
-  center: {
+  headerLogoContainer: {
     position: "absolute",
     left: 0,
     right: 0,
     alignItems: "center",
   },
-  right: {
+  headerTextContainer: {
     maxWidth: 100,
     justifyContent: "center",
     alignItems: "flex-end",
   },
-  logo: {
-    width: 100,
+  headerLogo: {
+    width: 40,
     height: 40,
   },
-  rightText: {
-    fontSize: 16,
-    fontWeight: "bold",
+  headerText: {
+    fontSize: 12,
     color: "black",
-    textAlign: "right",
+    textAlign: "left",
   },
 
   dropdownContainer: {
@@ -86,7 +82,7 @@ export default StyleSheet.create({
     borderBottomColor: color.secondary,
   },
   dropdownItemText: {
-    fontSize: fontSize.medium,
+    fontSize: fontSize.small,
     color: color.gray,
   },
   headingContainer: {

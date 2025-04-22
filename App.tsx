@@ -99,10 +99,10 @@ export default function App() {
   return (
     <PaperProvider>
       <ToastManager
-        position="bottom" // container at bottom
+        position="bottom"
         style={{
-          flexDirection: "column-reverse", // reverse the default bottom→up ordering :contentReference[oaicite:2]{index=2}
-          justifyContent: "flex-end", // align to the bottom edge
+          flexDirection: "column-reverse",
+          justifyContent: "flex-end",
         }}
       />
 

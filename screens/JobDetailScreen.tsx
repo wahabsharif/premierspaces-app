@@ -1,228 +1,228 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  FlatList,
 } from "react-native";
 import Header from "../components/Common/Header";
 import { baseApiUrl } from "../Constants/env";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
 
-const JobDetailScreen = ({
-  route,
-  navigation,
-}: NativeStackScreenProps<RootStackParamList, "JobDetailScreen">) => {
-  const { id } = route.params;
-  const [userData, setUserData] = useState<any>(null);
-  const [propertyData, setPropertyData] = useState<{
-    address: string;
-    company: string;
-    id: string;
-  } | null>(null);
-  const [jobDetail, setJobDetail] = useState<any>(null);
-  const [contractorData, setContractorData] = useState<any[]>([]);
-  const [totalAmount, setTotalAmount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+interface Property {
+  address: string;
+  company: string;
+  id: string;
+}
+
+interface JobDetail {
+  job_type: string;
+  task1?: string;
+  task2?: string;
+  task3?: string;
+  task4?: string;
+  task5?: string;
+  task6?: string;
+  task7?: string;
+  task8?: string;
+  task9?: string;
+  task10?: string;
+  image_file_count: number;
+  doc_file_count: number;
+  video_file_count: number;
+}
+
+interface Contractor {
+  name: string;
+  amount: string;
+}
+
+type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
+
+const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+  const { id: jobId } = route.params;
+  const [userId, setUserId] = useState<string | null>(null);
+  const [property, setProperty] = useState<Property | null>(null);
+  const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
+  const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Retrieve stored user data from AsyncStorage
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem("userData");
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          setUserData(parsedUser);
-        }
-      } catch (err) {
-        console.error("Error retrieving user data", err);
+  // Load user and property from AsyncStorage
+  const loadLocalData = useCallback(async () => {
+    try {
+      const [userJson, propJson] = await Promise.all([
+        AsyncStorage.getItem("userData"),
+        AsyncStorage.getItem("selectedProperty"),
+      ]);
+      if (userJson) {
+        const user = JSON.parse(userJson);
+        setUserId(user.payload?.userid ?? user.userid ?? null);
       }
-    };
-    fetchUserData();
+      if (propJson) setProperty(JSON.parse(propJson));
+    } catch (e) {
+      console.error("Error loading local data", e);
+    }
   }, []);
 
-  // Retrieve stored property data from AsyncStorage
-  useEffect(() => {
-    const fetchPropertyData = async () => {
-      try {
-        const storedProperty = await AsyncStorage.getItem("selectedProperty");
-        if (storedProperty) {
-          const parsedProperty = JSON.parse(storedProperty);
-          setPropertyData(parsedProperty);
-        }
-      } catch (err) {
-        console.error("Error retrieving property data", err);
+  // Fetch job detail
+  const fetchJob = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const { data: jd } = await axios.get<{
+        status: number;
+        payload: JobDetail | JobDetail[];
+      }>(`${baseApiUrl}/getjobs.php`, {
+        params: { userid: userId, id: jobId },
+      });
+      if (jd.status === 1) {
+        const detail = Array.isArray(jd.payload) ? jd.payload[0] : jd.payload;
+        setJobDetail(detail);
+      } else {
+        setError("Job details not found.");
       }
-    };
-    fetchPropertyData();
-  }, []);
+    } catch (e) {
+      console.error(e);
+      setError("Error fetching job details.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, jobId]);
 
-  useEffect(() => {
-    if (!userData) return;
-    const fetchJobDetail = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const userid = userData.payload
-          ? userData.payload.userid
-          : userData.userid;
-        const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&id=${id}`;
-        const response = await fetch(endpoint);
-        const json = await response.json();
-        if (json.status === 1) {
-          const detail =
-            Array.isArray(json.payload) && json.payload.length > 0
-              ? json.payload[0]
-              : json.payload;
-          setJobDetail(detail);
-        } else {
-          setError("Job details not found.");
-        }
-      } catch (err) {
-        console.error("Error fetching job details", err);
-        setError("Error fetching job details.");
-      } finally {
-        setLoading(false);
+  // Fetch contractor data
+  const fetchContractors = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const { data: cd } = await axios.get<{
+        status: number;
+        payload: Contractor | Contractor[];
+      }>(`${baseApiUrl}/get-contractor-data.php`, {
+        params: { userid: userId, job_id: jobId },
+      });
+      if (cd.status === 1) {
+        setContractors(Array.isArray(cd.payload) ? cd.payload : [cd.payload]);
       }
-    };
-    fetchJobDetail();
-  }, [userData, id]);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [userId, jobId]);
 
   useEffect(() => {
-    if (!userData || !jobDetail) return;
+    loadLocalData();
+  }, [loadLocalData]);
 
-    const fetchContractorData = async () => {
-      try {
-        const userid = userData.payload
-          ? userData.payload.userid
-          : userData.userid;
-        const endpoint = `${baseApiUrl}/get-contractor-data.php?userid=${userid}&job_id=${id}`;
-        const response = await fetch(endpoint);
-        const json = await response.json();
+  useEffect(() => {
+    fetchJob();
+  }, [fetchJob]);
 
-        if (json.status === 1 && json.payload) {
-          const contractors = Array.isArray(json.payload)
-            ? json.payload
-            : [json.payload];
+  useEffect(() => {
+    fetchContractors();
+  }, [fetchContractors]);
 
-          setContractorData(contractors);
-          const total = contractors.reduce(
-            (sum: number, contractor: { amount: string }) => {
-              return sum + (parseFloat(contractor.amount) || 0);
-            },
-            0
-          );
+  // Derive tasks list and total amount using useMemo, always before returns
+  const tasks = useMemo(
+    () =>
+      [
+        jobDetail?.task1,
+        jobDetail?.task2,
+        jobDetail?.task3,
+        jobDetail?.task4,
+        jobDetail?.task5,
+        jobDetail?.task6,
+        jobDetail?.task7,
+        jobDetail?.task8,
+        jobDetail?.task9,
+        jobDetail?.task10,
+      ].filter((t): t is string => Boolean(t && t.trim())),
+    [jobDetail]
+  );
 
-          setTotalAmount(total);
-        } else {
-          console.log("No contractor data available or error in response");
-        }
-      } catch (err) {
-        console.error("Error fetching contractor data", err);
-      }
-    };
+  const totalAmount = useMemo(
+    () => contractors.reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0),
+    [contractors]
+  );
 
-    fetchContractorData();
-  }, [userData, jobDetail, id]);
+  const renderTask = ({ item }: { item: string }) => (
+    <Text style={styles.taskItem}>{`\u2022 ${item}`}</Text>
+  );
 
-  if (loading) {
+  // Loading and error states
+  if (loading)
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color={color.primary} />
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#1f3759" />
       </View>
     );
-  }
 
-  if (error || !jobDetail) {
+  if (error || !jobDetail)
     return (
-      <View style={styles.container}>
+      <View style={styles.centered}>
         <Text style={styles.errorText}>
-          {error || "No job details available."}
+          {error ?? "No job details available."}
         </Text>
       </View>
     );
-  }
 
+  // Main UI
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screen}>
       <Header />
       <View style={styles.container}>
-        {/* Display Property Details */}
-        {propertyData && (
+        {property && (
           <View style={styles.propertyContainer}>
             <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <View style={styles.propertyDetails}>
-              <Text style={styles.propertyItem}>{propertyData.address}</Text>
-              <Text style={styles.propertyItem}>{propertyData.company}</Text>
-            </View>
-            {/* Upload Files Button aligned to the right */}
+            <Text style={styles.propertyItem}>{property.address}</Text>
+            <Text style={styles.propertyItem}>{property.company}</Text>
             <TouchableOpacity
               style={styles.uploadButton}
-              onPress={() => navigation.navigate("UploadScreen")}
+              onPress={() => navigation.navigate("UploadScreen", { jobId })}
             >
               <Text style={styles.uploadButtonText}>Upload Files</Text>
             </TouchableOpacity>
           </View>
         )}
         <Text style={styles.header}>Job Detail</Text>
-        <Text style={styles.label}>Landlord</Text>
-        <Text style={styles.value}></Text>
         <Text style={styles.label}>Job Type</Text>
         <Text style={styles.value}>{jobDetail.job_type}</Text>
-        <Text style={styles.label}>Tasks:</Text>
-        {[
-          jobDetail.task1,
-          jobDetail.task2,
-          jobDetail.task3,
-          jobDetail.task4,
-          jobDetail.task5,
-          jobDetail.task6,
-          jobDetail.task7,
-          jobDetail.task8,
-          jobDetail.task9,
-          jobDetail.task10,
-        ]
-          .filter((task) => task && task.trim().length > 0)
-          .map((task, index) => (
-            <Text key={index} style={styles.taskItem}>
-              {"\u2022"} {task}
-            </Text>
-          ))}
-        <Text style={styles.label}>Costs:</Text>
-
-        {/* Display contractor costs */}
+        {tasks.length > 0 && (
+          <>
+            <Text style={styles.label}>Tasks</Text>
+            <FlatList
+              data={tasks}
+              keyExtractor={(_, i) => i.toString()}
+              renderItem={renderTask}
+            />
+          </>
+        )}
+        <Text style={styles.label}>Costs</Text>
         <View style={styles.costsContainer}>
-          {contractorData.length > 0 ? (
+          {contractors.length > 0 ? (
             <>
-              {contractorData.map((contractor, index) => (
-                <View key={index} style={styles.costItem}>
-                  <Text style={styles.contractorName}>{contractor.name}</Text>
-                  <Text style={styles.contractorAmount}>
-                    £ {contractor.amount}
-                  </Text>
+              {contractors.map((c, idx) => (
+                <View key={idx} style={styles.costItem}>
+                  <Text style={styles.contractorName}>{c.name}</Text>
+                  <Text style={styles.contractorAmount}>{`£ ${c.amount}`}</Text>
                 </View>
               ))}
-
-              {/* Display total amount */}
               <View style={styles.totalContainer}>
                 <Text style={styles.totalLabel}>Total Cost</Text>
-                <Text style={styles.totalAmount}>
-                  £ {totalAmount.toFixed(2)}
-                </Text>
+                <Text style={styles.totalAmount}>{`£ ${totalAmount.toFixed(
+                  2
+                )}`}</Text>
               </View>
             </>
           ) : (
             <Text style={styles.noDataText}>No cost data available</Text>
           )}
         </View>
-
-        {/* Display file counts with icons */}
         <View style={styles.countsContainer}>
           <View style={styles.countContainer}>
             <MaterialCommunityIcons name="image" size={40} color="#1f3759" />
@@ -247,16 +247,14 @@ const JobDetailScreen = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: color.white,
-  },
+  screen: { flex: 1 },
+  container: { flex: 1, padding: 20, backgroundColor: color.white },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: {
     fontSize: fontSize.large,
     fontWeight: "bold",
-    marginBottom: 20,
     color: color.primary,
+    marginBottom: 15,
   },
   label: {
     fontSize: fontSize.medium,
@@ -265,47 +263,23 @@ const styles = StyleSheet.create({
     color: color.black,
     textTransform: "uppercase",
   },
-  value: {
-    fontSize: fontSize.medium,
-    marginLeft: 5,
-  },
-  taskItem: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-    paddingLeft: 10,
-  },
-  countItem: {
-    fontSize: fontSize.xl,
-    color: " #1f3759",
-    paddingLeft: 5,
-    fontWeight: "bold",
-  },
-  errorText: {
-    color: "red",
-    fontSize: fontSize.medium,
-    textAlign: "center",
-  },
+  value: { fontSize: fontSize.medium, marginLeft: 5 },
+  taskItem: { fontSize: fontSize.medium, color: color.gray, paddingLeft: 10 },
+  errorText: { color: "red", fontSize: fontSize.medium, textAlign: "center" },
   propertyContainer: {
-    backgroundColor: color.white,
+    marginBottom: 20,
     padding: 15,
     borderRadius: 8,
-    marginBottom: 20,
     borderWidth: 1,
     borderColor: color.secondary,
+    backgroundColor: color.white,
   },
   propertyLabel: {
     fontSize: fontSize.medium,
     fontWeight: "600",
-    color: color.black,
     marginBottom: 5,
   },
-  propertyDetails: {
-    paddingLeft: 10,
-  },
-  propertyItem: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-  },
+  propertyItem: { fontSize: fontSize.medium, color: color.gray },
   uploadButton: {
     marginTop: 10,
     alignSelf: "flex-end",
@@ -321,57 +295,46 @@ const styles = StyleSheet.create({
   },
   countsContainer: {
     flexDirection: "row",
-    marginTop: 20,
     justifyContent: "space-around",
+    marginTop: 20,
   },
-  countContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  countContainer: { flexDirection: "row", alignItems: "center" },
+  countItem: {
+    fontSize: fontSize.xl,
+    marginLeft: 5,
+    fontWeight: "bold",
+    color: "1f3759",
   },
-  costsContainer: {
-    marginLeft: 10,
-    marginTop: 5,
-  },
+  costsContainer: { marginTop: 10 },
   costItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 5,
   },
-  contractorName: {
-    fontSize: fontSize.medium,
-    color: "#FF0000",
-    flex: 2,
-  },
+  contractorName: { fontSize: fontSize.medium, flex: 2 },
   contractorAmount: {
     fontSize: fontSize.medium,
-    color: "#FF0000",
     fontWeight: "600",
     flex: 1,
     textAlign: "right",
   },
   noDataText: {
     fontSize: fontSize.medium,
-    color: color.gray,
     fontStyle: "italic",
+    color: color.gray,
   },
   totalContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: color.secondary,
     paddingVertical: 8,
     marginTop: 5,
-    borderTopWidth: 2,
-    borderTopColor: color.secondary,
   },
-  totalLabel: {
-    fontSize: fontSize.medium,
-    fontWeight: "bold",
-    color: color.primary,
-    flex: 2,
-  },
+  totalLabel: { fontSize: fontSize.medium, fontWeight: "bold", flex: 2 },
   totalAmount: {
     fontSize: fontSize.large,
     fontWeight: "bold",
-    color: color.primary,
     flex: 1,
     textAlign: "right",
   },

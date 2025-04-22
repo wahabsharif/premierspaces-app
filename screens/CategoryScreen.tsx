@@ -1,341 +1,264 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import React, { useEffect, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Button, Dialog, Portal } from "react-native-paper";
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  Modal,
+} from "react-native";
 import Header from "../components/Common/Header";
 import { color, fontSize } from "../Constants/theme";
 import commonStyles from "../Constants/styles";
 import { baseApiUrl } from "../Constants/env";
 
-const CategoryScreen = ({ navigation }: any) => {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
-  const [selectedSubCategory, setSelectedSubCategory] = useState<any>(null);
-  const [selectedCategory, setSelectedCategory] = useState<any>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertTitle, setAlertTitle] = useState("");
-  const [alertMessage, setAlertMessage] = useState("");
-  const [propertyData, setPropertyData] = useState<{
+interface SubCategory {
+  id: number;
+  sub_category: string;
+}
+
+interface Category {
+  id: number;
+  category: string;
+  sub_categories: SubCategory[];
+}
+
+const STORAGE_KEYS = {
+  USER: "userData",
+  PROPERTY: "selectedProperty",
+  SELECTED: "selectedData",
+};
+
+const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [property, setProperty] = useState<{
     address: string;
     company: string;
   } | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
-  const showAlert = (title: string, message: string) => {
-    setAlertTitle(title);
-    setAlertMessage(message);
-    setAlertVisible(true);
-  };
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        // Retrieve user data from AsyncStorage
-        const userDataJson = await AsyncStorage.getItem("userData");
-        const userData = userDataJson ? JSON.parse(userDataJson) : null;
-        const userid = userData?.payload?.userid;
-
-        if (!userid) {
-          showAlert("Error", "User ID not found. Please log in again.");
-          return;
-        }
-
-        // Call the API using the retrieved userid
-        const url = `${baseApiUrl}/fileuploadcats.php?userid=${userid}`;
-        const response = await axios.get(url);
-        if (response.data.status === 1) {
-          setCategories(response.data.payload);
-        } else {
-          showAlert("Error", "Failed to load categories");
-        }
-      } catch (error) {
-        console.error("Error fetching categories", error);
-        showAlert("Error", "An error occurred while fetching categories");
-      }
-    };
-
-    fetchCategories();
-  }, []);
-  useEffect(() => {
-    const fetchPropertyData = async () => {
-      try {
-        const storedProperty = await AsyncStorage.getItem("selectedProperty");
-        if (storedProperty) {
-          setPropertyData(JSON.parse(storedProperty));
-        }
-      } catch (error) {
-        console.error("Error retrieving property data", error);
-      }
-    };
-
-    fetchPropertyData();
+  const showError = useCallback((title: string, message: string) => {
+    setModalVisible(true);
+    // Optionally store title/message in state if needed
   }, []);
 
-  const toggleCategory = (id: number) => {
-    setExpandedCategory((prev) => (prev === id ? null : id));
-  };
+  const loadUserAndCategories = useCallback(async () => {
+    try {
+      const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+      const user = userJson ? JSON.parse(userJson) : null;
+      const userId = user?.payload?.userid;
+      if (!userId) {
+        showError("Error", "User ID missing. Please log in.");
+        return;
+      }
+      const { data } = await axios.get<{ status: number; payload: Category[] }>(
+        `${baseApiUrl}/fileuploadcats.php?userid=${userId}`
+      );
+      if (data.status === 1) setCategories(data.payload);
+      else showError("Error", "Failed to load categories");
+    } catch (err) {
+      console.error(err);
+      showError("Error", "Unable to fetch categories.");
+    }
+  }, [showError]);
 
-  const renderSubCategories = (subCategories: any, category: any) => (
-    <View style={{ marginTop: 10, paddingLeft: 20 }}>
-      {subCategories.map((subCategory: any) => {
-        const isSelected =
-          selectedSubCategory && selectedSubCategory.id === subCategory.id;
-        return (
-          <TouchableOpacity
-            key={subCategory.id}
-            onPress={() => {
-              setSelectedSubCategory(subCategory);
-              setSelectedCategory(category);
-            }}
-            style={[
-              styles.subCategoryItem,
-              isSelected && styles.selectedSubCategoryItem,
-            ]}
-          >
-            <Text
-              style={[styles.subCategoryText, isSelected && { color: "#fff" }]}
-            >
-              {subCategory.sub_category}
-            </Text>
-          </TouchableOpacity>
+  const loadProperty = useCallback(async () => {
+    try {
+      const propJson = await AsyncStorage.getItem(STORAGE_KEYS.PROPERTY);
+      if (propJson) setProperty(JSON.parse(propJson));
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUserAndCategories();
+    loadProperty();
+  }, [loadUserAndCategories, loadProperty]);
+
+  const toggleExpand = useCallback((id: number) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const onSubCategoryPress = useCallback(
+    async (category: Category, sub: SubCategory) => {
+      try {
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.SELECTED,
+          JSON.stringify({ category, subCategory: sub })
         );
-      })}
-    </View>
+        navigation.navigate("UploadScreen", { category, subCategory: sub });
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [navigation]
   );
 
-  // In CategoryScreen.tsx, update handleNavigate:
-  const handleNavigate = async () => {
-    if (!selectedCategory || !selectedSubCategory) {
-      showAlert("Selection Required", "Please select a subcategory");
-      return;
-    }
-    try {
-      const dataToStore = JSON.stringify({
-        category: {
-          id: selectedCategory.id,
-          category: selectedCategory.category,
-        },
-        subCategory: selectedSubCategory,
-      });
+  const renderSubCategory = useCallback(
+    ({ item: sub }: { item: SubCategory }) => (
+      <TouchableOpacity
+        onPress={() =>
+          onSubCategoryPress(categories.find((c) => c.id === expandedId)!, sub)
+        }
+        style={styles.subCategoryItem}
+      >
+        <Text style={styles.subCategoryText}>{sub.sub_category}</Text>
+        <Ionicons name="arrow-forward" size={16} color={color.primary} />
+      </TouchableOpacity>
+    ),
+    [expandedId, onSubCategoryPress, categories]
+  );
 
-      console.log("Data being stored in AsyncStorage:", dataToStore);
-      await AsyncStorage.setItem("selectedData", dataToStore);
-
-      // Verify the stored data
-      const storedData = await AsyncStorage.getItem("selectedData");
-      console.log("Data retrieved from AsyncStorage:", storedData);
-    } catch (error) {
-      console.error("Error storing or retrieving selected data", error);
-    }
-    // Pass an extra parameter to indicate navigation from CategoryScreen.
-    navigation.navigate("UploadScreen", {
-      category: selectedCategory,
-      subCategory: selectedSubCategory,
-      source: "CategoryScreen",
-    });
-  };
-
-  const openModal = () => setModalVisible(true);
-  const closeModal = () => setModalVisible(false);
-
-  const handleGoToJobsDirectly = () => {
-    navigation.navigate("JobsScreen");
-  };
-
-  const handleOpenNewJob = () => {
-    closeModal();
-    // navigation.navigate("NewJobsScreen");
-  };
-
-  const handleGoToJobs = () => {
-    closeModal();
-    // navigation.navigate("JobsScreen");
-  };
+  const renderCategory = useCallback(
+    ({ item: cat }: { item: Category }) => {
+      const isOpen = expandedId === cat.id;
+      return (
+        <View>
+          <TouchableOpacity
+            style={styles.categoryHeader}
+            onPress={() => toggleExpand(cat.id)}
+          >
+            <Text style={styles.categoryText}>{cat.category}</Text>
+            <Ionicons
+              name={isOpen ? "chevron-down" : "chevron-forward"}
+              size={20}
+              color={color.primary}
+            />
+          </TouchableOpacity>
+          {isOpen && (
+            <FlatList
+              data={cat.sub_categories}
+              keyExtractor={(s) => s.id.toString()}
+              renderItem={renderSubCategory}
+              contentContainerStyle={styles.subList}
+            />
+          )}
+        </View>
+      );
+    },
+    [expandedId, toggleExpand, renderSubCategory]
+  );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <Header />
-      <View style={{ padding: 20 }}>
-        <View style={commonStyles.headingContainer}>
-          <Text style={commonStyles.heading}>Select a Category To Upload</Text>
-        </View>
-        {propertyData && (
-          <View style={styles.propertyContainer}>
+      <View style={styles.content}>
+        <Text style={commonStyles.heading}>Select a Category To Upload</Text>
+        {property && (
+          <View style={styles.propertyBox}>
             <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <View style={styles.propertyDetails}>
-              <Text style={styles.propertyItem}>{propertyData.address}</Text>
-              <Text style={styles.propertyItem}>{propertyData.company}</Text>
-            </View>
+            <Text>{property.address}</Text>
+            <Text>{property.company}</Text>
           </View>
         )}
-        <View style={styles.uploadSection}>
-          <Text style={styles.uploadSectionTitle}>Upload for A Job</Text>
-          <TouchableOpacity
-            style={styles.uploadSectionButton}
-            onPress={handleGoToJobsDirectly}
-          >
-            <Text style={styles.uploadSectionButtonText}>Go To Jobs</Text>
-          </TouchableOpacity>
-        </View>
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category.id}
-            onPress={() => toggleCategory(category.id)}
-            style={styles.categoryContainer}
-          >
-            <View style={styles.categoryHeader}>
-              <Text style={styles.categoryText}>{category.category}</Text>
-              <Text style={styles.categoryText}>
-                {expandedCategory === category.id ? "▼" : "▶"}
-              </Text>
-            </View>
-            {expandedCategory === category.id &&
-              renderSubCategories(category.sub_categories, category)}
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity
+          style={styles.jobsButton}
+          onPress={() => navigation.navigate("JobsScreen")}
+        >
+          <Text style={styles.jobsText}>Go To Jobs</Text>
+        </TouchableOpacity>
+        <FlatList
+          data={categories}
+          keyExtractor={(c) => c.id.toString()}
+          renderItem={renderCategory}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
       </View>
-      <TouchableOpacity style={styles.floatingIcon} onPress={handleNavigate}>
-        <Ionicons name="arrow-forward" size={24} color="#fff" />
+
+      <TouchableOpacity
+        style={styles.reportButton}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.reportText}>Report A Problem</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.reportButton} onPress={openModal}>
-        <Text style={styles.reportButtonText}>Report A Problem</Text>
-      </TouchableOpacity>
+
       <Modal
         visible={modalVisible}
-        transparent={true}
+        transparent
         animationType="slide"
-        onRequestClose={closeModal}
+        onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Reporting A Problem</Text>
             <Text style={styles.modalMessage}>
               To report a problem, please open a new job or find an existing job
-              and upload files from job-detail view.
+              and upload files from Job Details.
             </Text>
-            <View style={styles.modalButtonRow}>
+            <View style={styles.modalButtonsRow}>
               <TouchableOpacity
                 style={[styles.modalButton, { marginRight: 10 }]}
-                onPress={handleOpenNewJob}
+                onPress={() => {
+                  setModalVisible(false);
+                  navigation.navigate("JobsScreen");
+                }}
               >
-                <Text style={styles.modalButtonText}>Open New Job</Text>
+                <Text style={styles.modalButtonText}>Go To Jobs</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalButton}
-                onPress={handleGoToJobs}
+                onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.modalButtonText}>Go To Jobs</Text>
+                <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-      <Portal>
-        <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
-          <Dialog.Title>{alertTitle}</Dialog.Title>
-          <Dialog.Content>
-            <Text>{alertMessage}</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setAlertVisible(false)}>OK</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  uploadSection: {
-    marginBottom: 30,
-    alignItems: "center",
-    width: "100%",
-    alignSelf: "center",
-  },
-  uploadSectionTitle: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    marginBottom: 5,
-    color: color.gray,
-    textAlign: "center",
-  },
-  uploadSectionButton: {
-    backgroundColor: color.primary,
-    paddingHorizontal: 10,
-    width: "60%",
-    paddingVertical: 10,
-    borderRadius: 5,
-  },
-  uploadSectionButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  categoryContainer: {
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: color.secondary,
-  },
+  container: { flex: 1 },
+  content: { padding: 20, flex: 1 },
   categoryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    padding: 10,
   },
-  categoryText: {
-    fontSize: fontSize.large,
-    color: color.primary,
-  },
+  categoryText: { fontSize: fontSize.large, color: color.primary },
   subCategoryItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-    marginBottom: 5,
+    paddingHorizontal: 20,
   },
-  selectedSubCategoryItem: {
+  subCategoryText: { fontSize: fontSize.medium, color: color.primary },
+  subList: { paddingLeft: 20 },
+  separator: { height: 1, backgroundColor: color.secondary },
+  jobsButton: {
     backgroundColor: color.primary,
-    borderWidth: 1,
-    borderColor: color.secondary,
-  },
-  subCategoryText: {
-    fontSize: fontSize.medium,
-    color: color.primary,
-  },
-  floatingIcon: {
-    position: "absolute",
-    bottom: 80,
-    right: 20,
-    backgroundColor: color.primary,
-    padding: 15,
-    borderRadius: 30,
-    shadowColor: color.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  reportButton: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: color.primary,
-    padding: 15,
+    padding: 12,
     borderRadius: 5,
     alignItems: "center",
-    shadowColor: color.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    marginVertical: 15,
   },
-  reportButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
+  jobsText: { color: color.white, fontWeight: "600" },
+  reportButton: {
+    backgroundColor: color.primary,
+    padding: 15,
+    borderRadius: 5,
+    margin: 20,
+    alignItems: "center",
+  },
+  reportText: { color: color.white, fontWeight: "600" },
+  propertyBox: {
+    backgroundColor: color.white,
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 15,
+  },
+  propertyLabel: {
     fontWeight: "600",
+    marginBottom: 5,
   },
   modalOverlay: {
     flex: 1,
@@ -354,7 +277,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 10,
-    color: color.gray,
+    color: color.black,
   },
   modalMessage: {
     fontSize: fontSize.medium,
@@ -362,8 +285,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     color: color.gray,
   },
-  modalButtonRow: {
+  modalButtonsRow: {
     flexDirection: "row",
+    marginTop: 10,
   },
   modalButton: {
     backgroundColor: color.primary,
@@ -373,32 +297,8 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     color: color.white,
-    fontSize: fontSize.small,
-    fontWeight: "600",
-  },
-  propertyContainer: {
-    backgroundColor: color.white,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: color.secondary,
-  },
-
-  propertyLabel: {
     fontSize: fontSize.medium,
     fontWeight: "600",
-    color: color.black,
-    marginBottom: 5,
-  },
-
-  propertyDetails: {
-    paddingLeft: 10,
-  },
-
-  propertyItem: {
-    fontSize: fontSize.medium,
-    color: color.gray,
   },
 });
 

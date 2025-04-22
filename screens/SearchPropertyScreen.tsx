@@ -1,9 +1,8 @@
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import React, { useState } from "react";
+import axios from "axios";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,10 +14,10 @@ import {
   View,
 } from "react-native";
 import Header from "../components/Common/Header";
-import { RootStackParamList } from "../types";
-import styles from "../Constants/styles";
 import { baseApiUrl } from "../Constants/env";
+import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
+import { RootStackParamList } from "../types";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -30,23 +29,21 @@ const SearchPropertyScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<any[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const navigation = useNavigation<SearchPropertyScreenNavigationProp>();
 
   const handleSearch = async () => {
     setError("");
     setLoading(true);
-    setSelectedId(null);
     try {
-      // Retrieve userid from AsyncStorage
       const userDataJson = await AsyncStorage.getItem("userData");
       const userData = userDataJson ? JSON.parse(userDataJson) : null;
       const userid = userData?.payload?.userid;
 
       if (!userid) {
         setError("User ID not found. Please log in again.");
-        setLoading(false);
+        setResults([]);
         return;
       }
 
@@ -54,10 +51,9 @@ const SearchPropertyScreen: React.FC = () => {
       const response = await axios.get(url);
       const data = response.data;
 
-      // Check for session expiration and show a custom modal
       if (data.status === 0 && data.payload?.message === "Session expired") {
         setShowSessionExpired(true);
-        setLoading(false);
+        setResults([]);
         return;
       }
 
@@ -69,17 +65,10 @@ const SearchPropertyScreen: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Error occurred during fetch:", err);
-      if (err.response) {
-        console.error("Error response data:", err.response.data);
-        if (err.response.status === 503) {
-          setError(
-            "Service is temporarily unavailable. Please try again later."
-          );
-        } else {
-          setError(`No property found with ( ${door_num} )`);
-        }
+      if (err.response?.status === 503) {
+        setError("Service is temporarily unavailable. Please try again later.");
       } else {
-        setError("An error occurred while searching properties.");
+        setError(`No property found with ( ${door_num} )`);
       }
       setResults([]);
     } finally {
@@ -87,38 +76,45 @@ const SearchPropertyScreen: React.FC = () => {
     }
   };
 
-  const handleSelectProperty = async (item: any) => {
-    console.log("handleSelectProperty called with item:", item);
-    setSelectedId(item.id);
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    if (door_num.trim() === "") {
+      setResults([]);
+      setError("");
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      handleSearch();
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [door_num]);
+
+  const handleSelectAndNavigate = async (item: any) => {
     try {
       await AsyncStorage.setItem("selectedProperty", JSON.stringify(item));
       console.log("Property saved to AsyncStorage:", item);
+      navigation.navigate("CategoryScreen", {
+        paramKey: item.address,
+      });
     } catch (error) {
       console.error("Error saving property:", error);
     }
   };
 
-  const handleNavigate = () => {
-    const selectedProperty = results.find((item) => item.id === selectedId);
-    if (selectedProperty) {
-      navigation.navigate("CategoryScreen", {
-        paramKey: selectedProperty.address,
-      });
-    } else {
-      console.warn("No property selected");
-    }
-  };
-
   const renderResultItem = ({ item }: { item: any }) => {
-    const isSelected = item.id === selectedId;
     return (
       <TouchableOpacity
-        style={[styles.resultItem, isSelected && styles.selectedItem]}
-        onPress={() => handleSelectProperty(item)}
+        style={styles.resultItem}
+        onPress={() => handleSelectAndNavigate(item)}
       >
-        <Text style={[styles.resultText, isSelected && styles.selectedText]}>
-          {item.address}
-        </Text>
+        <Text style={styles.resultText}>{item.address}</Text>
         <Text style={styles.resultCompany}>{item.company}</Text>
       </TouchableOpacity>
     );
@@ -138,18 +134,14 @@ const SearchPropertyScreen: React.FC = () => {
               style={styles.input}
               placeholder="Enter door number (e.g., 33, 32B)"
               value={door_num}
-              onChangeText={(text) => setdoor_num(text)}
+              onChangeText={setdoor_num}
             />
           </View>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
-        <TouchableOpacity style={styles.floatingIcon} onPress={handleSearch}>
-          {loading ? (
-            <ActivityIndicator color={color.white} />
-          ) : (
-            <Ionicons name="search" size={24} color={color.white} />
-          )}
-        </TouchableOpacity>
+
+        {loading && <ActivityIndicator color={color.primary} />}
+
         {results.length > 0 && (
           <View style={styles.list}>
             <Text style={styles.subHeading}>Property List</Text>
@@ -160,14 +152,6 @@ const SearchPropertyScreen: React.FC = () => {
               contentContainerStyle={styles.resultsContainer}
             />
           </View>
-        )}
-        {selectedId && (
-          <TouchableOpacity
-            style={styles.navigateButton}
-            onPress={handleNavigate}
-          >
-            <Ionicons name="arrow-forward" size={24} color={color.white} />
-          </TouchableOpacity>
         )}
       </View>
 

@@ -5,7 +5,7 @@ export type RootStackParamList = {
   AppLockSettingScreen: undefined;
   CategoryScreen: { paramKey: string };
   SearchPropertyScreen: undefined;
-  UploadScreen: undefined;
+  UploadScreen: { jobId: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;
