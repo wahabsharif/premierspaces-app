@@ -1,10 +1,10 @@
 import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { Button, Card, Dialog, Portal } from "react-native-paper";
-import PinInput from "../components/Common/PinInput";
+import PinInput from "../components/AppLock/PinInput";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
 
@@ -25,45 +25,104 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [alertMessage, setAlertMessage] = useState("");
   const [alertCallback, setAlertCallback] = useState<(() => void) | null>(null);
 
-  useEffect(() => {
-    const initializeAuth = async () => {
-      const storedPin = await SecureStore.getItemAsync("app_pin");
-      if (storedPin) {
-        setIsPinSet(true);
-        const biometricsEnabled = await SecureStore.getItemAsync(
-          "biometrics_enabled"
-        );
-        if (biometricsEnabled === "true" && (await isBiometricSupported())) {
-          setIsBiometricsEnabled(true);
-          attemptBiometricAuth();
-        }
+  // Create a memoized version of the biometric authentication function
+  const attemptBiometricAuth = useCallback(async () => {
+    try {
+      console.log("Starting biometric authentication...");
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Unlock with Fingerprint or Face ID",
+        fallbackLabel: "Use PIN",
+        disableDeviceFallback: false,
+      });
+      console.log("Biometric auth result:", result);
+      if (result.success) {
+        console.log("Biometric auth successful");
+        onUnlock();
       } else {
-        setIsSettingPin(true);
+        console.log("Biometric auth failed:", result.error);
+        showAlert(
+          "Authentication Failed",
+          "Biometric authentication didn’t work. Please enter your PIN."
+        );
       }
-    };
-    initializeAuth();
-  }, []);
+    } catch (error) {
+      console.error("Biometric authentication error:", error);
+      showAlert(
+        "Error",
+        "Biometric authentication failed. Please try again or use PIN."
+      );
+    }
+  }, [onUnlock]);
 
-  const isBiometricSupported = async () => {
+  const isBiometricSupported = useCallback(async () => {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const supportedTypes =
       await LocalAuthentication.supportedAuthenticationTypesAsync();
     return hasHardware && supportedTypes.length > 0;
-  };
+  }, []);
 
-  const attemptBiometricAuth = async () => {
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock with Fingerprint or Face ID",
-        fallbackLabel: "Use PIN",
-      });
-      if (result.success) {
-        onUnlock();
+  // Main initialization effect
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        console.log("Initializing authentication...");
+        const storedPin = await SecureStore.getItemAsync("app_pin");
+
+        if (!isMounted) return;
+
+        if (storedPin) {
+          setIsPinSet(true);
+          const biometricsEnabled = await SecureStore.getItemAsync(
+            "biometrics_enabled"
+          );
+          const isBiometricAvailable = await isBiometricSupported();
+          const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+          console.log(
+            "PIN set, biometrics enabled:",
+            biometricsEnabled,
+            "available:",
+            isBiometricAvailable,
+            "enrolled:",
+            isEnrolled
+          );
+
+          if (!isMounted) return;
+
+          if (
+            biometricsEnabled === "true" &&
+            isBiometricAvailable &&
+            isEnrolled
+          ) {
+            setIsBiometricsEnabled(true);
+            console.log("Scheduling biometric auth");
+            setTimeout(() => {
+              if (isMounted) {
+                console.log("Attempting biometric auth now");
+                attemptBiometricAuth();
+              }
+            }, 1000);
+          }
+        } else {
+          setIsSettingPin(true);
+        }
+      } catch (error) {
+        console.error("Auth initialization error:", error);
+        if (isMounted) {
+          setIsSettingPin(true);
+        }
       }
-    } catch (error) {
-      showAlert("Error", "Biometric authentication failed.");
-    }
-  };
+    };
+
+    initializeAuth();
+
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      isMounted = false;
+    };
+  }, [isBiometricSupported, attemptBiometricAuth]);
 
   const handlePinSubmit = async (pin: string) => {
     if (isSettingPin) {
@@ -78,7 +137,8 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           async () => {
             await SecureStore.setItemAsync("biometrics_enabled", "true");
             setIsBiometricsEnabled(true);
-            attemptBiometricAuth();
+            // Try to trigger biometric auth right after enabling
+            setTimeout(() => attemptBiometricAuth(), 300);
           }
         );
       } else {

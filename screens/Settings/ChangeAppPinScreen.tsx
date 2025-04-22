@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import React, { useState } from "react";
 import { Image, View } from "react-native";
 import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
-import PinInput from "../../components/Common/PinInput";
+import PinInput from "../../components/AppLock/PinInput";
 import styles from "../../Constants/styles";
 import { ChangeAppPinScreenProps } from "../../types";
 const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
