@@ -1,7 +1,7 @@
 {
   "name": "premierspaces-app",
   "license": "0BSD",
-  "version": "1.0.7",
+  "version": "1.0.10",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
