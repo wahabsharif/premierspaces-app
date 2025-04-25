@@ -424,7 +424,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.gray },
+              { backgroundColor: color.orange },
             ]}
             onPress={pickImage}
             disabled={uploading}
@@ -446,7 +446,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.secondary },
+              { backgroundColor: color.lightGreen },
             ]}
             onPress={pickDocument}
             disabled={uploading}
