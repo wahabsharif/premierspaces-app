@@ -52,11 +52,11 @@ export default StyleSheet.create({
     alignItems: "flex-end",
   },
   headerLogo: {
-    width: 40,
-    height: 40,
+    width: 30,
+    height: 30,
   },
   headerText: {
-    fontSize: 12,
+    fontSize: fontSize.small,
     color: "black",
     textAlign: "left",
   },

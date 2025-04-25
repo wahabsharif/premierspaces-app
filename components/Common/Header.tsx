@@ -1,4 +1,4 @@
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import Octicons from "@expo/vector-icons/Octicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import styles from "../../Constants/styles";
 import { RootStackParamList } from "../../types";
+import { fontSize } from "../../Constants/theme";
 
 type HeaderNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -77,15 +78,20 @@ const Header = () => {
             {userName}
           </Text>
         </View>
-        <View style={styles.headerLogoContainer}>
+
+        <TouchableOpacity
+          style={styles.headerLogoContainer}
+          onPress={() => navigation.navigate("SearchPropertyScreen")}
+          activeOpacity={0.7}
+        >
           <Image
             source={require("../../assets/logo.png")}
             style={styles.headerLogo}
             resizeMode="contain"
           />
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleDropdownPress}>
-          <MaterialCommunityIcons name="menu" size={30} color="black" />
+          <Octicons name="three-bars" size={fontSize.large} color="black" />
         </TouchableOpacity>
       </View>
 
