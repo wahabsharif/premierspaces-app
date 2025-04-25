@@ -94,7 +94,7 @@ export default StyleSheet.create({
     fontWeight: "900",
     marginBottom: 16,
     alignSelf: "center",
-    textTransform: "uppercase",
+    textTransform: "capitalize",
   },
 
   subHeading: {

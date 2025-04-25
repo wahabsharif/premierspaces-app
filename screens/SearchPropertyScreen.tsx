@@ -129,10 +129,10 @@ const SearchPropertyScreen: React.FC = () => {
         </View>
         <View style={styles.inputWrapper}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>DOOR NO.</Text>
+            <Text style={styles.label}>Door No.</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter door number (e.g., 33, 32B)"
+              placeholder="Enter door number..."
               value={door_num}
               onChangeText={setdoor_num}
             />
