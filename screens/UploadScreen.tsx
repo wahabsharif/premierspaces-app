@@ -3,7 +3,7 @@ import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Video, ResizeMode } from "expo-av";
+import { ResizeMode, Video } from "expo-av";
 import * as Camera from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
@@ -23,8 +23,9 @@ import {
 import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { ProgressBar } from "../components/Common/ProgressBar";
+import UploadStatusModal from "../components/UploadStatusModal";
 import { baseApiUrl } from "../Constants/env";
-import style from "../Constants/styles";
+import { default as style, default as styles } from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { getFileId } from "../helper";
 import { UploadScreenProps } from "../types";
@@ -80,7 +81,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [uploadedCount, setUploadedCount] = useState(0);
-
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [successCount, setSuccessCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
   // Helper function to infer mimeType from file name (for documents)
   const inferMimeType = (fileName: string) => {
     const ext = fileName.split(".").pop()?.toLowerCase();
@@ -307,13 +310,20 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
+  // In the uploadImages function, modify the following parts:
+
   const uploadImages = async () => {
     if (media.length === 0) {
       showAlert("Error", "Please select at least one file to upload.");
       return;
     }
+
     setUploading(true);
     setUploadedCount(0);
+    // Add these two lines to reset success and failure counts
+    setSuccessCount(0);
+    setFailedCount(0);
+
     const fileId = getFileId();
     console.log(`Generated file ID: ${fileId}`);
     const totalFiles = media.length;
@@ -370,55 +380,64 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             },
           }
         );
+
         newUploadProgress[file.uri] = "Complete";
         setUploadProgress({ ...newUploadProgress });
         setUploadedCount((prevCount) => prevCount + 1);
+        // Important: Increment success count here
+        setSuccessCount((prevCount) => prevCount + 1);
         return response.data;
       } catch (error) {
         console.error(`Error uploading file ${index + 1}:`, error);
         newUploadProgress[file.uri] = "Failed";
         setUploadProgress({ ...newUploadProgress });
+        // Important: Increment failed count here
+        setFailedCount((prevCount) => prevCount + 1);
         throw error;
       }
     });
 
     try {
-      // Limit concurrent uploads to 3 at a time.
       await uploadQueue(tasks, 3);
-      showSnackbar("All files uploaded successfully!");
+      // Don't update success/failed counts here - they're already updated in the individual task handlers
+      setStatusModalVisible(true);
       setMedia([]);
     } catch (error) {
       console.error("Error uploading files:", error);
-      showAlert(
-        "Upload Error",
-        "Some files failed to upload. Please check your network connection and try again."
-      );
+      // No need to update counts here either
+      setStatusModalVisible(true);
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screenContainer}>
       <Header />
       <View style={style.container}>
         <View style={style.headingContainer}>
           <Text style={style.heading}>Upload Files</Text>
         </View>
         {storedProperty && (
-          <View style={internalStyle.propertyInfo}>
-            <Text style={internalStyle.propertyText}>
-              {storedProperty.address}
-            </Text>
-            <Text style={style.resultCompany}>{storedProperty.company}</Text>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{storedProperty.address}</Text>
+            <Text style={styles.extraSmallText}>{storedProperty.company}</Text>
           </View>
         )}
-        <Text style={internalStyle.title}>
+        <Text style={style.subHeading}>
           {category?.category}
           {subCategory ? ` - ${subCategory.sub_category}` : ""}
         </Text>
-        <Text style={internalStyle.buttonHeading}>Choose File From</Text>
-        <View style={internalStyle.buttonContainer}>
+        <Text style={style.subHeading}>Choose File From</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            alignItems: "center",
+            marginVertical: 10,
+          }}
+        >
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
@@ -629,20 +648,18 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           {snackbarMessage}
         </Snackbar>
       </View>
+      <UploadStatusModal
+        visible={statusModalVisible}
+        onClose={() => setStatusModalVisible(false)}
+        successCount={successCount}
+        failedCount={failedCount}
+        totalCount={successCount + failedCount}
+      />
     </View>
   );
 };
 
 const internalStyle = StyleSheet.create({
-  title: {
-    fontSize: fontSize.large,
-    fontWeight: "600",
-    marginBottom: 20,
-    color: color.gray,
-    borderBottomWidth: 1,
-    borderColor: "#ddd",
-    paddingVertical: 10,
-  },
   actionButton: {
     width: 120,
     height: 90,
@@ -657,12 +674,7 @@ const internalStyle = StyleSheet.create({
     color: color.white,
     textAlign: "center",
   },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 10,
-  },
+
   loadingOverlay: {
     position: "absolute",
     top: 0,
@@ -779,21 +791,6 @@ const internalStyle = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: color.gray,
-  },
-  propertyInfo: {
-    padding: 5,
-    borderBottomWidth: 1,
-    borderColor: "#ddd",
-  },
-  propertyText: {
-    fontSize: fontSize.medium,
-    marginBottom: 5,
-  },
-  buttonHeading: {
-    fontSize: fontSize.large,
-    textAlign: "center",
-    fontWeight: "600",
-    marginBottom: 5,
   },
 });
 
