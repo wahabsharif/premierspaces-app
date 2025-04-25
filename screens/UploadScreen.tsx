@@ -532,8 +532,8 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         {media.length > 0 && (
           <TouchableOpacity
             style={[
-              internalStyle.uploadButton,
-              uploading && internalStyle.disabledButton,
+              style.primaryButton,
+              uploading && { backgroundColor: color.gray },
             ]}
             onPress={uploadImages}
             disabled={uploading}
@@ -541,85 +541,87 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             {uploading ? (
               <ActivityIndicator color="white" size="small" />
             ) : (
-              <Text style={internalStyle.uploadButtonText}>
+              <Text style={style.buttonText}>
                 Upload {media.length} File{media.length > 1 ? "s" : ""}
               </Text>
             )}
           </TouchableOpacity>
         )}
         <Modal visible={modalVisible} transparent={true} animationType="slide">
-          <View style={internalStyle.modalContainer}>
-            <TouchableOpacity
-              style={internalStyle.closeModal}
-              onPress={() => setModalVisible(false)}
-            >
-              <AntDesign name="close" size={30} color="white" />
-            </TouchableOpacity>
-            {selectedFile && selectedFile.type === "image" && (
-              <Image
-                source={{ uri: selectedFile.uri }}
-                style={internalStyle.fullImage}
-              />
-            )}
-            {selectedFile && selectedFile.type === "video" && (
-              <Video
-                source={{ uri: selectedFile.uri }}
-                style={internalStyle.fullImage}
-                useNativeControls
-                resizeMode={ResizeMode.CONTAIN}
-                isLooping
-              />
-            )}
-            {selectedFile && selectedFile.type === "document" && (
-              <View style={internalStyle.documentPreview}>
-                <Feather name="file-text" size={80} color="gray" />
-                <Text style={{ color: "white", marginTop: 10 }}>
-                  No preview available
-                </Text>
-              </View>
-            )}
-            <FlatList
-              data={media}
-              horizontal
-              keyExtractor={(_, index) => index.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity onPress={() => setSelectedFile(item)}>
-                  {item.type === "image" ? (
-                    <Image
-                      source={{ uri: item.uri }}
-                      style={[
-                        internalStyle.thumbnail,
-                        selectedFile?.uri === item.uri &&
-                          internalStyle.selectedThumbnail,
-                      ]}
-                    />
-                  ) : item.type === "video" ? (
-                    <View
-                      style={[
-                        internalStyle.thumbnail,
-                        { justifyContent: "center", alignItems: "center" },
-                        selectedFile?.uri === item.uri &&
-                          internalStyle.selectedThumbnail,
-                      ]}
-                    >
-                      <Feather name="video" size={20} color="gray" />
-                    </View>
-                  ) : (
-                    <View
-                      style={[
-                        internalStyle.thumbnail,
-                        { justifyContent: "center", alignItems: "center" },
-                        selectedFile?.uri === item.uri &&
-                          internalStyle.selectedThumbnail,
-                      ]}
-                    >
-                      <Feather name="file-text" size={20} color="gray" />
-                    </View>
-                  )}
-                </TouchableOpacity>
+          <View style={style.modalContainer}>
+            <View style={internalStyle.modalView}>
+              <TouchableOpacity
+                style={style.modalButtonClose}
+                onPress={() => setModalVisible(false)}
+              >
+                <AntDesign name="close" size={30} color="white" />
+              </TouchableOpacity>
+              {selectedFile && selectedFile.type === "image" && (
+                <Image
+                  source={{ uri: selectedFile.uri }}
+                  style={internalStyle.fullImage}
+                />
               )}
-              contentContainerStyle={internalStyle.thumbnailContainer}
-            />
+              {selectedFile && selectedFile.type === "video" && (
+                <Video
+                  source={{ uri: selectedFile.uri }}
+                  style={internalStyle.fullImage}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping
+                />
+              )}
+              {selectedFile && selectedFile.type === "document" && (
+                <View style={internalStyle.documentPreview}>
+                  <Feather name="file-text" size={80} color="gray" />
+                  <Text style={{ color: "white", marginTop: 10 }}>
+                    No preview available
+                  </Text>
+                </View>
+              )}
+              <FlatList
+                data={media}
+                horizontal
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity onPress={() => setSelectedFile(item)}>
+                    {item.type === "image" ? (
+                      <Image
+                        source={{ uri: item.uri }}
+                        style={[
+                          internalStyle.thumbnail,
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      />
+                    ) : item.type === "video" ? (
+                      <View
+                        style={[
+                          internalStyle.thumbnail,
+                          { justifyContent: "center", alignItems: "center" },
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      >
+                        <Feather name="video" size={20} color="gray" />
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          internalStyle.thumbnail,
+                          { justifyContent: "center", alignItems: "center" },
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      >
+                        <Feather name="file-text" size={20} color="gray" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={internalStyle.thumbnailContainer}
+              />
+            </View>
           </View>
         </Modal>
         <Portal>
@@ -660,6 +662,11 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 };
 
 const internalStyle = StyleSheet.create({
+  modalView: {
+    alignItems: "center",
+    width: "100%",
+    position: "relative",
+  },
   actionButton: {
     width: 120,
     height: 90,
@@ -736,13 +743,6 @@ const internalStyle = StyleSheet.create({
     fontSize: fontSize.medium,
     fontWeight: "bold",
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
   closeModal: {
     position: "absolute",
     top: 40,
@@ -776,21 +776,6 @@ const internalStyle = StyleSheet.create({
     marginHorizontal: 5,
     borderWidth: 2,
     borderColor: "white",
-  },
-  uploadButton: {
-    backgroundColor: color.primary,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginVertical: 20,
-  },
-  uploadButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "bold",
-  },
-  disabledButton: {
-    backgroundColor: color.gray,
   },
 });
 

@@ -169,14 +169,16 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
   return (
     <View style={styles.pinContainer}>
-      <Image
-        source={require("../assets/logo.png")}
-        style={styles.pinLogo}
-        resizeMode="contain"
-      />
-      <Text style={localStyles.versionText}>
-        Version: {Constants.expoConfig?.version || "N/A"}
-      </Text>
+      <View style={{ marginBottom: 20 }}>
+        <Image
+          source={require("../assets/logo.png")}
+          style={styles.pinLogo}
+          resizeMode="contain"
+        />
+        <Text style={styles.extraSmallText}>
+          Version: {Constants.expoConfig?.version || "N/A"}
+        </Text>
+      </View>
 
       <Card style={styles.card}>
         <Card.Content>
@@ -225,14 +227,5 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     </View>
   );
 };
-
-const localStyles = StyleSheet.create({
-  versionText: {
-    fontSize: 14,
-    color: color.gray,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-});
 
 export default LockScreen;

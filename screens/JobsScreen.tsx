@@ -3,6 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -150,7 +151,9 @@ const JobsScreen = ({
           <View
             style={[
               innerStyles.statusContainer,
-              { backgroundColor: getStatusBackground(Number(item.status)) },
+              {
+                backgroundColor: getStatusBackground(Number(item.status)),
+              },
             ]}
           >
             <Text style={innerStyles.statusText}>
@@ -176,41 +179,34 @@ const JobsScreen = ({
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screenContainer}>
       <Header />
-      <View style={innerStyles.container}>
+      <View style={styles.container}>
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Jobs List</Text>
         </View>
         {propertyData && (
-          <View style={innerStyles.propertyContainer}>
-            <Text style={innerStyles.propertyLabel}>Selected Property:</Text>
-            <View style={innerStyles.propertyDetails}>
-              <Text style={innerStyles.propertyItem}>
-                {propertyData.address}
-              </Text>
-              <Text style={styles.resultCompany}>{propertyData.company}</Text>
-            </View>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{propertyData.address}</Text>
+            <Text style={styles.extraSmallText}>{propertyData.company}</Text>
           </View>
         )}
         <TouchableOpacity
-          style={innerStyles.button}
+          style={styles.primaryButton}
           onPress={() => navigation.navigate("OpenNewJobScreen")}
         >
-          <Text style={innerStyles.buttonText}>Open New Job</Text>
+          <Text style={styles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
-        {loading && <Text style={innerStyles.statusText}>Loading jobs...</Text>}
-        {!loading && error && (
-          <Text style={[innerStyles.statusText, { color: color.red }]}>
-            {error}
-          </Text>
-        )}
+        {loading && <ActivityIndicator color={color.primary} />}
+        {!loading && error && <Text style={styles.errorText}>{error}</Text>}
         {!loading && !error && jobs.length > 0 && (
           <FlatList
             data={jobs}
             keyExtractor={(item) => item.id}
             renderItem={renderJob}
             contentContainerStyle={{ paddingBottom: 20 }}
+            style={{ width: "100%" }}
           />
         )}
       </View>
@@ -219,46 +215,6 @@ const JobsScreen = ({
 };
 
 const innerStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  propertyContainer: {
-    backgroundColor: color.white,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: color.secondary,
-  },
-  propertyLabel: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    color: color.black,
-    marginBottom: 5,
-  },
-  propertyDetails: {
-    paddingLeft: 10,
-  },
-  propertyItem: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-  },
-  button: {
-    backgroundColor: color.primary,
-    paddingHorizontal: 10,
-    width: "40%",
-    paddingVertical: 10,
-    borderRadius: 5,
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  buttonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    textAlign: "center",
-  },
   jobContainer: {
     flexDirection: "row",
     backgroundColor: color.white,
@@ -295,8 +251,8 @@ const innerStyles = StyleSheet.create({
     marginTop: 5,
   },
   statusText: {
-    color: color.gray,
-    fontWeight: "bold",
+    color: color.white,
+    fontWeight: "semibold",
   },
 });
 

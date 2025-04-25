@@ -43,7 +43,6 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   const showError = useCallback((title: string, message: string) => {
     setModalVisible(true);
-    // Optionally store title/message in state if needed
   }, []);
 
   const loadUserAndCategories = useCallback(async () => {
@@ -145,37 +144,41 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 
   return (
-    <View style={innerStyles.container}>
+    <View style={styles.screenContainer}>
       <Header />
-      <View style={innerStyles.content}>
-        <Text style={styles.heading}>Select a Category To Upload</Text>
+      <View style={styles.container}>
+        <View style={styles.headingContainer}>
+          <Text style={styles.heading}>Select a Category To Upload</Text>
+        </View>
         {property && (
-          <View style={innerStyles.propertyBox}>
-            <Text style={innerStyles.propertyLabel}>Selected Property:</Text>
-            <Text>{property.address}</Text>
-            <Text style={styles.resultCompany}>{property.company}</Text>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{property.address}</Text>
+            <Text style={styles.extraSmallText}>{property.company}</Text>
           </View>
         )}
         <TouchableOpacity
-          style={innerStyles.jobsButton}
+          style={styles.primaryButton}
           onPress={() => navigation.navigate("JobsScreen")}
         >
-          <Text style={innerStyles.jobsText}>Go To Jobs</Text>
+          <Text style={styles.buttonText}>Go To Jobs</Text>
         </TouchableOpacity>
         <FlatList
           data={categories}
           keyExtractor={(c) => c.id.toString()}
           renderItem={renderCategory}
-          ItemSeparatorComponent={() => <View style={innerStyles.separator} />}
+          style={{ width: "100%" }}
+          ItemSeparatorComponent={() => (
+            <View style={{ height: 1, backgroundColor: color.secondary }} />
+          )}
         />
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => setModalVisible(true)}
+        >
+          <Text style={styles.buttonText}>Report A Problem</Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={innerStyles.reportButton}
-        onPress={() => setModalVisible(true)}
-      >
-        <Text style={innerStyles.reportText}>Report A Problem</Text>
-      </TouchableOpacity>
 
       <Modal
         visible={modalVisible}
@@ -183,28 +186,28 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={innerStyles.modalOverlay}>
-          <View style={innerStyles.modalContent}>
-            <Text style={innerStyles.modalTitle}>Reporting A Problem</Text>
-            <Text style={innerStyles.modalMessage}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Reporting A Problem</Text>
+            <Text style={styles.modalText}>
               To report a problem, please open a new job or find an existing job
               and upload files from Job Details.
             </Text>
-            <View style={innerStyles.modalButtonsRow}>
+            <View style={styles.modalButtonsContainer}>
               <TouchableOpacity
-                style={[innerStyles.modalButton, { marginRight: 10 }]}
+                style={[styles.modalButton, { marginRight: 10 }]}
                 onPress={() => {
                   setModalVisible(false);
                   navigation.navigate("JobsScreen");
                 }}
               >
-                <Text style={innerStyles.modalButtonText}>Go To Jobs</Text>
+                <Text style={styles.modalButtonText}>Go To Jobs</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={innerStyles.modalButton}
+                style={styles.modalButtonClose}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={innerStyles.modalButtonText}>Cancel</Text>
+                <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -215,8 +218,6 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 };
 
 const innerStyles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 20, flex: 1 },
   categoryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -233,73 +234,6 @@ const innerStyles = StyleSheet.create({
   },
   subCategoryText: { fontSize: fontSize.medium, color: color.primary },
   subList: { paddingLeft: 20 },
-  separator: { height: 1, backgroundColor: color.secondary },
-  jobsButton: {
-    backgroundColor: color.primary,
-    padding: 12,
-    borderRadius: 5,
-    alignItems: "center",
-    marginVertical: 15,
-  },
-  jobsText: { color: color.white, fontWeight: "600" },
-  reportButton: {
-    backgroundColor: color.primary,
-    padding: 15,
-    borderRadius: 5,
-    margin: 20,
-    alignItems: "center",
-  },
-  reportText: { color: color.white, fontWeight: "600" },
-  propertyBox: {
-    backgroundColor: color.white,
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 15,
-  },
-  propertyLabel: {
-    fontWeight: "600",
-    marginBottom: 5,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "80%",
-    backgroundColor: color.white,
-    borderRadius: 8,
-    padding: 20,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 10,
-    color: color.black,
-  },
-  modalMessage: {
-    fontSize: fontSize.medium,
-    textAlign: "center",
-    marginBottom: 20,
-    color: color.gray,
-  },
-  modalButtonsRow: {
-    flexDirection: "row",
-    marginTop: 10,
-  },
-  modalButton: {
-    backgroundColor: color.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-  },
-  modalButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-  },
 });
 
 export default CategoryScreen;

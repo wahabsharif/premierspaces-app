@@ -172,9 +172,8 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
     );
 
-  // Main UI
   return (
-    <View style={innerStyles.screen}>
+    <View style={styles.screenContainer}>
       <Header />
       <View style={innerStyles.container}>
         {property && (

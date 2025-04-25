@@ -80,98 +80,104 @@ const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   };
 
   return (
-    <View style={internalstyles.container}>
-      <Image
-        source={require("../assets/logo.png")}
-        style={styles.image}
-        resizeMode="contain"
-      />
-      <Text style={localStyles.versionText}>
-        Version: {Constants.expoConfig?.version || "N/A"}
-      </Text>
-      <View style={styles.inputContainer}>
+    <View style={styles.screenContainer}>
+      <View style={[styles.container, { justifyContent: "center" }]}>
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 10,
-          }}
-        >
-          <Text style={internalstyles.label}>Initials:</Text>
-          <TextInput
-            placeholder="Enter Initials"
-            value={initials}
-            autoCapitalize="none"
-            onChangeText={setInitials}
-            style={styles.input}
-          />
-        </View>
-      </View>
-      <View style={styles.inputContainer}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
             marginBottom: 20,
+            alignItems: "center",
           }}
         >
-          <Text style={internalstyles.label}>Pin:</Text>
-          <TextInput
-            placeholder="Enter Pin"
-            value={pin}
-            onChangeText={setPin}
-            secureTextEntry
-            keyboardType="numeric"
-            style={styles.input}
+          <Image
+            source={require("../assets/logo.png")}
+            style={styles.image}
+            resizeMode="contain"
           />
+          <Text style={styles.extraSmallText}>
+            Version: {Constants.expoConfig?.version || "N/A"}
+          </Text>
         </View>
+        <View style={styles.inputContainer}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 10,
+            }}
+          >
+            <Text
+              style={{
+                width: "20%",
+                marginRight: 8,
+                fontSize: fontSize.large,
+                fontWeight: "600",
+              }}
+            >
+              Initials:
+            </Text>
+            <TextInput
+              placeholder="Enter Initials"
+              value={initials}
+              autoCapitalize="none"
+              onChangeText={setInitials}
+              style={styles.input}
+            />
+          </View>
+        </View>
+        <View style={styles.inputContainer}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 20,
+            }}
+          >
+            <Text
+              style={{
+                width: "20%",
+                marginRight: 8,
+                fontSize: fontSize.large,
+                fontWeight: "600",
+              }}
+            >
+              Pin:
+            </Text>
+            <TextInput
+              placeholder="Enter Pin"
+              value={pin}
+              onChangeText={setPin}
+              secureTextEntry
+              keyboardType="numeric"
+              style={styles.input}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity onPress={handleLogin} style={styles.primaryButton}>
+          {isLoading ? (
+            <ActivityIndicator size="small" color={color.white} />
+          ) : (
+            <Text style={styles.buttonText}>Login</Text>
+          )}
+        </TouchableOpacity>
+
+        <Portal>
+          <Dialog
+            visible={alertVisible}
+            onDismiss={() => setAlertVisible(false)}
+          >
+            <Dialog.Title>Error</Dialog.Title>
+            <Dialog.Content>
+              <Text>{alertMessage}</Text>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setAlertVisible(false)}>OK</Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
       </View>
-
-      <TouchableOpacity onPress={handleLogin} style={styles.button}>
-        {isLoading ? (
-          <ActivityIndicator size="small" color={color.white} />
-        ) : (
-          <Text style={styles.buttonText}>Login</Text>
-        )}
-      </TouchableOpacity>
-
-      <Portal>
-        <Dialog visible={alertVisible} onDismiss={() => setAlertVisible(false)}>
-          <Dialog.Title>Error</Dialog.Title>
-          <Dialog.Content>
-            <Text>{alertMessage}</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setAlertVisible(false)}>OK</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
     </View>
   );
 };
-
-const internalstyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  label: {
-    width: "20%",
-    marginRight: 8,
-    fontSize: fontSize.large,
-    fontWeight: "600",
-  },
-});
-
-const localStyles = StyleSheet.create({
-  versionText: {
-    fontSize: 14,
-    color: color.gray,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-});
 
 export default LoginScreen;

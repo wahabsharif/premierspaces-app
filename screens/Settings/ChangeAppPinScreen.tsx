@@ -5,6 +5,8 @@ import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
 import PinInput from "../../components/AppLock/PinInput";
 import styles from "../../Constants/styles";
 import { ChangeAppPinScreenProps } from "../../types";
+import Constants from "expo-constants";
+
 const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   navigation,
 }) => {
@@ -73,11 +75,16 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
 
   return (
     <View style={styles.pinContainer}>
-      <Image
-        source={require("../../assets/logo.png")}
-        style={styles.pinLogo}
-        resizeMode="contain"
-      />
+      <View style={{ marginBottom: 20 }}>
+        <Image
+          source={require("../../assets/logo.png")}
+          style={styles.pinLogo}
+          resizeMode="contain"
+        />
+        <Text style={styles.extraSmallText}>
+          Version: {Constants.expoConfig?.version || "N/A"}
+        </Text>
+      </View>
       <Card style={styles.card}>
         <Card.Content>
           <Text style={styles.title}>{title}</Text>

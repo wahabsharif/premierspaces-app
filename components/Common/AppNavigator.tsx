@@ -2,7 +2,6 @@ import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import SearchPropertyScreen from "../../screens/SearchPropertyScreen";
-import PropertyListScreen from "../../screens/PropertyListScreen";
 import CategoryScreen from "../../screens/CategoryScreen";
 import UploadScreen from "../../screens/UploadScreen";
 import SettingScreen from "../../screens/Settings/SettingScreen";
@@ -45,7 +44,6 @@ export const AppNavigator = ({
       component={SearchPropertyScreen}
     />
     <Stack.Screen name="LoginScreen" component={LoginScreen} />
-    <Stack.Screen name="PropertyListScreen" component={PropertyListScreen} />
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />
     <Stack.Screen name="SettingScreen" component={SettingScreen} />
