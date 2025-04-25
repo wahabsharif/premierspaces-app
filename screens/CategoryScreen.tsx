@@ -1,19 +1,19 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
+  FlatList,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
-  FlatList,
-  Modal,
+  View,
 } from "react-native";
 import Header from "../components/Common/Header";
-import { color, fontSize } from "../Constants/theme";
-import commonStyles from "../Constants/styles";
 import { baseApiUrl } from "../Constants/env";
+import styles from "../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
 
 interface SubCategory {
   id: number;
@@ -105,9 +105,9 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         onPress={() =>
           onSubCategoryPress(categories.find((c) => c.id === expandedId)!, sub)
         }
-        style={styles.subCategoryItem}
+        style={innerStyles.subCategoryItem}
       >
-        <Text style={styles.subCategoryText}>{sub.sub_category}</Text>
+        <Text style={innerStyles.subCategoryText}>{sub.sub_category}</Text>
         <Ionicons name="arrow-forward" size={16} color={color.primary} />
       </TouchableOpacity>
     ),
@@ -120,10 +120,10 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       return (
         <View>
           <TouchableOpacity
-            style={styles.categoryHeader}
+            style={innerStyles.categoryHeader}
             onPress={() => toggleExpand(cat.id)}
           >
-            <Text style={styles.categoryText}>{cat.category}</Text>
+            <Text style={innerStyles.categoryText}>{cat.category}</Text>
             <Ionicons
               name={isOpen ? "chevron-down" : "chevron-forward"}
               size={20}
@@ -135,7 +135,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               data={cat.sub_categories}
               keyExtractor={(s) => s.id.toString()}
               renderItem={renderSubCategory}
-              contentContainerStyle={styles.subList}
+              contentContainerStyle={innerStyles.subList}
             />
           )}
         </View>
@@ -145,36 +145,36 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={innerStyles.container}>
       <Header />
-      <View style={styles.content}>
-        <Text style={commonStyles.heading}>Select a Category To Upload</Text>
+      <View style={innerStyles.content}>
+        <Text style={styles.heading}>Select a Category To Upload</Text>
         {property && (
-          <View style={styles.propertyBox}>
-            <Text style={styles.propertyLabel}>Selected Property:</Text>
+          <View style={innerStyles.propertyBox}>
+            <Text style={innerStyles.propertyLabel}>Selected Property:</Text>
             <Text>{property.address}</Text>
-            <Text>{property.company}</Text>
+            <Text style={styles.resultCompany}>{property.company}</Text>
           </View>
         )}
         <TouchableOpacity
-          style={styles.jobsButton}
+          style={innerStyles.jobsButton}
           onPress={() => navigation.navigate("JobsScreen")}
         >
-          <Text style={styles.jobsText}>Go To Jobs</Text>
+          <Text style={innerStyles.jobsText}>Go To Jobs</Text>
         </TouchableOpacity>
         <FlatList
           data={categories}
           keyExtractor={(c) => c.id.toString()}
           renderItem={renderCategory}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <View style={innerStyles.separator} />}
         />
       </View>
 
       <TouchableOpacity
-        style={styles.reportButton}
+        style={innerStyles.reportButton}
         onPress={() => setModalVisible(true)}
       >
-        <Text style={styles.reportText}>Report A Problem</Text>
+        <Text style={innerStyles.reportText}>Report A Problem</Text>
       </TouchableOpacity>
 
       <Modal
@@ -183,28 +183,28 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Reporting A Problem</Text>
-            <Text style={styles.modalMessage}>
+        <View style={innerStyles.modalOverlay}>
+          <View style={innerStyles.modalContent}>
+            <Text style={innerStyles.modalTitle}>Reporting A Problem</Text>
+            <Text style={innerStyles.modalMessage}>
               To report a problem, please open a new job or find an existing job
               and upload files from Job Details.
             </Text>
-            <View style={styles.modalButtonsRow}>
+            <View style={innerStyles.modalButtonsRow}>
               <TouchableOpacity
-                style={[styles.modalButton, { marginRight: 10 }]}
+                style={[innerStyles.modalButton, { marginRight: 10 }]}
                 onPress={() => {
                   setModalVisible(false);
                   navigation.navigate("JobsScreen");
                 }}
               >
-                <Text style={styles.modalButtonText}>Go To Jobs</Text>
+                <Text style={innerStyles.modalButtonText}>Go To Jobs</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalButton}
+                style={innerStyles.modalButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.modalButtonText}>Cancel</Text>
+                <Text style={innerStyles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -214,7 +214,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const innerStyles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 20, flex: 1 },
   categoryHeader: {

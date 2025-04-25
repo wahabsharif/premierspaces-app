@@ -410,9 +410,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             <Text style={internalStyle.propertyText}>
               {storedProperty.address}
             </Text>
-            <Text style={internalStyle.propertyText}>
-              {storedProperty.company}
-            </Text>
+            <Text style={style.resultCompany}>{storedProperty.company}</Text>
           </View>
         )}
         <Text style={internalStyle.title}>

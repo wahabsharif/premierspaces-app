@@ -91,7 +91,6 @@ export default StyleSheet.create({
   },
   heading: {
     fontSize: fontSize.large,
-    fontWeight: "900",
     marginBottom: 16,
     alignSelf: "center",
     textTransform: "capitalize",
@@ -118,7 +117,6 @@ export default StyleSheet.create({
   label: {
     marginRight: 8,
     fontSize: fontSize.large,
-    fontWeight: "600",
   },
   floatingIcon: {
     position: "absolute",
@@ -171,7 +169,7 @@ export default StyleSheet.create({
     color: color.white,
   },
   resultCompany: {
-    fontSize: fontSize.small,
+    fontSize: fontSize.xs,
     color: color.gray,
   },
   list: {

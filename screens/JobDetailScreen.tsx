@@ -15,6 +15,7 @@ import Header from "../components/Common/Header";
 import { baseApiUrl } from "../Constants/env";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
+import styles from "../Constants/styles";
 
 interface Property {
   address: string;
@@ -151,21 +152,21 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const renderTask = ({ item }: { item: string }) => (
-    <Text style={styles.taskItem}>{`\u2022 ${item}`}</Text>
+    <Text style={innerStyles.taskItem}>{`\u2022 ${item}`}</Text>
   );
 
   // Loading and error states
   if (loading)
     return (
-      <View style={styles.centered}>
+      <View style={innerStyles.centered}>
         <ActivityIndicator size="large" color="#1f3759" />
       </View>
     );
 
   if (error || !jobDetail)
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>
+      <View style={innerStyles.centered}>
+        <Text style={innerStyles.errorText}>
           {error ?? "No job details available."}
         </Text>
       </View>
@@ -173,28 +174,28 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Main UI
   return (
-    <View style={styles.screen}>
+    <View style={innerStyles.screen}>
       <Header />
-      <View style={styles.container}>
+      <View style={innerStyles.container}>
         {property && (
-          <View style={styles.propertyContainer}>
-            <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <Text style={styles.propertyItem}>{property.address}</Text>
-            <Text style={styles.propertyItem}>{property.company}</Text>
+          <View style={innerStyles.propertyContainer}>
+            <Text style={innerStyles.propertyLabel}>Selected Property:</Text>
+            <Text style={innerStyles.propertyItem}>{property.address}</Text>
+            <Text style={styles.resultCompany}>{property.company}</Text>
             <TouchableOpacity
-              style={styles.uploadButton}
+              style={innerStyles.uploadButton}
               onPress={() => navigation.navigate("UploadScreen", { jobId })}
             >
-              <Text style={styles.uploadButtonText}>Upload Files</Text>
+              <Text style={innerStyles.uploadButtonText}>Upload Files</Text>
             </TouchableOpacity>
           </View>
         )}
-        <Text style={styles.header}>Job Detail</Text>
-        <Text style={styles.label}>Job Type</Text>
-        <Text style={styles.value}>{jobDetail.job_type}</Text>
+        <Text style={innerStyles.header}>Job Detail</Text>
+        <Text style={innerStyles.label}>Job Type</Text>
+        <Text style={innerStyles.value}>{jobDetail.job_type}</Text>
         {tasks.length > 0 && (
           <>
-            <Text style={styles.label}>Tasks</Text>
+            <Text style={innerStyles.label}>Tasks</Text>
             <FlatList
               data={tasks}
               keyExtractor={(_, i) => i.toString()}
@@ -202,43 +203,51 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             />
           </>
         )}
-        <Text style={styles.label}>Costs</Text>
-        <View style={styles.costsContainer}>
+        <Text style={innerStyles.label}>Costs</Text>
+        <View style={innerStyles.costsContainer}>
           {contractors.length > 0 ? (
             <>
               {contractors.map((c, idx) => (
-                <View key={idx} style={styles.costItem}>
-                  <Text style={styles.contractorName}>{c.name}</Text>
-                  <Text style={styles.contractorAmount}>{`£ ${c.amount}`}</Text>
+                <View key={idx} style={innerStyles.costItem}>
+                  <Text style={innerStyles.contractorName}>{c.name}</Text>
+                  <Text
+                    style={innerStyles.contractorAmount}
+                  >{`£ ${c.amount}`}</Text>
                 </View>
               ))}
-              <View style={styles.totalContainer}>
-                <Text style={styles.totalLabel}>Total Cost</Text>
-                <Text style={styles.totalAmount}>{`£ ${totalAmount.toFixed(
+              <View style={innerStyles.totalContainer}>
+                <Text style={innerStyles.totalLabel}>Total Cost</Text>
+                <Text style={innerStyles.totalAmount}>{`£ ${totalAmount.toFixed(
                   2
                 )}`}</Text>
               </View>
             </>
           ) : (
-            <Text style={styles.noDataText}>No cost data available</Text>
+            <Text style={innerStyles.noDataText}>No cost data available</Text>
           )}
         </View>
-        <View style={styles.countsContainer}>
-          <View style={styles.countContainer}>
+        <View style={innerStyles.countsContainer}>
+          <View style={innerStyles.countContainer}>
             <MaterialCommunityIcons name="image" size={40} color="#1f3759" />
-            <Text style={styles.countItem}>{jobDetail.image_file_count}</Text>
+            <Text style={innerStyles.countItem}>
+              {jobDetail.image_file_count}
+            </Text>
           </View>
-          <View style={styles.countContainer}>
+          <View style={innerStyles.countContainer}>
             <MaterialCommunityIcons
               name="file-document"
               size={40}
               color="#1f3759"
             />
-            <Text style={styles.countItem}>{jobDetail.doc_file_count}</Text>
+            <Text style={innerStyles.countItem}>
+              {jobDetail.doc_file_count}
+            </Text>
           </View>
-          <View style={styles.countContainer}>
+          <View style={innerStyles.countContainer}>
             <MaterialCommunityIcons name="video" size={40} color="#1f3759" />
-            <Text style={styles.countItem}>{jobDetail.video_file_count}</Text>
+            <Text style={innerStyles.countItem}>
+              {jobDetail.video_file_count}
+            </Text>
           </View>
         </View>
       </View>
@@ -246,7 +255,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const innerStyles = StyleSheet.create({
   screen: { flex: 1 },
   container: { flex: 1, padding: 20, backgroundColor: color.white },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

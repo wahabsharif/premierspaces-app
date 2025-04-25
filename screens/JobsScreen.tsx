@@ -14,6 +14,7 @@ import { baseApiUrl } from "../Constants/env";
 import commonStyles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { Job, RootStackParamList } from "../types";
+import styles from "../Constants/styles";
 
 const JobsScreen = ({
   navigation,
@@ -138,18 +139,21 @@ const JobsScreen = ({
     };
 
     return (
-      <TouchableOpacity style={styles.jobContainer} onPress={handleJobPress}>
-        <View style={styles.jobDetails}>
-          <Text style={styles.jobNum}>{item.job_num}</Text>
+      <TouchableOpacity
+        style={innerStyles.jobContainer}
+        onPress={handleJobPress}
+      >
+        <View style={innerStyles.jobDetails}>
+          <Text style={innerStyles.jobNum}>{item.job_num}</Text>
           <Text>{item.date_created}</Text>
 
           <View
             style={[
-              styles.statusContainer,
+              innerStyles.statusContainer,
               { backgroundColor: getStatusBackground(Number(item.status)) },
             ]}
           >
-            <Text style={styles.statusText}>
+            <Text style={innerStyles.statusText}>
               {Number(item.status) === 1
                 ? "Open"
                 : Number(item.status) === 2
@@ -160,9 +164,9 @@ const JobsScreen = ({
 
           <Text>{item.job_type}</Text>
         </View>
-        <View style={styles.taskListContainer}>
+        <View style={innerStyles.taskListContainer}>
           {tasks.map((task, index) => (
-            <Text key={index} style={styles.taskItem}>
+            <Text key={index} style={innerStyles.taskItem}>
               {"\u2022"} {task}
             </Text>
           ))}
@@ -174,28 +178,32 @@ const JobsScreen = ({
   return (
     <View style={{ flex: 1 }}>
       <Header />
-      <View style={styles.container}>
-        <View style={commonStyles.headingContainer}>
-          <Text style={commonStyles.heading}>Jobs List</Text>
+      <View style={innerStyles.container}>
+        <View style={styles.headingContainer}>
+          <Text style={styles.heading}>Jobs List</Text>
         </View>
         {propertyData && (
-          <View style={styles.propertyContainer}>
-            <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <View style={styles.propertyDetails}>
-              <Text style={styles.propertyItem}>{propertyData.address}</Text>
-              <Text style={styles.propertyItem}>{propertyData.company}</Text>
+          <View style={innerStyles.propertyContainer}>
+            <Text style={innerStyles.propertyLabel}>Selected Property:</Text>
+            <View style={innerStyles.propertyDetails}>
+              <Text style={innerStyles.propertyItem}>
+                {propertyData.address}
+              </Text>
+              <Text style={styles.resultCompany}>{propertyData.company}</Text>
             </View>
           </View>
         )}
         <TouchableOpacity
-          style={styles.button}
+          style={innerStyles.button}
           onPress={() => navigation.navigate("OpenNewJobScreen")}
         >
-          <Text style={styles.buttonText}>Open New Job</Text>
+          <Text style={innerStyles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
-        {loading && <Text style={styles.statusText}>Loading jobs...</Text>}
+        {loading && <Text style={innerStyles.statusText}>Loading jobs...</Text>}
         {!loading && error && (
-          <Text style={[styles.statusText, { color: color.red }]}>{error}</Text>
+          <Text style={[innerStyles.statusText, { color: color.red }]}>
+            {error}
+          </Text>
         )}
         {!loading && !error && jobs.length > 0 && (
           <FlatList
@@ -210,7 +218,7 @@ const JobsScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
+const innerStyles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
