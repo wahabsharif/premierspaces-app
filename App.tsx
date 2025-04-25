@@ -1,16 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
+import * as Application from "expo-application";
+import { StatusBar } from "expo-status-bar"; // ← import runtime StatusBar
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  AppStateStatus,
   ImageBackground,
   StyleSheet,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Provider as PaperProvider } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ToastManager, { Toast } from "toastify-react-native";
-import * as Application from "expo-application";
 
 import { AppNavigator } from "./components/Common/AppNavigator";
 import LockScreen from "./screens/LockScreen";
@@ -31,7 +33,6 @@ export default function App() {
           AsyncStorage.getItem("app_version"),
         ]);
 
-        // Check if user data exists
         if (userData) {
           setIsLoggedIn(true);
           Toast.success("Welcome back!");
@@ -43,7 +44,6 @@ export default function App() {
         setIsUnlocked(appLockEnabled === "false" || appLockEnabled === null);
 
         const currentVersion = Application.nativeApplicationVersion || "0.0.0";
-
         if (storedVersion !== currentVersion) {
           await AsyncStorage.removeItem("userData");
           setIsLoggedIn(false);
@@ -62,7 +62,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleAppStateChange = async (nextAppState: string) => {
+    const handleAppStateChange = async (
+      nextAppState: AppStateStatus
+    ): Promise<void> => {
       try {
         const appLockEnabled = await AsyncStorage.getItem("app_lock_enabled");
         if (
@@ -100,10 +102,7 @@ export default function App() {
     <PaperProvider>
       <ToastManager
         position="bottom"
-        style={{
-          flexDirection: "column-reverse",
-          justifyContent: "flex-end",
-        }}
+        style={{ flexDirection: "column-reverse", justifyContent: "flex-end" }}
       />
 
       <ImageBackground source={backgroundImage} style={styles.background}>

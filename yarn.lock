@@ -2055,9 +2055,9 @@
     "@types/node" "*"
 
 "@types/node@*":
-  version "22.14.1"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.14.1.tgz#53b54585cec81c21eee3697521e31312d6ca1e6f"
-  integrity sha512-u0HuPQwe/dHrItgHHpmw3N2fYCR6x4ivMNbPHRkBVP4CvN+kiRrKHWk3i8tXiO/joPwXLMYvF9TTF0eqgHIuOw==
+  version "22.15.1"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.15.1.tgz#4cd2c8717a61ae2979c6a0624b4d1b67415bf2c0"
+  integrity sha512-gSZyd0Qmv7qvbd2fJ9HGdYmv1yhNdelIA4YOtN6vkcmSwFhthxSEsBgU/JYZcXjWT6DFzoATcHrc52Ckh8SeRA==
   dependencies:
     undici-types "~6.21.0"
 
@@ -2303,9 +2303,9 @@ at-least-node@^1.0.0:
   integrity sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==
 
 axios@^1.8.1:
-  version "1.8.4"
-  resolved "https://registry.yarnpkg.com/axios/-/axios-1.8.4.tgz#78990bb4bc63d2cae072952d374835950a82f447"
-  integrity sha512-eBSYY4Y68NNlHbHBMdeDmKNtDgXWhQsJcGqzO3iLUM0GraQFSS9cVgPX5I9b3lbdFKyYoAEGAZF1DwhTaljNAw==
+  version "1.9.0"
+  resolved "https://registry.yarnpkg.com/axios/-/axios-1.9.0.tgz#25534e3b72b54540077d33046f77e3b8d7081901"
+  integrity sha512-re4CqKTJaURpzbLHtIi6XpDv20/CnpXOtjRY5/CU32L8gU8ek9UIivcfvSWvmKEngmVbrUtPpdDwWDWL7DNHvg==
   dependencies:
     follow-redirects "^1.15.6"
     form-data "^4.0.0"
@@ -3110,9 +3110,9 @@ ee-first@1.1.1:
   integrity sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==
 
 electron-to-chromium@^1.5.73:
-  version "1.5.140"
-  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.5.140.tgz#91d9279fe72963f22c5784cc7f3461b5fed34786"
-  integrity sha512-o82Rj+ONp4Ip7Cl1r7lrqx/pXhbp/lh9DpKcMNscFJdh8ebyRofnc7Sh01B4jx403RI0oqTBvlZ7OBIZLMr2+Q==
+  version "1.5.142"
+  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.5.142.tgz#1de55d0d19b24b07768c4bfc90f41bd7f248d043"
+  integrity sha512-Ah2HgkTu/9RhTDNThBtzu2Wirdy4DC9b0sMT1pUhbkZQ5U/iwmE+PHZX1MpjD5IkJCc2wSghgGG/B04szAx07w==
 
 emoji-regex@^8.0.0:
   version "8.0.0"
@@ -5723,9 +5723,9 @@ react-native-modal@^14.0.0-rc.1:
     react-native-animatable "1.4.0"
 
 react-native-paper@^5.13.1:
-  version "5.13.3"
-  resolved "https://registry.yarnpkg.com/react-native-paper/-/react-native-paper-5.13.3.tgz#72631d7b02abc32af465fb4b8e8ea90a733fae84"
-  integrity sha512-OyUonUq5JwVClSi21eh0WW4FYnjqEY/6VasOzFi1wit85FBYsL1nYSz1Gqoxsw5bA5yDDyms/gdSvrUcQMYjMw==
+  version "5.13.4"
+  resolved "https://registry.yarnpkg.com/react-native-paper/-/react-native-paper-5.13.4.tgz#5ab7426ae4c682a7731cba1c27461c2a5b8c91e9"
+  integrity sha512-dDYXrYE81upegQXQKjcxd/mn+y7X7l0sWIRt6I6IQSN4QGHWRESdt29GcJ+rpkHC53ArB/LuGVpF2CcIf/eCTg==
   dependencies:
     "@callstack/react-theme-provider" "^3.0.9"
     color "^3.1.2"
