@@ -77,7 +77,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     loadLocalData();
   }, [loadLocalData]);
 
-  // Fetch job detail
   const fetchJob = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -102,7 +101,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [userId, jobId]);
 
-  // Fetch contractor data
   const fetchContractors = useCallback(async () => {
     if (!userId) return;
     try {
@@ -120,11 +118,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [userId, jobId]);
 
-  // 🔄 Reload data on screen focus
   useReloadOnFocus(fetchJob);
   useReloadOnFocus(fetchContractors);
 
-  // Derive tasks list and total amount
   const tasks = useMemo(
     () =>
       [
@@ -151,7 +147,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
   );
 
-  // Loading and error states
   if (loading)
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -185,13 +180,16 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </TouchableOpacity>
           </View>
         )}
+
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Job Detail</Text>
         </View>
+
         <View style={{ width: "100%", marginVertical: 10 }}>
           <Text style={styles.label}>Job Type</Text>
           <Text style={styles.smallText}>{jobDetail.job_type}</Text>
         </View>
+
         {tasks.length > 0 && (
           <View style={{ width: "100%", marginVertical: 10 }}>
             <Text style={styles.label}>Tasks</Text>
@@ -202,6 +200,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             />
           </View>
         )}
+
         <View style={{ width: "100%" }}>
           <Text style={styles.label}>Costs</Text>
           {contractors.length > 0 ? (
@@ -225,29 +224,62 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={innerStyles.noDataText}>No cost data available</Text>
           )}
         </View>
+
         <View style={innerStyles.countsContainer}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <MaterialCommunityIcons name="image" size={40} color="#1f3759" />
-            <Text style={innerStyles.countItem}>
-              {jobDetail.image_file_count}
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <MaterialCommunityIcons
-              name="file-document"
-              size={40}
-              color="#1f3759"
-            />
-            <Text style={innerStyles.countItem}>
-              {jobDetail.doc_file_count}
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <MaterialCommunityIcons name="video" size={40} color="#1f3759" />
-            <Text style={innerStyles.countItem}>
-              {jobDetail.video_file_count}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={innerStyles.countBlock}
+            onPress={() =>
+              navigation.navigate("MediaPreviewScreen", {
+                jobId,
+                fileCategory: "image",
+              })
+            }
+          >
+            <View style={innerStyles.countItemRow}>
+              <MaterialCommunityIcons name="image" size={40} color="#1f3759" />
+              <Text style={innerStyles.countItem}>
+                {jobDetail.image_file_count}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={innerStyles.countBlock}
+            onPress={() =>
+              navigation.navigate("MediaPreviewScreen", {
+                jobId,
+                fileCategory: "document",
+              })
+            }
+          >
+            <View style={innerStyles.countItemRow}>
+              <MaterialCommunityIcons
+                name="file-document"
+                size={40}
+                color="#1f3759"
+              />
+              <Text style={innerStyles.countItem}>
+                {jobDetail.doc_file_count}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={innerStyles.countBlock}
+            onPress={() =>
+              navigation.navigate("MediaPreviewScreen", {
+                jobId,
+                fileCategory: "video",
+              })
+            }
+          >
+            <View style={innerStyles.countItemRow}>
+              <MaterialCommunityIcons name="video" size={40} color="#1f3759" />
+              <Text style={innerStyles.countItem}>
+                {jobDetail.video_file_count}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -262,11 +294,19 @@ const innerStyles = StyleSheet.create({
     marginTop: 20,
     width: "100%",
   },
+  countBlock: {
+    flex: 1,
+    alignItems: "center",
+  },
+  countItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   countItem: {
     fontSize: fontSize.xl,
     marginLeft: 5,
     fontWeight: "bold",
-    color: "1f3759",
+    color: "#1f3759",
   },
   costItem: {
     flexDirection: "row",
