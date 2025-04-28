@@ -1,4 +1,4 @@
-import { AntDesign } from "@expo/vector-icons";
+import { AntDesign, MaterialIcons } from "@expo/vector-icons";
 import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -65,6 +65,8 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
+  const [micPermission, requestMicPermission] =
+    Camera.useMicrophonePermissions();
   const [storedProperty, setStoredProperty] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -75,8 +77,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [jobData, setJobData] = useState<any>(null);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [userData, setUserData] = useState<any>(null);
-
-  // Custom Alert State
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
@@ -84,6 +84,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
+
   // Helper function to infer mimeType from file name (for documents)
   const inferMimeType = (fileName: string) => {
     const ext = fileName.split(".").pop()?.toLowerCase();
@@ -118,6 +119,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     };
     fetchUserData();
   }, []);
+
   useEffect(() => {
     const fetchStoredProperty = async () => {
       try {
@@ -167,16 +169,43 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setSnackbarVisible(true);
   };
 
-  // Pick images or videos from the library
+  // Permission check functions
+  const checkCameraPermission = async () => {
+    if (!permission?.granted) {
+      const { status } = await requestPermission();
+      if (status !== "granted") {
+        showAlert("Permission Required", "Camera permission is required!");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const checkMicPermission = async () => {
+    if (!micPermission?.granted) {
+      const { status } = await requestMicPermission();
+      if (status !== "granted") {
+        showAlert(
+          "Permission Required",
+          "Microphone permission is required for video recording!"
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Pick images or videos from the gallery
+  // Replace the pickImage function with this updated version:
   const pickImage = async () => {
     setLoadingMedia(true);
     try {
       navigation.setParams({ isPickingImage: true });
       let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        mediaTypes: ["images", "videos"],
         allowsMultipleSelection: true,
-        allowsEditing: true,
-        quality: 1, // Consider reducing quality to compress images
+        allowsEditing: false,
+        quality: 1,
       });
       if (!result.canceled) {
         const newFiles: MediaFile[] = result.assets.map((asset) => {
@@ -184,11 +213,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           const name = asset.uri.split("/").pop() || `file_${Date.now()}`;
           let mimeType = "";
           if (fileType === "image") {
-            mimeType = name.endsWith(".png")
-              ? "image/png"
-              : name.endsWith(".jpg") || name.endsWith(".jpeg")
-              ? "image/jpeg"
-              : "image/jpeg";
+            mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
           } else if (fileType === "video") {
             mimeType = name.endsWith(".mp4") ? "video/mp4" : "video/mp4";
           }
@@ -204,37 +229,65 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
-  // Use the camera to take a photo
-  const takePhoto = async () => {
+  const recordVideo = async () => {
     setLoadingMedia(true);
-    if (!permission?.granted) {
-      const { status } = await requestPermission();
-      if (status !== "granted") {
-        showAlert("Permission Required", "Camera permission is required!");
+    try {
+      const hasCameraPermission = await checkCameraPermission();
+      const hasMicPermission = await checkMicPermission();
+      if (!hasCameraPermission || !hasMicPermission) {
         setLoadingMedia(false);
         return;
       }
-    }
-    try {
       navigation.setParams({ isPickingImage: true });
-      let result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
         quality: 1,
+        videoMaxDuration: 60,
       });
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const name = asset.uri.split("/").pop() || `file_${Date.now()}`;
-        const mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
-        setMedia([...media, { uri: asset.uri, type: "image", name, mimeType }]);
+        const name = asset.uri.split("/").pop() || `video_${Date.now()}.mp4`;
+        const mimeType = "video/mp4";
+        setMedia([...media, { uri: asset.uri, type: "video", name, mimeType }]);
       }
     } catch (error) {
-      showAlert("Error", "Failed to take a photo. Please try again.");
+      showAlert("Error", "Failed to record video. Please try again.");
     } finally {
       navigation.setParams({ isPickingImage: false });
       setLoadingMedia(false);
     }
   };
 
+  // Take a photo
+  const takePhoto = async () => {
+    setLoadingMedia(true);
+    try {
+      const hasCameraPermission = await checkCameraPermission();
+      if (!hasCameraPermission) {
+        setLoadingMedia(false);
+        return;
+      }
+      navigation.setParams({ isPickingImage: true });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 1,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const name = asset.uri.split("/").pop() || `photo_${Date.now()}.jpg`;
+        const mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
+        setMedia([...media, { uri: asset.uri, type: "image", name, mimeType }]);
+      }
+    } catch (error) {
+      showAlert("Error", "Failed to take photo. Please try again.");
+    } finally {
+      navigation.setParams({ isPickingImage: false });
+      setLoadingMedia(false);
+    }
+  };
+
+  // Pick a document
   const pickDocument = async () => {
     setLoadingMedia(true);
     try {
@@ -243,7 +296,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         type: "*/*",
         multiple: false,
       });
-      console.log("DocumentPicker result:", result);
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const doc = result.assets[0];
         const name = doc.name;
@@ -256,10 +308,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           size: doc.size,
         };
         setMedia((prev) => [...prev, newFile]);
-      } else {
-        console.log(
-          "Document picker was cancelled or returned an unexpected result"
-        );
       }
     } catch (error) {
       showAlert("Error", "Failed to pick a document. Please try again.");
@@ -275,7 +323,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setMedia(updatedMedia);
   };
 
-  // Only  a base64 header for images
   const getFileHeader = async (
     uri: string,
     mimeType: string
@@ -310,8 +357,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
-  // In the uploadImages function, modify the following parts:
-
   const uploadImages = async () => {
     if (media.length === 0) {
       showAlert("Error", "Please select at least one file to upload.");
@@ -320,16 +365,13 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
     setUploading(true);
     setUploadedCount(0);
-    // Add these two lines to reset success and failure counts
     setSuccessCount(0);
     setFailedCount(0);
 
     const fileId = getFileId();
-    console.log(`Generated file ID: ${fileId}`);
     const totalFiles = media.length;
     const newUploadProgress = { ...uploadProgress };
 
-    // Create an array of upload tasks
     const tasks = media.map((file, index) => async () => {
       const fileSize = file.size ? file.size : await getFileSize(file.uri);
       if (fileSize === null) return;
@@ -384,14 +426,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         newUploadProgress[file.uri] = "Complete";
         setUploadProgress({ ...newUploadProgress });
         setUploadedCount((prevCount) => prevCount + 1);
-        // Important: Increment success count here
         setSuccessCount((prevCount) => prevCount + 1);
         return response.data;
       } catch (error) {
         console.error(`Error uploading file ${index + 1}:`, error);
         newUploadProgress[file.uri] = "Failed";
         setUploadProgress({ ...newUploadProgress });
-        // Important: Increment failed count here
         setFailedCount((prevCount) => prevCount + 1);
         throw error;
       }
@@ -399,12 +439,10 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
 
     try {
       await uploadQueue(tasks, 3);
-      // Don't update success/failed counts here - they're already updated in the individual task handlers
       setStatusModalVisible(true);
       setMedia([]);
     } catch (error) {
       console.error("Error uploading files:", error);
-      // No need to update counts here either
       setStatusModalVisible(true);
     } finally {
       setUploading(false);
@@ -433,42 +471,52 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         <View
           style={{
             flexDirection: "row",
-            justifyContent: "center",
-            alignItems: "center",
+            marginHorizontal: 10,
             marginVertical: 10,
           }}
         >
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.orange },
+              { backgroundColor: color.orange, marginHorizontal: 5 },
             ]}
             onPress={pickImage}
             disabled={uploading}
           >
-            <Entypo name="images" size={28} color="white" />
-            <Text style={internalStyle.actionButtonLabel}>Gallery/Video</Text>
+            <Entypo name="images" size={24} color="white" />
+            <Text style={internalStyle.actionButtonLabel}>Gallery</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.primary },
+              { backgroundColor: color.primary, marginHorizontal: 5 },
             ]}
             onPress={takePhoto}
             disabled={uploading}
           >
-            <Feather name="camera" size={28} color="white" />
-            <Text style={internalStyle.actionButtonLabel}>Camera</Text>
+            <Feather name="camera" size={24} color="white" />
+            <Text style={internalStyle.actionButtonLabel}>Take Photo</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.lightGreen },
+              { backgroundColor: color.secondary, marginHorizontal: 5 },
+            ]}
+            onPress={recordVideo}
+            disabled={uploading}
+          >
+            <MaterialIcons name="videocam" size={24} color="white" />
+            <Text style={internalStyle.actionButtonLabel}>Record Video</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              internalStyle.actionButton,
+              { backgroundColor: color.lightGreen, marginHorizontal: 5 },
             ]}
             onPress={pickDocument}
             disabled={uploading}
           >
-            <Feather name="file-text" size={28} color="white" />
+            <Feather name="file-text" size={24} color="white" />
             <Text style={internalStyle.actionButtonLabel}>Document</Text>
           </TouchableOpacity>
         </View>
@@ -668,20 +716,18 @@ const internalStyle = StyleSheet.create({
     position: "relative",
   },
   actionButton: {
-    width: 120,
-    height: 90,
+    flex: 1, // Equal width for all buttons
+    height: 80,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 5,
   },
   actionButtonLabel: {
     marginTop: 4,
-    fontSize: fontSize.medium,
+    fontSize: 12, // Smaller font size to fit
     color: color.white,
     textAlign: "center",
   },
-
   loadingOverlay: {
     position: "absolute",
     top: 0,
@@ -742,12 +788,6 @@ const internalStyle = StyleSheet.create({
     color: color.white,
     fontSize: fontSize.medium,
     fontWeight: "bold",
-  },
-  closeModal: {
-    position: "absolute",
-    top: 40,
-    right: 20,
-    zIndex: 10,
   },
   fullImage: {
     width: "90%",
