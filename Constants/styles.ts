@@ -89,7 +89,7 @@ export default StyleSheet.create({
   },
   headingContainer: {
     alignItems: "flex-start",
-    marginTop: 16,
+    marginTop: 10,
     width: "100%",
   },
   heading: {

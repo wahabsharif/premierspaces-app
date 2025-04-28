@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import * as Application from "expo-application";
-import { StatusBar } from "expo-status-bar"; // ← import runtime StatusBar
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,

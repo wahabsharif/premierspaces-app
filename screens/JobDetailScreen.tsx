@@ -16,6 +16,7 @@ import { baseApiUrl } from "../Constants/env";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
 import styles from "../Constants/styles";
+import { useReloadOnFocus } from "../hooks";
 
 interface Property {
   address: string;
@@ -56,7 +57,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load user and property from AsyncStorage
   const loadLocalData = useCallback(async () => {
     try {
       const [userJson, propJson] = await Promise.all([
@@ -72,6 +72,10 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       console.error("Error loading local data", e);
     }
   }, []);
+
+  useEffect(() => {
+    loadLocalData();
+  }, [loadLocalData]);
 
   // Fetch job detail
   const fetchJob = useCallback(async () => {
@@ -116,19 +120,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [userId, jobId]);
 
-  useEffect(() => {
-    loadLocalData();
-  }, [loadLocalData]);
+  // 🔄 Reload data on screen focus
+  useReloadOnFocus(fetchJob);
+  useReloadOnFocus(fetchContractors);
 
-  useEffect(() => {
-    fetchJob();
-  }, [fetchJob]);
-
-  useEffect(() => {
-    fetchContractors();
-  }, [fetchContractors]);
-
-  // Derive tasks list and total amount using useMemo, always before returns
+  // Derive tasks list and total amount
   const tasks = useMemo(
     () =>
       [
@@ -152,21 +148,21 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const renderTask = ({ item }: { item: string }) => (
-    <Text style={innerStyles.taskItem}>{`\u2022 ${item}`}</Text>
+    <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
   );
 
   // Loading and error states
   if (loading)
     return (
-      <View style={innerStyles.centered}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#1f3759" />
       </View>
     );
 
   if (error || !jobDetail)
     return (
-      <View style={innerStyles.centered}>
-        <Text style={innerStyles.errorText}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text style={styles.errorText}>
           {error ?? "No job details available."}
         </Text>
       </View>
@@ -175,40 +171,44 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <View style={styles.screenContainer}>
       <Header />
-      <View style={innerStyles.container}>
+      <View style={styles.container}>
         {property && (
-          <View style={innerStyles.propertyContainer}>
-            <Text style={innerStyles.propertyLabel}>Selected Property:</Text>
-            <Text style={innerStyles.propertyItem}>{property.address}</Text>
-            <Text style={styles.resultCompany}>{property.company}</Text>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{property.address}</Text>
+            <Text style={styles.extraSmallText}>{property.company}</Text>
             <TouchableOpacity
-              style={innerStyles.uploadButton}
+              style={styles.primaryButton}
               onPress={() => navigation.navigate("UploadScreen", { jobId })}
             >
-              <Text style={innerStyles.uploadButtonText}>Upload Files</Text>
+              <Text style={styles.buttonText}>Upload Files</Text>
             </TouchableOpacity>
           </View>
         )}
-        <Text style={innerStyles.header}>Job Detail</Text>
-        <Text style={innerStyles.label}>Job Type</Text>
-        <Text style={innerStyles.value}>{jobDetail.job_type}</Text>
+        <View style={styles.headingContainer}>
+          <Text style={styles.heading}>Job Detail</Text>
+        </View>
+        <View style={{ width: "100%", marginVertical: 10 }}>
+          <Text style={styles.label}>Job Type</Text>
+          <Text style={styles.smallText}>{jobDetail.job_type}</Text>
+        </View>
         {tasks.length > 0 && (
-          <>
-            <Text style={innerStyles.label}>Tasks</Text>
+          <View style={{ width: "100%", marginVertical: 10 }}>
+            <Text style={styles.label}>Tasks</Text>
             <FlatList
               data={tasks}
               keyExtractor={(_, i) => i.toString()}
               renderItem={renderTask}
             />
-          </>
+          </View>
         )}
-        <Text style={innerStyles.label}>Costs</Text>
-        <View style={innerStyles.costsContainer}>
+        <View style={{ width: "100%" }}>
+          <Text style={styles.label}>Costs</Text>
           {contractors.length > 0 ? (
             <>
               {contractors.map((c, idx) => (
                 <View key={idx} style={innerStyles.costItem}>
-                  <Text style={innerStyles.contractorName}>{c.name}</Text>
+                  <Text style={styles.smallText}>{c.name}</Text>
                   <Text
                     style={innerStyles.contractorAmount}
                   >{`£ ${c.amount}`}</Text>
@@ -226,13 +226,13 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           )}
         </View>
         <View style={innerStyles.countsContainer}>
-          <View style={innerStyles.countContainer}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
             <MaterialCommunityIcons name="image" size={40} color="#1f3759" />
             <Text style={innerStyles.countItem}>
               {jobDetail.image_file_count}
             </Text>
           </View>
-          <View style={innerStyles.countContainer}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
             <MaterialCommunityIcons
               name="file-document"
               size={40}
@@ -242,7 +242,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               {jobDetail.doc_file_count}
             </Text>
           </View>
-          <View style={innerStyles.countContainer}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
             <MaterialCommunityIcons name="video" size={40} color="#1f3759" />
             <Text style={innerStyles.countItem}>
               {jobDetail.video_file_count}
@@ -255,71 +255,24 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 };
 
 const innerStyles = StyleSheet.create({
-  screen: { flex: 1 },
-  container: { flex: 1, padding: 20, backgroundColor: color.white },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
-    fontSize: fontSize.large,
-    fontWeight: "bold",
-    color: color.primary,
-    marginBottom: 15,
-  },
-  label: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    marginTop: 10,
-    color: color.black,
-    textTransform: "uppercase",
-  },
-  value: { fontSize: fontSize.medium, marginLeft: 5 },
   taskItem: { fontSize: fontSize.medium, color: color.gray, paddingLeft: 10 },
-  errorText: { color: "red", fontSize: fontSize.medium, textAlign: "center" },
-  propertyContainer: {
-    marginBottom: 20,
-    padding: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: color.secondary,
-    backgroundColor: color.white,
-  },
-  propertyLabel: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    marginBottom: 5,
-  },
-  propertyItem: { fontSize: fontSize.medium, color: color.gray },
-  uploadButton: {
-    marginTop: 10,
-    alignSelf: "flex-end",
-    backgroundColor: color.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-  },
-  uploadButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-  },
   countsContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginTop: 20,
+    width: "100%",
   },
-  countContainer: { flexDirection: "row", alignItems: "center" },
   countItem: {
     fontSize: fontSize.xl,
     marginLeft: 5,
     fontWeight: "bold",
     color: "1f3759",
   },
-  costsContainer: { marginTop: 10 },
   costItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 5,
   },
-  contractorName: { fontSize: fontSize.medium, flex: 2 },
   contractorAmount: {
     fontSize: fontSize.medium,
     fontWeight: "600",

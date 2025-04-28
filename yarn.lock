@@ -2055,9 +2055,9 @@
     "@types/node" "*"
 
 "@types/node@*":
-  version "22.15.1"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.15.1.tgz#4cd2c8717a61ae2979c6a0624b4d1b67415bf2c0"
-  integrity sha512-gSZyd0Qmv7qvbd2fJ9HGdYmv1yhNdelIA4YOtN6vkcmSwFhthxSEsBgU/JYZcXjWT6DFzoATcHrc52Ckh8SeRA==
+  version "22.15.3"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.15.3.tgz#b7fb9396a8ec5b5dfb1345d8ac2502060e9af68b"
+  integrity sha512-lX7HFZeHf4QG/J7tBZqrCAXwz9J5RD56Y6MpP0eJkka8p+K0RY/yBTW7CYFJ4VGCclxqOLKmiGP5juQc6MKgcw==
   dependencies:
     undici-types "~6.21.0"
 
@@ -3110,9 +3110,9 @@ ee-first@1.1.1:
   integrity sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==
 
 electron-to-chromium@^1.5.73:
-  version "1.5.142"
-  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.5.142.tgz#1de55d0d19b24b07768c4bfc90f41bd7f248d043"
-  integrity sha512-Ah2HgkTu/9RhTDNThBtzu2Wirdy4DC9b0sMT1pUhbkZQ5U/iwmE+PHZX1MpjD5IkJCc2wSghgGG/B04szAx07w==
+  version "1.5.143"
+  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.5.143.tgz#b057bcb9dddd3a9b24ba6c9b9e39a82bee84bdaf"
+  integrity sha512-QqklJMOFBMqe46k8iIOwA9l2hz57V2OKMmP5eSWcUvwx+mASAsbU+wkF1pHjn9ZVSBPrsYWr4/W/95y5SwYg2g==
 
 emoji-regex@^8.0.0:
   version "8.0.0"
@@ -5723,9 +5723,9 @@ react-native-modal@^14.0.0-rc.1:
     react-native-animatable "1.4.0"
 
 react-native-paper@^5.13.1:
-  version "5.13.4"
-  resolved "https://registry.yarnpkg.com/react-native-paper/-/react-native-paper-5.13.4.tgz#5ab7426ae4c682a7731cba1c27461c2a5b8c91e9"
-  integrity sha512-dDYXrYE81upegQXQKjcxd/mn+y7X7l0sWIRt6I6IQSN4QGHWRESdt29GcJ+rpkHC53ArB/LuGVpF2CcIf/eCTg==
+  version "5.13.5"
+  resolved "https://registry.yarnpkg.com/react-native-paper/-/react-native-paper-5.13.5.tgz#e5c2e3ca444da59c214296af8bd1622928dc1204"
+  integrity sha512-aaUVy7bzv9PGTMB2+bfrGwX5D9bjQFPjPemOyUjHZxka/xgFozIyDjtLPUIaYZ5LcvJhXH4zhc/S6N+zpdIwrQ==
   dependencies:
     "@callstack/react-theme-provider" "^3.0.9"
     color "^3.1.2"
