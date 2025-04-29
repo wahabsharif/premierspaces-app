@@ -94,3 +94,27 @@ export interface UploadScreenProps {
 export interface ChangeAppPinScreenProps {
   navigation: any;
 }
+
+export interface FileItem {
+  id: string;
+  file_name: string;
+  path: string;
+  date_created: string;
+  stream_url: string;
+  property_id: string;
+  job_id: string;
+  user_name: string;
+}
+
+export interface FileTypeCount {
+  type: string;
+  count: number;
+  icon: string;
+}
+
+export interface GroupedFiles {
+  path: string;
+  formattedPath: string;
+  files: FileItem[];
+  fileTypeCounts: FileTypeCount[];
+}
