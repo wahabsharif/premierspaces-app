@@ -167,6 +167,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     <View style={styles.screenContainer}>
       <Header />
       <View style={styles.container}>
+        <View style={styles.headingContainer}>
+          <Text style={styles.heading}>Job Detail</Text>
+        </View>
         {property && (
           <View style={styles.screenBanner}>
             <Text style={styles.bannerLabel}>Selected Property:</Text>
@@ -180,11 +183,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </TouchableOpacity>
           </View>
         )}
-
-        <View style={styles.headingContainer}>
-          <Text style={styles.heading}>Job Detail</Text>
-        </View>
-
         <View style={{ width: "100%", marginVertical: 10 }}>
           <Text style={styles.label}>Job Type</Text>
           <Text style={styles.smallText}>{jobDetail.job_type}</Text>

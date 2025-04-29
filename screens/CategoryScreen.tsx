@@ -163,6 +163,12 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         >
           <Text style={styles.buttonText}>Go To Jobs</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => navigation.navigate("FilesScreen")}
+        >
+          <Text style={styles.buttonText}>Go To Files</Text>
+        </TouchableOpacity>
         <FlatList
           data={categories}
           keyExtractor={(c) => c.id.toString()}

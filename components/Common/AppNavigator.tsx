@@ -12,6 +12,7 @@ import JobsScreen from "../../screens/JobsScreen";
 import OpenNewJobScreen from "../../screens/OpenNewJobScreen";
 import JobDetailScreen from "../../screens/JobDetailScreen";
 import MediaPreviewScreen from "../../screens/MediaPreviewScreen";
+import FilesScreen from "../../screens/FilesScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
@@ -68,6 +69,10 @@ export const AppNavigator = ({
     <Stack.Screen
       name="MediaPreviewScreen"
       component={MediaPreviewScreen as React.ComponentType<any>}
+    />
+    <Stack.Screen
+      name="FilesScreen"
+      component={FilesScreen as React.ComponentType<any>}
     />
   </Stack.Navigator>
 );
