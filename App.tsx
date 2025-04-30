@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ToastManager, { Toast } from "toastify-react-native";
 
 import { AppNavigator } from "./components/Common/AppNavigator";
+import NetworkStatus from "./components/Common/NetworkStatus";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 
@@ -99,6 +100,7 @@ export default function App() {
 
   return (
     <PaperProvider>
+      <NetworkStatus />
       <ToastManager
         position="bottom"
         style={{ flexDirection: "column-reverse", justifyContent: "flex-end" }}
