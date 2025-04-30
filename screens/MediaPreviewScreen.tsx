@@ -37,6 +37,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "MediaPreviewScreen">;
 
 const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const { jobId, fileCategory } = route.params;
+  const [allMedia, setAllMedia] = useState<MediaFile[]>([]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +49,9 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   // Video player reference for modal
   const videoRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
+
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<string>(fileCategory);
 
   // Map the fileCategory string to the numeric category used in the API
   const getFileCategoryNumber = (category: string): string => {
@@ -63,6 +67,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
   };
 
+  // Load media from API
   useEffect(() => {
     const loadMedia = async () => {
       try {
@@ -70,8 +75,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         const propRaw = await AsyncStorage.getItem("selectedProperty");
 
         if (!userDataRaw || !propRaw) {
-          const errMsg = "Missing user or property data";
-          setError(errMsg);
+          setError("Missing user or property data");
           return;
         }
 
@@ -81,36 +85,22 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         const propertyId = property.id;
 
         const url =
-          `http://192.168.18.130:8000` +
-          `/api/mapp/get-files.php` +
-          `?userid=${userId}` +
-          `&property_id=${propertyId}` +
-          `&job_id=${jobId}`;
+          `http://192.168.18.130:8000/api/mapp/get-files.php` +
+          `?userid=${userId}&property_id=${propertyId}&job_id=${jobId}`;
 
         const res = await fetch(url);
-
         const contentType = res.headers.get("content-type");
 
-        if (!contentType || !contentType.includes("application/json")) {
-          // If not JSON, log the raw text for debugging
-          const text = await res.text();
-
+        if (!contentType?.includes("application/json")) {
           throw new Error("Server returned non-JSON response");
         }
 
         const json = await res.json();
-
         if (json.status !== 1 || !Array.isArray(json.payload)) {
           throw new Error("Invalid API response");
         }
 
-        // Filter media files based on the file category
-        const categoryNumber = getFileCategoryNumber(fileCategory);
-        const filteredFiles = json.payload.filter(
-          (item: MediaFile) => item.file_category === categoryNumber
-        );
-
-        setMediaFiles(filteredFiles);
+        setAllMedia(json.payload);
       } catch (e: any) {
         console.error("[MediaPreview] Error in loadMedia():", e);
         setError(e.message);
@@ -119,25 +109,33 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
       }
     };
     loadMedia();
-  }, [jobId, fileCategory]);
+  }, [jobId]);
+
+  // Filter media based on activeTab
+  useEffect(() => {
+    const categoryNumber = getFileCategoryNumber(activeTab);
+    const filtered = allMedia.filter(
+      (item) => item.file_category === categoryNumber
+    );
+    setMediaFiles(filtered);
+  }, [activeTab, allMedia]);
 
   // Handle opening modal with selected item
   const openModal = (item: MediaFile) => {
     setSelectedItem(item);
     setModalVisible(true);
-    setIsPaused(false); // Ensure video plays when modal opens
+    setIsPaused(false);
   };
 
-  // Handle closing modal and cleaning up resources
+  // Handle closing modal
   const closeModal = () => {
-    // Pause video if it's playing
-    if (fileCategory === "video" && videoRef.current) {
+    if (activeTab === "video" && videoRef.current) {
       setIsPaused(true);
     }
     setModalVisible(false);
   };
 
-  // Generate thumbnail for video
+  // Video placeholder
   const VideoThumbnail = ({ uri }: { uri: string }) => (
     <View style={innerStyles.videoPlaceholder}>
       <View style={innerStyles.playButton}>
@@ -147,114 +145,66 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     </View>
   );
 
-  // Render items based on file category
-  const renderItem = ({ item }: { item: MediaFile }) => {
-    // Get appropriate rendering based on file category
-    switch (fileCategory) {
-      case "image":
-        return (
-          <TouchableOpacity
-            style={innerStyles.itemContainer}
-            onPress={() => openModal(item)}
-            activeOpacity={0.7}
-          >
-            <Image
-              source={{ uri: item.stream_url }}
-              style={innerStyles.image}
-              resizeMode="cover"
-              onError={(e) => {
-                console.error(
-                  `[MediaPreview] Image load error for ${item.id}:`,
-                  e.nativeEvent
-                );
-              }}
-            />
-          </TouchableOpacity>
-        );
-      case "video":
-        return (
-          <TouchableOpacity
-            style={innerStyles.itemContainer}
-            onPress={() => openModal(item)}
-            activeOpacity={0.7}
-          >
-            <VideoThumbnail uri={item.stream_url} />
-          </TouchableOpacity>
-        );
-      case "document":
-        return (
-          <TouchableOpacity
-            style={innerStyles.itemContainer}
-            onPress={() => openModal(item)}
-            activeOpacity={0.7}
-          >
-            <View style={innerStyles.documentPlaceholder}>
-              <Text style={innerStyles.documentText}>Document</Text>
-              <Text style={innerStyles.documentName}>
-                {item.file_name.length > 20
-                  ? item.file_name.substring(0, 18) + "..."
-                  : item.file_name}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        );
-      default:
-        return null;
-    }
-  };
+  const renderItem = ({ item }: { item: MediaFile }) => (
+    <TouchableOpacity
+      style={innerStyles.itemContainer}
+      onPress={() => openModal(item)}
+      activeOpacity={0.7}
+    >
+      {activeTab === "image" ? (
+        <Image
+          source={{ uri: item.stream_url }}
+          style={innerStyles.image}
+          resizeMode="cover"
+        />
+      ) : activeTab === "video" ? (
+        <VideoThumbnail uri={item.stream_url} />
+      ) : (
+        <View style={innerStyles.documentPlaceholder}>
+          <Text style={innerStyles.documentText}>Document</Text>
+          <Text style={innerStyles.documentName}>
+            {item.file_name.length > 20
+              ? item.file_name.substring(0, 18) + "..."
+              : item.file_name}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 
-  // Render modal content based on file category
   const renderModalContent = () => {
     if (!selectedItem) return null;
-
-    switch (fileCategory) {
-      case "image":
-        return (
-          <Image
-            source={{ uri: selectedItem.stream_url }}
-            style={innerStyles.modalImage}
-            resizeMode="contain"
-            onError={(e) => {
-              console.error(
-                `[MediaPreview] Modal image load error:`,
-                e.nativeEvent
-              );
-            }}
-          />
-        );
-      case "video":
-        return (
-          <View style={innerStyles.modalVideoContainer}>
-            <Video
-              ref={videoRef}
-              source={{ uri: selectedItem.stream_url }}
-              style={innerStyles.videoPlayer}
-              resizeMode="contain"
-              paused={isPaused}
-              controls={true}
-            />
-            <TouchableOpacity
-              style={innerStyles.playPauseButton}
-              onPress={() => setIsPaused(!isPaused)}
-            >
-              <Text style={innerStyles.playPauseButtonText}>
-                {isPaused ? "▶" : "II"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        );
-      case "document":
-        return (
-          <View style={innerStyles.modalDocContainer}>
-            <Text style={innerStyles.modalDocText}>Document Preview</Text>
-            <Text style={innerStyles.modalFileName}>
-              {selectedItem.file_name}
-            </Text>
-          </View>
-        );
-      default:
-        return null;
-    }
+    return activeTab === "image" ? (
+      <Image
+        source={{ uri: selectedItem.stream_url }}
+        style={innerStyles.modalImage}
+        resizeMode="contain"
+      />
+    ) : activeTab === "video" ? (
+      <View style={innerStyles.modalVideoContainer}>
+        <Video
+          ref={videoRef}
+          source={{ uri: selectedItem.stream_url }}
+          style={innerStyles.videoPlayer}
+          resizeMode="contain"
+          paused={isPaused}
+          controls
+        />
+        <TouchableOpacity
+          style={innerStyles.playPauseButton}
+          onPress={() => setIsPaused(!isPaused)}
+        >
+          <Text style={innerStyles.playPauseButtonText}>
+            {isPaused ? "▶" : "II"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <View style={innerStyles.modalDocContainer}>
+        <Text style={innerStyles.modalDocText}>Document Preview</Text>
+        <Text style={innerStyles.modalFileName}>{selectedItem.file_name}</Text>
+      </View>
+    );
   };
 
   if (loading) {
@@ -269,7 +219,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   }
 
   if (error) {
-    console.warn("[MediaPreview] Rendering error message:", error);
     return (
       <View style={styles.screenContainer}>
         <Header />
@@ -280,43 +229,54 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     );
   }
 
-  // Display category title
-  const getCategoryTitle = () => {
-    switch (fileCategory) {
-      case "image":
-        return "Images";
-      case "video":
-        return "Videos";
-      case "document":
-        return "Documents";
-      default:
-        return "Media Files";
-    }
-  };
+  // Tab labels
+  const tabs = [
+    { key: "image", label: "Images" },
+    { key: "video", label: "Videos" },
+    { key: "document", label: "Documents" },
+  ];
 
   return (
     <View style={styles.screenContainer}>
       <Header />
       <View style={styles.container}>
-        <Text style={innerStyles.categoryTitle}>{getCategoryTitle()}</Text>
+        <View style={innerStyles.tabsContainer}>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={innerStyles.tabItem}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text
+                style={[
+                  innerStyles.tabText,
+                  activeTab === tab.key && innerStyles.activeTabText,
+                ]}
+              >
+                {tab.label}
+              </Text>
+              {activeTab === tab.key && (
+                <View style={innerStyles.tabUnderline} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <FlatList
           data={mediaFiles}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           numColumns={NUM_COLUMNS}
-          ListEmptyComponent={() => {
-            return (
-              <View style={innerStyles.center}>
-                <Text>No {fileCategory} files found.</Text>
-              </View>
-            );
-          }}
+          ListEmptyComponent={() => (
+            <View style={innerStyles.center}>
+              <Text>No {activeTab} files found.</Text>
+            </View>
+          )}
         />
 
-        {/* Full Screen Modal */}
         <Modal
           visible={modalVisible}
-          transparent={true}
+          transparent
           animationType="fade"
           onRequestClose={closeModal}
         >
@@ -328,9 +288,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             >
               <Text style={innerStyles.closeButtonText}>×</Text>
             </TouchableOpacity>
-
             <View style={innerStyles.modalContent}>{renderModalContent()}</View>
-
             {selectedItem && (
               <View style={innerStyles.fileInfoContainer}>
                 <Text style={innerStyles.fileInfoText}>
@@ -349,6 +307,32 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 };
 
 const innerStyles = StyleSheet.create({
+  tabsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+  },
+  tabItem: {
+    alignItems: "center",
+    paddingVertical: 6,
+    flex: 1,
+  },
+  tabText: {
+    fontSize: 16,
+    color: "#444",
+  },
+  activeTabText: {
+    fontWeight: "bold",
+    color: "#0077B6",
+  },
+  tabUnderline: {
+    height: 2,
+    backgroundColor: "#0077B6",
+    width: "60%",
+    marginTop: 4,
+  },
   itemContainer: {
     margin: 10,
     width: 200,
@@ -409,38 +393,14 @@ const innerStyles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
   },
-  caption: {
-    padding: 4,
-    fontSize: 12,
-    textAlign: "center",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  errorText: {
-    color: "red",
-    padding: 16,
-    textAlign: "center",
-  },
-  categoryTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginVertical: 10,
-    textAlign: "center",
-  },
-  // Modal styles
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  errorText: { color: "red", padding: 16, textAlign: "center" },
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
   },
-  modalContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  modalContent: { flex: 1, justifyContent: "center", alignItems: "center" },
   modalImage: {
     width: width,
     height: height * 0.7,
