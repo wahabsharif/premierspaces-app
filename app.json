@@ -2,7 +2,7 @@
   "expo": {
     "name": "Premier Spaces",
     "slug": "premier-spaces",
-    "version": "1.2.2",
+    "version": "1.2.8",
     "orientation": "portrait",
     "icon": "./assets/touch-icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,6 @@
     },
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#ffffff",
       "translucent": false,
       "hidden": false
     },

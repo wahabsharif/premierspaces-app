@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,18 +11,27 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  Alert,
+  Platform,
+  Pressable,
 } from "react-native";
-import Video from "react-native-video";
+import {
+  Video,
+  AVPlaybackStatus,
+  ResizeMode,
+  VideoFullscreenUpdate,
+} from "expo-av";
+import * as VideoThumbnails from "expo-video-thumbnails";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types";
 import styles from "../Constants/styles";
 import Header from "../components/Common/Header";
+import VideoThumbnail from "../components/Common/VideoThumbnail";
+import * as ScreenOrientation from "expo-screen-orientation";
 
-const { width, height } = Dimensions.get("window");
-const ITEM_MARGIN = 2;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NUM_COLUMNS = 2;
-const ITEM_SIZE = (width - ITEM_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
 
 interface MediaFile {
   id: string;
@@ -35,7 +44,7 @@ interface MediaFile {
 
 type Props = NativeStackScreenProps<RootStackParamList, "MediaPreviewScreen">;
 
-const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
+const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
   const { jobId, fileCategory } = route.params;
   const [allMedia, setAllMedia] = useState<MediaFile[]>([]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
@@ -43,10 +52,33 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const [error, setError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MediaFile | null>(null);
-  const videoRef = useRef(null);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isModalReady, setIsModalReady] = useState(false);
+  const videoRef = useRef<Video>(null);
+  const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
+  const [dimensions, setDimensions] = useState({
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [orientation, setOrientation] = useState(1); // 1 for portrait, 2 for landscape
 
   const [activeTab, setActiveTab] = useState<string>(fileCategory || "image");
+  const thumbnailCache = useMemo(() => new Map<string, string>(), []);
+
+  useEffect(() => {
+    const dimensionsListener = Dimensions.addEventListener(
+      "change",
+      ({ window }) => {
+        const { width, height } = window;
+        setDimensions({ width, height });
+        setOrientation(width > height ? 2 : 1);
+      }
+    );
+
+    return () => {
+      dimensionsListener.remove();
+    };
+  }, []);
 
   const getFileCategoryNumber = (category: string): string => {
     switch (category) {
@@ -61,42 +93,32 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
   };
 
-  // Load media from API
   useEffect(() => {
     const loadMedia = async () => {
       try {
         const userDataRaw = await AsyncStorage.getItem("userData");
         const propRaw = await AsyncStorage.getItem("selectedProperty");
-
         if (!userDataRaw || !propRaw) {
           setError("Missing user or property data");
+          setLoading(false);
           return;
         }
-
         const userData = JSON.parse(userDataRaw);
         const property = JSON.parse(propRaw);
         const userId = userData.payload?.userid || userData.userid;
         const propertyId = property.id;
-
-        const url =
-          `http://192.168.18.130:8000/api/mapp/get-files.php` +
-          `?userid=${userId}&property_id=${propertyId}&job_id=${jobId}`;
-
-        const res = await fetch(url);
-        const contentType = res.headers.get("content-type");
-
-        if (!contentType?.includes("application/json")) {
-          throw new Error("Server returned non-JSON response");
-        }
-
+        const url = `http://192.168.18.130:8000/api/mapp/get-files.php?userid=${userId}&property_id=${propertyId}&job_id=${jobId}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) throw new Error(`Server status: ${res.status}`);
         const json = await res.json();
         if (json.status !== 1 || !Array.isArray(json.payload)) {
-          throw new Error("Invalid API response");
+          throw new Error("Invalid data received");
         }
-
         setAllMedia(json.payload);
       } catch (e: any) {
-        console.error("[MediaPreview] Error in loadMedia():", e);
         setError(e.message);
       } finally {
         setLoading(false);
@@ -105,39 +127,67 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     loadMedia();
   }, [jobId]);
 
-  // Filter media based on activeTab
   useEffect(() => {
     const categoryNumber = getFileCategoryNumber(activeTab);
-    const filtered = allMedia.filter(
-      (item) => item.file_category === categoryNumber
+    setMediaFiles(
+      allMedia.filter((item) => item.file_category === categoryNumber)
     );
-    setMediaFiles(filtered);
   }, [activeTab, allMedia]);
 
-  // Handle opening modal with selected item
-  const openModal = (item: MediaFile) => {
+  useEffect(() => {
+    if (modalVisible) {
+      const t = setTimeout(() => setIsModalReady(true), 100);
+      return () => clearTimeout(t);
+    } else {
+      setIsModalReady(false);
+      setIsFullscreen(false);
+      // Reset orientation when closing modal
+      if (orientation !== 1) {
+        ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.PORTRAIT_UP
+        ).catch(() => {});
+      }
+    }
+  }, [modalVisible]);
+
+  const openModal = async (item: MediaFile) => {
     setSelectedItem(item);
     setModalVisible(true);
-    setIsPaused(false);
+    setStatus(null);
+
+    // Allow screen rotation if it's a video
+    if (item.file_category === getFileCategoryNumber("video")) {
+      await ScreenOrientation.unlockAsync().catch(() => {});
+    }
   };
 
-  // Handle closing modal
-  const closeModal = () => {
-    if (activeTab === "video" && videoRef.current) {
-      setIsPaused(true);
+  const closeModal = async () => {
+    if (videoRef.current) {
+      videoRef.current.pauseAsync().catch(() => {});
     }
+
+    // Lock back to portrait when closing
+    await ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.PORTRAIT_UP
+    ).catch(() => {});
+
     setModalVisible(false);
   };
 
-  // Video placeholder
-  const VideoThumbnail = ({ uri }: { uri: string }) => (
-    <View style={innerStyles.videoPlaceholder}>
-      <View style={innerStyles.playButton}>
-        <Text style={innerStyles.playButtonText}>▶</Text>
-      </View>
-      <Text style={innerStyles.videoText}>Video</Text>
-    </View>
-  );
+  const toggleFullscreen = async () => {
+    const newState = !isFullscreen;
+    setIsFullscreen(newState);
+
+    if (newState) {
+      await ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.LANDSCAPE
+      ).catch(() => {});
+    } else {
+      await ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP
+      ).catch(() => {});
+    }
+  };
 
   const renderItem = ({ item }: { item: MediaFile }) => (
     <TouchableOpacity
@@ -152,14 +202,17 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           resizeMode="cover"
         />
       ) : activeTab === "video" ? (
-        <VideoThumbnail uri={item.stream_url} />
+        <VideoThumbnail
+          uri={item.stream_url}
+          onPress={() => openModal(item)}
+          active
+          cache={thumbnailCache}
+        />
       ) : (
         <View style={innerStyles.documentPlaceholder}>
           <Text style={innerStyles.documentText}>Document</Text>
-          <Text style={innerStyles.documentName}>
-            {item.file_name.length > 20
-              ? item.file_name.substring(0, 18) + "..."
-              : item.file_name}
+          <Text style={innerStyles.documentName} numberOfLines={1}>
+            {item.file_name}
           </Text>
         </View>
       )}
@@ -168,32 +221,78 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
   const renderModalContent = () => {
     if (!selectedItem) return null;
-    return activeTab === "image" ? (
-      <Image
-        source={{ uri: selectedItem.stream_url }}
-        style={innerStyles.modalImage}
-        resizeMode="contain"
-      />
-    ) : activeTab === "video" ? (
-      <View style={innerStyles.modalVideoContainer}>
-        <Video
-          ref={videoRef}
+
+    if (activeTab === "video" && !isModalReady) {
+      return <ActivityIndicator size="large" color="#fff" />;
+    }
+
+    if (activeTab === "image") {
+      return (
+        <Image
           source={{ uri: selectedItem.stream_url }}
-          style={innerStyles.videoPlayer}
-          resizeMode="contain"
-          paused={isPaused}
-          controls
+          style={innerStyles.modalImage}
+          resizeMode={ResizeMode.CONTAIN}
         />
-        <TouchableOpacity
-          style={innerStyles.playPauseButton}
-          onPress={() => setIsPaused(!isPaused)}
+      );
+    }
+
+    if (activeTab === "video") {
+      const videoStyles =
+        orientation === 2 || isFullscreen
+          ? [
+              innerStyles.videoPlayer,
+              { width: dimensions.width, height: dimensions.height },
+            ]
+          : [innerStyles.videoPlayer];
+
+      return (
+        <View
+          style={[
+            innerStyles.modalVideoContainer,
+            orientation === 2 || isFullscreen
+              ? { width: dimensions.width, height: dimensions.height }
+              : {},
+          ]}
         >
-          <Text style={innerStyles.playPauseButtonText}>
-            {isPaused ? "▶" : "II"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    ) : (
+          <Video
+            ref={videoRef}
+            source={{ uri: selectedItem.stream_url }}
+            style={videoStyles}
+            useNativeControls={
+              !(status && "isPlaying" in status && status.isPlaying)
+            } // show controls only when not playing
+            resizeMode={ResizeMode.CONTAIN}
+            isLooping={false}
+            onPlaybackStatusUpdate={(status) => {
+              setStatus(status);
+
+              // Auto-rewind when ended
+              if (
+                status &&
+                "didJustFinish" in status &&
+                status.didJustFinish &&
+                !status.isLooping
+              ) {
+                videoRef.current?.setPositionAsync(0);
+              }
+            }}
+            onFullscreenUpdate={({ fullscreenUpdate }) => {
+              if (
+                fullscreenUpdate === VideoFullscreenUpdate.PLAYER_WILL_PRESENT
+              ) {
+                setIsFullscreen(true);
+              } else if (
+                fullscreenUpdate === VideoFullscreenUpdate.PLAYER_WILL_DISMISS
+              ) {
+                setIsFullscreen(false);
+              }
+            }}
+          />
+        </View>
+      );
+    }
+
+    return (
       <View style={innerStyles.modalDocContainer}>
         <Text style={innerStyles.modalDocText}>Document Preview</Text>
         <Text style={innerStyles.modalFileName}>{selectedItem.file_name}</Text>
@@ -207,6 +306,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         <Header />
         <View style={[styles.container, innerStyles.center]}>
           <ActivityIndicator size="large" color="#0077B6" />
+          <Text style={innerStyles.loadingText}>Loading media...</Text>
         </View>
       </View>
     );
@@ -218,12 +318,20 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         <Header />
         <View style={[styles.container, innerStyles.center]}>
           <Text style={innerStyles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={innerStyles.retryButton}
+            onPress={() => {
+              setLoading(true);
+              setError(null);
+            }}
+          >
+            <Text style={innerStyles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  // Tab labels
   const tabs = [
     { key: "image", label: "Images" },
     { key: "video", label: "Videos" },
@@ -255,44 +363,95 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             </TouchableOpacity>
           ))}
         </View>
-
         <FlatList
           data={mediaFiles}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           numColumns={NUM_COLUMNS}
+          contentContainerStyle={
+            mediaFiles.length === 0
+              ? { flex: 1, justifyContent: "center" }
+              : undefined
+          }
           ListEmptyComponent={() => (
-            <View style={innerStyles.center}>
-              <Text>No {activeTab} files found.</Text>
+            <View style={innerStyles.emptyContainer}>
+              <Text style={innerStyles.emptyText}>
+                No {activeTab} files found.
+              </Text>
             </View>
           )}
         />
-
         <Modal
           visible={modalVisible}
           transparent
           animationType="fade"
           onRequestClose={closeModal}
+          statusBarTranslucent
         >
-          <SafeAreaView style={innerStyles.modalContainer}>
-            <StatusBar backgroundColor="#000000" barStyle="light-content" />
+          <SafeAreaView
+            style={[
+              innerStyles.modalContainer,
+              activeTab === "video" &&
+                (orientation === 2 || isFullscreen) &&
+                innerStyles.fullscreenModalContainer,
+            ]}
+          >
+            <StatusBar
+              backgroundColor="#000"
+              barStyle="light-content"
+              translucent
+            />
+
             <TouchableOpacity
-              style={innerStyles.closeButton}
+              style={[
+                innerStyles.closeButton,
+                (orientation === 2 || isFullscreen) && { top: 20 },
+              ]}
               onPress={closeModal}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             >
               <Text style={innerStyles.closeButtonText}>×</Text>
             </TouchableOpacity>
-            <View style={innerStyles.modalContent}>{renderModalContent()}</View>
-            {selectedItem && (
-              <View style={innerStyles.fileInfoContainer}>
-                <Text style={innerStyles.fileInfoText}>
-                  {selectedItem.file_name}
+
+            {activeTab === "video" && (
+              <TouchableOpacity
+                style={[
+                  innerStyles.fullscreenButton,
+                  (orientation === 2 || isFullscreen) && { top: 20, right: 70 },
+                ]}
+                onPress={toggleFullscreen}
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              >
+                <Text style={innerStyles.fullscreenButtonText}>
+                  {isFullscreen ? "↙" : "↗"}
                 </Text>
-                <Text style={innerStyles.fileInfoDate}>
-                  {new Date(selectedItem.date_created).toLocaleDateString()}
-                </Text>
-              </View>
+              </TouchableOpacity>
             )}
+
+            <View
+              style={[
+                innerStyles.modalContent,
+                activeTab === "video" &&
+                  (orientation === 2 || isFullscreen) && { padding: 0 },
+              ]}
+            >
+              {renderModalContent()}
+            </View>
+
+            {selectedItem &&
+              !(
+                activeTab === "video" &&
+                (orientation === 2 || isFullscreen)
+              ) && (
+                <View style={innerStyles.fileInfoContainer}>
+                  <Text style={innerStyles.fileInfoText}>
+                    {selectedItem.file_name}
+                  </Text>
+                  <Text style={innerStyles.fileInfoDate}>
+                    {new Date(selectedItem.date_created).toLocaleDateString()}
+                  </Text>
+                </View>
+              )}
           </SafeAreaView>
         </Modal>
       </View>
@@ -329,43 +488,38 @@ const innerStyles = StyleSheet.create({
   },
   itemContainer: {
     margin: 10,
-    width: 140,
-    height: 140,
+    width: 160,
+    height: 160,
     borderRadius: 8,
     backgroundColor: "#fff",
     overflow: "hidden",
     elevation: 2,
   },
+  imageContainer: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+  },
+  errorItem: {
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorItemText: {
+    color: "#666",
+    fontSize: 12,
+    textAlign: "center",
+    padding: 5,
+  },
   image: {
     width: "100%",
     height: "100%",
   },
-  videoPlaceholder: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#0077B6",
-  },
-  playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  playButtonText: {
-    color: "#fff",
-    fontSize: 20,
-    marginLeft: 3,
-  },
-  videoText: {
-    color: "#fff",
-    textAlign: "center",
-    padding: 4,
-    fontWeight: "bold",
+  loadingText: {
+    marginTop: 10,
+    color: "#666",
   },
   documentPlaceholder: {
     width: "100%",
@@ -387,52 +541,83 @@ const innerStyles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
   },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorText: { color: "red", padding: 16, textAlign: "center" },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    color: "#666",
+    textAlign: "center",
+    fontSize: 16,
+  },
+  errorText: {
+    color: "red",
+    padding: 16,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#0077B6",
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
   },
-  modalContent: { flex: 1, justifyContent: "center", alignItems: "center" },
+  fullscreenModalContainer: {
+    backgroundColor: "#000",
+  },
+  modalContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 10,
+  },
+  errorModalContent: {
+    width: SCREEN_WIDTH * 0.8,
+    height: 200,
+    backgroundColor: "#aa3333",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+  },
+  errorModalText: {
+    color: "#fff",
+    fontSize: 16,
+    textAlign: "center",
+  },
   modalImage: {
-    width: width,
-    height: height * 0.7,
-    maxHeight: height - 150,
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * (4 / 3),
+    maxHeight: SCREEN_HEIGHT - 150,
   },
   videoPlayer: {
-    width: width,
-    height: width * (9 / 16), // 16:9 aspect ratio
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
     backgroundColor: "#000",
   },
   modalVideoContainer: {
-    width: width,
-    height: width * (9 / 16), // 16:9 aspect ratio for the container
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
     justifyContent: "center",
     alignItems: "center",
-  },
-  playPauseButton: {
-    position: "absolute",
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  playPauseButtonText: {
-    color: "#fff",
-    fontSize: 24,
-  },
-  modalVideoText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
   },
   modalDocContainer: {
-    width: width * 0.8,
-    height: height * 0.6,
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
     backgroundColor: "#2C7DA0",
     justifyContent: "center",
     alignItems: "center",
@@ -460,11 +645,28 @@ const innerStyles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 2,
+    zIndex: 5,
   },
   closeButtonText: {
     color: "#fff",
     fontSize: 24,
+    fontWeight: "bold",
+  },
+  fullscreenButton: {
+    position: "absolute",
+    top: 40,
+    right: 70,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 5,
+  },
+  fullscreenButtonText: {
+    color: "#fff",
+    fontSize: 20,
     fontWeight: "bold",
   },
   fileInfoContainer: {
