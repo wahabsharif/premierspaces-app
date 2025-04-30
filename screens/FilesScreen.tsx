@@ -308,7 +308,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
           >
             <View
               style={{
-                marginLeft: 30,
+                marginLeft: 20,
                 flexDirection: "row",
                 alignItems: "center",
                 gap: 5,
@@ -318,33 +318,27 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
               <Text>{formatDate(item.files[0]?.date_created)}</Text>
             </View>
             <Ionicons name="arrow-forward-sharp" size={20} color="black" />
-            <View style={innerStyles.pathHeader}>
-              <Ionicons name="folder-open" size={22} color={color.primary} />
-              <Text style={[styles.smallText, { marginLeft: 5 }]}>
-                {item.formattedPath || "Root Directory"}
-              </Text>
+            <View style={innerStyles.fileTypesContainer}>
+              {item.fileTypeCounts.map((typeCount, index) => (
+                <View key={index} style={innerStyles.fileTypeItem}>
+                  <Ionicons
+                    name={typeCount.icon as any}
+                    size={22}
+                    color={color.primary}
+                  />
+                  <Text
+                    style={{
+                      fontSize: fontSize.medium,
+                      color: color.gray,
+                      marginHorizontal: 2,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {typeCount.count}
+                  </Text>
+                </View>
+              ))}
             </View>
-          </View>
-          <View style={innerStyles.fileTypesContainer}>
-            {item.fileTypeCounts.map((typeCount, index) => (
-              <View key={index} style={innerStyles.fileTypeItem}>
-                <Ionicons
-                  name={typeCount.icon as any}
-                  size={22}
-                  color={color.primary}
-                />
-                <Text
-                  style={{
-                    fontSize: fontSize.medium,
-                    color: color.gray,
-                    marginHorizontal: 5,
-                    fontWeight: "bold",
-                  }}
-                >
-                  {typeCount.count}
-                </Text>
-              </View>
-            ))}
           </View>
         </View>
       </TouchableOpacity>
@@ -421,17 +415,12 @@ const innerStyles = StyleSheet.create({
     marginTop: 5,
     textAlign: "center",
   },
-  pathHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 5,
-  },
   fileTypesContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
     marginRight: 50,
     flexWrap: "wrap",
-    gap: 10,
+    gap: 5,
   },
 
   fileTypeItem: {
