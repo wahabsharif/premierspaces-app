@@ -104,6 +104,9 @@ export interface FileItem {
   property_id: string;
   job_id: string;
   user_name: string;
+  job_num: string;
+  main_category: string;
+  sub_category: string;
 }
 
 export interface FileTypeCount {

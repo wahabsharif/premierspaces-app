@@ -11,6 +11,7 @@ export const color = {
   lightGreen: "#02bc2a",
   blue: "#0000ff",
   skyBlue: "#357bb7",
+  darkYellow: "#FFAA1D",
 };
 
 export const fontSize = {

@@ -4,7 +4,6 @@ import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   StyleSheet,
   Text,
@@ -16,11 +15,15 @@ import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import Header from "../components/Common/Header";
 import { FileItem, FileTypeCount, GroupedFiles } from "../types";
+import { formatDate } from "../helper";
 
 const STORAGE_KEYS = {
   USER: "userData",
   PROPERTY: "selectedProperty",
 };
+
+type CategoryMap = Record<number, string>;
+type SubCategoryMap = Record<number, string>;
 
 export default function FilesScreen({ navigation }: { navigation: any }) {
   const [property, setProperty] = useState<{
@@ -33,12 +36,43 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // New state for category mappings
+  const [categoryMap, setCategoryMap] = useState<CategoryMap>({});
+  const [subCategoryMap, setSubCategoryMap] = useState<SubCategoryMap>({});
+
+  // Fetch categories and subcategories
+  const fetchCategories = useCallback(async () => {
+    try {
+      const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+      const user = userJson ? JSON.parse(userJson) : null;
+      const userId = user?.payload?.userid;
+      if (!userId) return;
+
+      const { data } = await axios.get(
+        `${baseApiUrl}/fileuploadcats.php?userid=${userId}`
+      );
+      if (data.status === 1 && Array.isArray(data.payload)) {
+        const catMap: CategoryMap = {};
+        const subMap: SubCategoryMap = {};
+        data.payload.forEach((cat: any) => {
+          catMap[cat.id] = cat.category;
+          cat.sub_categories.forEach((sub: any) => {
+            subMap[sub.id] = sub.sub_category;
+          });
+        });
+        setCategoryMap(catMap);
+        setSubCategoryMap(subMap);
+      }
+    } catch (err) {
+      console.error("Error fetching categories:", err);
+    }
+  }, []);
+
   const fetchFiles = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Get user ID from storage
       const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
       const user = userJson ? JSON.parse(userJson) : null;
       const userId = user?.payload?.userid;
@@ -48,7 +82,6 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
         return;
       }
 
-      // Fetch files data
       const { data } = await axios.get(
         `${baseApiUrl}/get-files.php?userid=${userId}&property_id=${property.id}`
       );
@@ -201,11 +234,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
         const storedProperty = await AsyncStorage.getItem(
           STORAGE_KEYS.PROPERTY
         );
-        console.log("Loaded property from storage:", storedProperty);
-        if (storedProperty) {
-          const parsedProperty = JSON.parse(storedProperty);
-          setProperty(parsedProperty);
-        }
+        if (storedProperty) setProperty(JSON.parse(storedProperty));
       } catch (error) {
         console.error("Failed to load property:", error);
         setError("Failed to load property information");
@@ -213,16 +242,14 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
     };
 
     fetchProperty();
-  }, []);
+    fetchCategories();
+  }, [fetchCategories]);
 
   useEffect(() => {
-    if (property?.id) {
-      fetchFiles();
-    }
+    if (property?.id) fetchFiles();
   }, [property, fetchFiles]);
 
   const navigateToFileList = (pathItem: GroupedFiles) => {
-    // Navigate to a screen that shows all files in this path
     navigation.navigate("MediaPreviewScreen", {
       path: pathItem.path,
       files: pathItem.files,
@@ -231,22 +258,73 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
     });
   };
 
-  const renderPathGroup = ({ item }: { item: GroupedFiles }) => (
-    <TouchableOpacity
-      style={{ width: "100%", marginBottom: 8 }}
-      onPress={() => navigateToFileList(item)}
-    >
-      <View style={{ width: "100%" }}>
-        <View style={innerStyles.pathHeader}>
-          <Ionicons name="folder-open" size={22} color={color.gray} />
-          <Text style={[styles.smallText, { marginLeft: 5 }]}>
-            {item.formattedPath || "Root Directory"}
-          </Text>
-        </View>
+  const renderPathGroup = ({ item }: { item: GroupedFiles }) => {
+    const mainCatId = Number(item.files[0]?.main_category);
+    const subCatId = Number(item.files[0]?.sub_category);
+    const mainCatName = categoryMap[mainCatId];
+    const subCatName = subCategoryMap[subCatId];
 
-        <View style={{ flexDirection: "row", marginLeft: 22 }}>
-          <View style={innerStyles.verticalLine} />
-          <View style={innerStyles.horizontalLine} />
+    return (
+      <TouchableOpacity
+        style={{
+          width: "100%",
+          marginBottom: 8,
+          borderBottomColor: color.secondary,
+          borderBottomWidth: 1,
+          paddingVertical: 15,
+        }}
+        onPress={() => navigateToFileList(item)}
+      >
+        <View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Ionicons name="folder-open" size={22} color={color.darkYellow} />
+            <Text style={[styles.smallText, { fontWeight: "bold" }]}>
+              {item.files[0].job_num}
+            </Text>
+
+            {mainCatName ? (
+              <>
+                <Ionicons name="arrow-forward-sharp" size={20} color="black" />
+                <Text>{mainCatName}</Text>
+              </>
+            ) : null}
+
+            {subCatName ? (
+              <>
+                <Ionicons name="arrow-forward-sharp" size={20} color="black" />
+                <Text>{subCatName}</Text>
+              </>
+            ) : null}
+          </View>
+
+          <View
+            style={{
+              width: "100%",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 5,
+            }}
+          >
+            <View
+              style={{
+                marginLeft: 30,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <Ionicons name="calendar" size={20} color={color.primary} />
+              <Text>{formatDate(item.files[0]?.date_created)}</Text>
+            </View>
+            <Ionicons name="arrow-forward-sharp" size={20} color="black" />
+            <View style={innerStyles.pathHeader}>
+              <Ionicons name="folder-open" size={22} color={color.primary} />
+              <Text style={[styles.smallText, { marginLeft: 5 }]}>
+                {item.formattedPath || "Root Directory"}
+              </Text>
+            </View>
+          </View>
           <View style={innerStyles.fileTypesContainer}>
             {item.fileTypeCounts.map((typeCount, index) => (
               <View key={index} style={innerStyles.fileTypeItem}>
@@ -258,7 +336,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
                 <Text
                   style={{
                     fontSize: fontSize.medium,
-                    color: color.primary,
+                    color: color.gray,
                     marginHorizontal: 5,
                     fontWeight: "bold",
                   }}
@@ -269,9 +347,9 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
             ))}
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.screenContainer}>
@@ -346,33 +424,18 @@ const innerStyles = StyleSheet.create({
   pathHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
     paddingVertical: 5,
-  },
-  verticalLine: {
-    width: 1,
-    height: 20,
-    backgroundColor: color.gray,
-    marginLeft: 11,
-    opacity: 0.5,
-  },
-  horizontalLine: {
-    width: 20,
-    height: 1,
-    backgroundColor: color.gray,
-    alignSelf: "flex-end",
-    marginBottom: 13,
-    marginRight: 11,
-    opacity: 0.5,
   },
   fileTypesContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 5,
+    justifyContent: "flex-end",
+    marginRight: 50,
+    flexWrap: "wrap",
+    gap: 10,
   },
+
   fileTypeItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 10,
   },
 });
