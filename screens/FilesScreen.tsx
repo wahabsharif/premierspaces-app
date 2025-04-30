@@ -417,9 +417,6 @@ const innerStyles = StyleSheet.create({
   },
   fileTypesContainer: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    marginRight: 50,
-    flexWrap: "wrap",
     gap: 5,
   },
 
