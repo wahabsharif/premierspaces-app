@@ -41,19 +41,13 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MediaFile | null>(null);
-
-  // Video player reference for modal
   const videoRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Active tab state
-  const [activeTab, setActiveTab] = useState<string>(fileCategory);
+  const [activeTab, setActiveTab] = useState<string>(fileCategory || "image");
 
-  // Map the fileCategory string to the numeric category used in the API
   const getFileCategoryNumber = (category: string): string => {
     switch (category) {
       case "image":
@@ -335,8 +329,8 @@ const innerStyles = StyleSheet.create({
   },
   itemContainer: {
     margin: 10,
-    width: 200,
-    height: 200,
+    width: 140,
+    height: 140,
     borderRadius: 8,
     backgroundColor: "#fff",
     overflow: "hidden",
