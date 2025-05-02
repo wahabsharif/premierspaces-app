@@ -1,18 +1,18 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import SearchPropertyScreen from "../../screens/SearchPropertyScreen";
-import CategoryScreen from "../../screens/CategoryScreen";
-import UploadScreen from "../../screens/UploadScreen";
-import SettingScreen from "../../screens/Settings/SettingScreen";
-import AppLockSettingScreen from "../../screens/Settings/AppLockSettingScreen";
-import ChangeAppPinScreen from "../../screens/Settings/ChangeAppPinScreen";
-import LoginScreen from "../../screens/LoginScreen";
-import JobsScreen from "../../screens/JobsScreen";
-import OpenNewJobScreen from "../../screens/OpenNewJobScreen";
-import JobDetailScreen from "../../screens/JobDetailScreen";
-import MediaPreviewScreen from "../../screens/MediaPreviewScreen";
-import FilesScreen from "../../screens/FilesScreen";
+import SearchPropertyScreen from "../screens/SearchPropertyScreen";
+import CategoryScreen from "../screens/CategoryScreen";
+import UploadScreen from "../screens/UploadScreen";
+import SettingScreen from "../screens/Settings/SettingScreen";
+import AppLockSettingScreen from "../screens/Settings/AppLockSettingScreen";
+import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
+import LoginScreen from "../screens/LoginScreen";
+import JobsScreen from "../screens/JobsScreen";
+import OpenNewJobScreen from "../screens/OpenNewJobScreen";
+import JobDetailScreen from "../screens/JobDetailScreen";
+import MediaPreviewScreen from "../screens/MediaPreviewScreen";
+import FilesScreen from "../screens/FilesScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
