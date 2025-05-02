@@ -11,13 +11,12 @@ import {
 } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Provider as ReduxProvider } from "react-redux";
 import ToastManager, { Toast } from "toastify-react-native";
+
+import { AppNavigator } from "./components/Common/AppNavigator";
 import NetworkStatus from "./components/Common/NetworkStatus";
-import { AppNavigator } from "./navigation/AppNavigator";
-import AuthStack from "./navigation/AuthStack";
 import LockScreen from "./screens/LockScreen";
-import { store } from "./store";
+import LoginScreen from "./screens/LoginScreen";
 
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -101,37 +100,37 @@ export default function App() {
 
   return (
     <PaperProvider>
-      <ReduxProvider store={store}>
-        <NetworkStatus />
-        <ToastManager
-          position="bottom"
-          style={{
-            flexDirection: "column-reverse",
-            justifyContent: "flex-end",
-          }}
-        />
+      <NetworkStatus />
+      <ToastManager
+        position="bottom"
+        style={{ flexDirection: "column-reverse", justifyContent: "flex-end" }}
+      />
 
-        <ImageBackground source={backgroundImage} style={styles.background}>
-          <SafeAreaView style={styles.container}>
+      <ImageBackground source={backgroundImage} style={styles.background}>
+        <SafeAreaView style={styles.container}>
+          {isUnlocked ? (
             <NavigationContainer>
-              {isUnlocked ? (
-                isLoggedIn ? (
-                  <AppNavigator setIsPickingImage={setIsPickingImage} />
-                ) : (
-                  <AuthStack />
-                )
+              {isLoggedIn ? (
+                <AppNavigator setIsPickingImage={setIsPickingImage} />
               ) : (
-                <LockScreen
-                  onUnlock={() => {
-                    setIsUnlocked(true);
-                    Toast.success("Unlocked!");
+                <LoginScreen
+                  onLoginSuccess={() => {
+                    setIsLoggedIn(true);
+                    Toast.success("Login successful!");
                   }}
                 />
               )}
             </NavigationContainer>
-          </SafeAreaView>
-        </ImageBackground>
-      </ReduxProvider>
+          ) : (
+            <LockScreen
+              onUnlock={() => {
+                setIsUnlocked(true);
+                Toast.success("Unlocked!");
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </ImageBackground>
     </PaperProvider>
   );
 }

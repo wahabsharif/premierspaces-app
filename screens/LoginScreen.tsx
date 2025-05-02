@@ -1,41 +1,82 @@
-// screens/LoginScreen.tsx
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import Constants from "expo-constants";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
-import { useDispatch, useSelector } from "react-redux";
+import { baseApiUrl } from "../Constants/env";
 import styles from "../Constants/styles";
-import { fontSize } from "../Constants/theme";
-import { AppDispatch, RootState } from "../store";
-import { login } from "../store/authSlice";
+import { color, fontSize } from "../Constants/theme";
 
-const LoginScreen = ({ navigation }: any) => {
-  const dispatch = useDispatch<AppDispatch>();
-  const { loading, error } = useSelector((state: RootState) => state.auth);
-
+const LoginScreen = ({ navigation, onLoginSuccess, route }: any) => {
   const [initials, setInitials] = useState("");
   const [pin, setPin] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
-  const handleLogin = () => {
-    dispatch(login({ initials, pin }))
-      .unwrap()
-      .then(() => {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "SearchPropertyScreen" }],
-        });
-      })
-      .catch((err) => {
-        console.log("Login error:", err);
-      });
+
+  const handleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.post(
+        `${baseApiUrl}/login.php`,
+        {
+          userid: 0,
+          payload: {
+            initials: initials,
+            pin: pin,
+          },
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.status === 1) {
+        const userInfo = {
+          token: data.token,
+          userId: data.userId,
+        };
+        await AsyncStorage.setItem("userData", JSON.stringify(userInfo));
+        await AsyncStorage.setItem("userData", JSON.stringify(data));
+
+        console.log("Latest userData Stored in Storage:", data);
+
+        if (onLoginSuccess) {
+          onLoginSuccess();
+        } else if (navigation) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "SearchPropertyScreen" }],
+          });
+        }
+      } else {
+        console.log("Login failed:", data);
+        showError("Invalid Credentials", "Unable to login, please try again.");
+      }
+    } catch (error) {
+      console.error("Login Error:", error);
+      showError("An unexpected error occurred.", "Please try again later.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const showError = (message: string, p0: string) => {
+    setAlertMessage(message);
+    setAlertVisible(true);
   };
 
   return (
@@ -113,8 +154,8 @@ const LoginScreen = ({ navigation }: any) => {
         </View>
 
         <TouchableOpacity onPress={handleLogin} style={styles.primaryButton}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color={color.white} />
           ) : (
             <Text style={styles.buttonText}>Login</Text>
           )}
