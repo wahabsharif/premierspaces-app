@@ -1,3 +1,4 @@
+// store/authSlice.ts
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -5,23 +6,26 @@ import { baseApiUrl } from "../Constants/env";
 
 // Define the shape of our auth state
 interface AuthState {
-  token: string | null;
-  userId: string | null;
+  status: number | null;
+  payload: {
+    userid: string;
+    name: string;
+    role: string;
+  } | null;
   loading: boolean;
   error: string | null;
 }
 
 const initialState: AuthState = {
-  token: null,
-  userId: null,
+  status: null,
+  payload: null,
   loading: false,
   error: null,
 };
 
 // Async thunk for login
-// store/authSlice.ts
 export const login = createAsyncThunk<
-  { token: string; userId: string },
+  { status: number; payload: { userid: string; name: string; role: string } },
   { initials: string; pin: string },
   { rejectValue: string }
 >("auth/login", async ({ initials, pin }, { rejectWithValue }) => {
@@ -31,35 +35,21 @@ export const login = createAsyncThunk<
       payload: { initials, pin },
     });
     const data = response.data;
-    console.log("🔍 login response.data:", data);
 
     if (data.status !== 1) {
       return rejectWithValue("Invalid credentials");
     }
 
-    // ─── PATCH ───
-    // API returns { payload: { userid: "qwohnadv7w", ... }, ... }
-    const userId = data.payload.userid;
-    if (!userId) {
-      console.warn("⚠️ payload.userid missing");
-      return rejectWithValue("Malformed login response");
-    }
-    // We'll temporarily use `userId` also as our "token"
-    const token = userId;
-
-    const userInfo = { token, userId };
-
-    // store & verify
+    // Store full response structure
     try {
-      await AsyncStorage.setItem("userData", JSON.stringify(userInfo));
+      await AsyncStorage.setItem("userData", JSON.stringify(data));
       const stored = await AsyncStorage.getItem("userData");
       console.log("✅ Latest userData in AsyncStorage:", stored);
     } catch (e) {
       console.error("❌ AsyncStorage error:", e);
     }
-    // ──────────────
 
-    return userInfo;
+    return data;
   } catch (err: any) {
     return rejectWithValue(err.message || "Unexpected error");
   }
@@ -70,8 +60,9 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     logout(state) {
-      state.token = null;
-      state.userId = null;
+      state.status = null;
+      state.payload = null;
+      AsyncStorage.removeItem("userData");
     },
   },
   extraReducers: (builder) => {
@@ -82,10 +73,16 @@ const authSlice = createSlice({
       })
       .addCase(
         login.fulfilled,
-        (state, action: PayloadAction<{ token: string; userId: string }>) => {
+        (
+          state,
+          action: PayloadAction<{
+            status: number;
+            payload: { userid: string; name: string; role: string };
+          }>
+        ) => {
           state.loading = false;
-          state.token = action.payload.token;
-          state.userId = action.payload.userId;
+          state.status = action.payload.status;
+          state.payload = action.payload.payload;
         }
       )
       .addCase(login.rejected, (state, action) => {

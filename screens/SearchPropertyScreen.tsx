@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -16,7 +15,7 @@ import {
 import Header from "../components/Common/Header";
 import { baseApiUrl } from "../Constants/env";
 import styles from "../Constants/styles";
-import { color, fontSize } from "../Constants/theme";
+import { color } from "../Constants/theme";
 import { RootStackParamList } from "../types";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<

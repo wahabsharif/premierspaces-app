@@ -37,7 +37,6 @@ export default function App() {
         if (userData) {
           setIsLoggedIn(true);
           Toast.success("Welcome back!");
-          console.log("Latest User Data Stored in Storage:", userData);
         } else {
           setIsLoggedIn(false);
         }

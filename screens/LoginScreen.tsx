@@ -28,10 +28,7 @@ const LoginScreen = ({ navigation }: any) => {
     dispatch(login({ initials, pin }))
       .unwrap()
       .then(() => {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "SearchPropertyScreen" }],
-        });
+        navigation.replace("SearchPropertyScreen");
       })
       .catch((err) => {
         console.log("Login error:", err);
