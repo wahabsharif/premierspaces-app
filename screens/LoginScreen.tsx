@@ -28,9 +28,9 @@ const LoginScreen = ({ navigation }: any) => {
     dispatch(login({ initials, pin }))
       .unwrap()
       .then(() => {
-        navigation.replace("SearchPropertyScreen");
+        navigation.navigate("SearchPropertyScreen");
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.log("Login error:", err);
       });
   };
