@@ -27,6 +27,7 @@ import {
   TasksState,
 } from "../types";
 import { baseApiUrl } from "../Constants/env";
+import styles from "../Constants/styles";
 
 const TASK_KEYS = Array.from({ length: 10 }, (_, i) => `task${i + 1}`);
 
@@ -177,9 +178,7 @@ const OpenNewJobScreen = ({
       );
       console.log("Server Response:", response.data);
       showToast("Job created successfully!");
-      // Option 1: Navigate back to JobsScreen
       navigation.navigate("JobsScreen");
-      // Optionally reset the form if needed:
       setTimeout(resetForm, 500);
     } catch (error) {
       console.error("Error posting job", error);
@@ -219,159 +218,142 @@ const OpenNewJobScreen = ({
   const renderDropdownItem = useCallback(
     ({ item }: { item: JobType }) => (
       <TouchableOpacity
-        style={styles.dropdownItem}
+        style={innerStyles.dropdownItem}
         onPress={() => handleSelectJobType(item)}
       >
-        <Text style={styles.dropdownItemText}>{item.job_type}</Text>
+        <Text style={styles.smallText}>{item.job_type}</Text>
       </TouchableOpacity>
     ),
     [handleSelectJobType]
   );
 
   return (
-    <View style={styles.flex}>
+    <View style={styles.screenContainer}>
       <Header />
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={commonStyles.headingContainer}>
-          <Text style={commonStyles.heading}>Create New Job</Text>
-        </View>
-
-        {propertyData && (
-          <View style={styles.propertyContainer}>
-            <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <View style={styles.propertyDetails}>
-              <Text style={styles.propertyItem}>{propertyData.address}</Text>
-              <Text style={styles.propertyItem}>{propertyData.company}</Text>
-            </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.container}>
+          <View style={styles.headingContainer}>
+            <Text style={styles.heading}>Create New Job</Text>
           </View>
-        )}
 
-        <Text style={styles.label}>Job Category:</Text>
-        <View style={styles.dropdownContainer}>
-          <TouchableOpacity
-            ref={dropdownRef}
-            style={styles.dropdown}
-            onPress={openDropdown}
-          >
-            <View style={styles.dropdownInner}>
-              <Text style={styles.dropdownText}>
-                {selectedJobType
-                  ? selectedJobType.job_type
-                  : "Select a job type..."}
-              </Text>
-              <AntDesign
-                name="caretdown"
-                size={20}
-                color={color.black}
-                style={{
-                  transform: [{ rotate: dropdownOpen ? "180deg" : "0deg" }],
-                }}
-              />
+          {propertyData && (
+            <View style={styles.screenBanner}>
+              <Text style={styles.bannerLabel}>Selected Property:</Text>
+              <Text style={styles.bannerText}>{propertyData.address}</Text>
+              <Text style={styles.extraSmallText}>{propertyData.company}</Text>
             </View>
-          </TouchableOpacity>
+          )}
 
-          <Modal
-            visible={dropdownOpen}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setDropdownOpen(false)}
-          >
+          <View style={innerStyles.dropdownContainer}>
+            <Text style={[styles.smallText, { textAlign: "left", margin: 5 }]}>
+              Job Category:
+            </Text>
+
             <TouchableOpacity
-              style={styles.modalOverlay}
-              activeOpacity={1}
-              onPress={() => setDropdownOpen(false)}
+              ref={dropdownRef}
+              style={innerStyles.dropdown}
+              onPress={openDropdown}
             >
-              <View
-                style={[
-                  styles.dropdownListContainer,
-                  {
-                    position: "absolute",
-                    top: dropdownPosition.top,
-                    left: dropdownPosition.left,
-                    width: dropdownPosition.width,
-                    maxHeight:
-                      Dimensions.get("window").height -
-                      dropdownPosition.top -
-                      20,
-                  },
-                ]}
-              >
-                <FlatList
-                  data={jobTypes}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={renderDropdownItem}
-                  initialNumToRender={10}
-                  maxToRenderPerBatch={10}
+              <View style={innerStyles.dropdownInner}>
+                <Text style={styles.smallText}>
+                  {selectedJobType
+                    ? selectedJobType.job_type
+                    : "Select a job type..."}
+                </Text>
+                <AntDesign
+                  name="caretdown"
+                  size={20}
+                  color={color.black}
+                  style={{
+                    transform: [{ rotate: dropdownOpen ? "180deg" : "0deg" }],
+                  }}
                 />
               </View>
             </TouchableOpacity>
-          </Modal>
+
+            <Modal
+              visible={dropdownOpen}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setDropdownOpen(false)}
+            >
+              <TouchableOpacity
+                style={styles.modalContainer}
+                activeOpacity={1}
+                onPress={() => setDropdownOpen(false)}
+              >
+                <View
+                  style={[
+                    innerStyles.dropdownListContainer,
+                    {
+                      position: "absolute",
+                      top: dropdownPosition.top,
+                      left: dropdownPosition.left,
+                      width: dropdownPosition.width,
+                      maxHeight:
+                        Dimensions.get("window").height -
+                        dropdownPosition.top -
+                        20,
+                    },
+                  ]}
+                >
+                  <FlatList
+                    data={jobTypes}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={renderDropdownItem}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                  />
+                </View>
+              </TouchableOpacity>
+            </Modal>
+          </View>
+
+          <View>
+            <Text style={styles.smallText}>Job Tasks:</Text>
+            {TASK_KEYS.map((taskKey) => (
+              <View key={taskKey} style={styles.inputContainer}>
+                <TextInput
+                  multiline
+                  onContentSizeChange={(e) =>
+                    handleContentSizeChange(taskKey, e)
+                  }
+                  placeholder={`Enter ${taskKey}`}
+                  value={jobTasks[taskKey]}
+                  onChangeText={(text) => handleTaskChange(taskKey, text)}
+                  style={[styles.input, { height: inputHeights[taskKey] }]}
+                />
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              loading && { backgroundColor: color.gray },
+            ]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? "Submitting..." : "Submit"}
+            </Text>
+          </TouchableOpacity>
         </View>
-
-        <Text style={styles.label}>Job Tasks:</Text>
-        {TASK_KEYS.map((key) => (
-          <TextInput
-            key={key}
-            multiline
-            onContentSizeChange={(event) => handleContentSizeChange(key, event)}
-            style={[styles.input, { height: inputHeights[key] }]}
-            placeholder={`Enter ${key}`}
-            value={jobTasks[key]}
-            onChangeText={(text) => handleTaskChange(key, text)}
-          />
-        ))}
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? "Submitting..." : "Submit"}
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  propertyContainer: {
-    backgroundColor: color.white,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: color.secondary,
-  },
-  propertyLabel: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    color: color.black,
-    marginBottom: 5,
-  },
-  propertyDetails: {
-    paddingLeft: 10,
-  },
-  propertyItem: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-  },
-  label: {
-    fontSize: fontSize.medium,
-    color: color.black,
-    marginBottom: 5,
-  },
+const innerStyles = StyleSheet.create({
   dropdownContainer: {
     position: "relative",
-    marginBottom: 20,
+    margin: 10,
+    width: "100%",
   },
   dropdown: {
     height: 40,
@@ -386,14 +368,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  dropdownText: {
-    fontSize: fontSize.medium,
-    color: color.black,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
   dropdownListContainer: {
     backgroundColor: color.white,
@@ -412,36 +386,6 @@ const styles = StyleSheet.create({
     padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: color.secondary,
-  },
-  dropdownItemText: {
-    fontSize: fontSize.medium,
-    color: color.black,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: color.secondary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    backgroundColor: color.white,
-    fontSize: fontSize.medium,
-    color: color.black,
-    textAlignVertical: "top",
-  },
-  button: {
-    backgroundColor: color.primary,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  buttonDisabled: {
-    backgroundColor: color.gray,
-  },
-  buttonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "bold",
   },
 });
 

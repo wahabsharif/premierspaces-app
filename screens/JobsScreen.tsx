@@ -3,6 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import { baseApiUrl } from "../Constants/env";
 import commonStyles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { Job, RootStackParamList } from "../types";
+import styles from "../Constants/styles";
 
 const JobsScreen = ({
   navigation,
@@ -138,18 +140,23 @@ const JobsScreen = ({
     };
 
     return (
-      <TouchableOpacity style={styles.jobContainer} onPress={handleJobPress}>
-        <View style={styles.jobDetails}>
-          <Text style={styles.jobNum}>{item.job_num}</Text>
+      <TouchableOpacity
+        style={innerStyles.jobContainer}
+        onPress={handleJobPress}
+      >
+        <View style={innerStyles.jobDetails}>
+          <Text style={innerStyles.jobNum}>{item.job_num}</Text>
           <Text>{item.date_created}</Text>
 
           <View
             style={[
-              styles.statusContainer,
-              { backgroundColor: getStatusBackground(Number(item.status)) },
+              innerStyles.statusContainer,
+              {
+                backgroundColor: getStatusBackground(Number(item.status)),
+              },
             ]}
           >
-            <Text style={styles.statusText}>
+            <Text style={innerStyles.statusText}>
               {Number(item.status) === 1
                 ? "Open"
                 : Number(item.status) === 2
@@ -160,9 +167,9 @@ const JobsScreen = ({
 
           <Text>{item.job_type}</Text>
         </View>
-        <View style={styles.taskListContainer}>
+        <View style={innerStyles.taskListContainer}>
           {tasks.map((task, index) => (
-            <Text key={index} style={styles.taskItem}>
+            <Text key={index} style={innerStyles.taskItem}>
               {"\u2022"} {task}
             </Text>
           ))}
@@ -172,37 +179,34 @@ const JobsScreen = ({
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screenContainer}>
       <Header />
       <View style={styles.container}>
-        <View style={commonStyles.headingContainer}>
-          <Text style={commonStyles.heading}>Jobs List</Text>
+        <View style={styles.headingContainer}>
+          <Text style={styles.heading}>Jobs List</Text>
         </View>
         {propertyData && (
-          <View style={styles.propertyContainer}>
-            <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <View style={styles.propertyDetails}>
-              <Text style={styles.propertyItem}>{propertyData.address}</Text>
-              <Text style={styles.propertyItem}>{propertyData.company}</Text>
-            </View>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{propertyData.address}</Text>
+            <Text style={styles.extraSmallText}>{propertyData.company}</Text>
           </View>
         )}
         <TouchableOpacity
-          style={styles.button}
+          style={styles.primaryButton}
           onPress={() => navigation.navigate("OpenNewJobScreen")}
         >
           <Text style={styles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
-        {loading && <Text style={styles.statusText}>Loading jobs...</Text>}
-        {!loading && error && (
-          <Text style={[styles.statusText, { color: color.red }]}>{error}</Text>
-        )}
+        {loading && <ActivityIndicator color={color.primary} />}
+        {!loading && error && <Text style={styles.errorText}>{error}</Text>}
         {!loading && !error && jobs.length > 0 && (
           <FlatList
             data={jobs}
             keyExtractor={(item) => item.id}
             renderItem={renderJob}
             contentContainerStyle={{ paddingBottom: 20 }}
+            style={{ width: "100%" }}
           />
         )}
       </View>
@@ -210,47 +214,7 @@ const JobsScreen = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  propertyContainer: {
-    backgroundColor: color.white,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: color.secondary,
-  },
-  propertyLabel: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    color: color.black,
-    marginBottom: 5,
-  },
-  propertyDetails: {
-    paddingLeft: 10,
-  },
-  propertyItem: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-  },
-  button: {
-    backgroundColor: color.primary,
-    paddingHorizontal: 10,
-    width: "40%",
-    paddingVertical: 10,
-    borderRadius: 5,
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  buttonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-    textAlign: "center",
-  },
+const innerStyles = StyleSheet.create({
   jobContainer: {
     flexDirection: "row",
     backgroundColor: color.white,
@@ -287,8 +251,8 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   statusText: {
-    color: color.gray,
-    fontWeight: "bold",
+    color: color.white,
+    fontWeight: "semibold",
   },
 });
 

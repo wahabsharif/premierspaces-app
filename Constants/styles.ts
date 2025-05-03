@@ -2,13 +2,16 @@ import { StyleSheet } from "react-native";
 import { color, fontSize } from "./theme";
 
 export default StyleSheet.create({
-  screen: {
+  screenContainer: {
     flex: 1,
   },
   container: {
     flex: 1,
-    padding: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     position: "relative",
+    alignItems: "center",
+    height: "100%",
   },
   pinContainer: {
     position: "absolute",
@@ -27,7 +30,6 @@ export default StyleSheet.create({
     width: 100,
     height: 100,
   },
-
   headerContainer: {
     height: 60,
     flexDirection: "row",
@@ -52,11 +54,11 @@ export default StyleSheet.create({
     alignItems: "flex-end",
   },
   headerLogo: {
-    width: 40,
-    height: 40,
+    width: 30,
+    height: 30,
   },
   headerText: {
-    fontSize: 12,
+    fontSize: fontSize.small,
     color: "black",
     textAlign: "left",
   },
@@ -87,91 +89,77 @@ export default StyleSheet.create({
   },
   headingContainer: {
     alignItems: "flex-start",
-    marginTop: 16,
+    marginTop: 10,
+    width: "100%",
   },
   heading: {
     fontSize: fontSize.large,
-    fontWeight: "900",
     marginBottom: 16,
     alignSelf: "center",
-    textTransform: "uppercase",
+    textTransform: "capitalize",
   },
 
   subHeading: {
-    fontSize: fontSize.large,
-    fontWeight: "600",
-    marginVertical: 12,
+    fontSize: fontSize.medium,
+    marginVertical: 8,
     textAlign: "center",
   },
-  inputWrapper: {
-    flex: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 20,
-  },
+
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
   },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: color.secondary,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    backgroundColor: color.white,
+    marginVertical: 5,
+    fontSize: fontSize.small,
+    color: color.black,
+  },
   label: {
     marginRight: 8,
-    fontSize: fontSize.large,
+    fontSize: fontSize.medium,
+  },
+  screenBanner: {
+    backgroundColor: color.white,
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 15,
+    width: "100%",
+  },
+  bannerLabel: {
     fontWeight: "600",
+    marginBottom: 5,
   },
-  floatingIcon: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    backgroundColor: color.primary,
-    padding: 16,
-    borderRadius: 50,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 1,
-  },
-  navigateButton: {
-    position: "absolute",
-    bottom: 90,
-    right: 20,
-    backgroundColor: color.primary,
-    padding: 16,
-    borderRadius: 50,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 1,
+  bannerText: {
+    fontSize: fontSize.small,
+    color: color.black,
+    paddingLeft: 10,
   },
   errorText: {
     color: color.red,
     marginTop: 10,
     fontSize: fontSize.medium,
-  },
-  resultsContainer: {
-    paddingVertical: 20,
+    textAlign: "center",
   },
   resultItem: {
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: color.secondary,
   },
-  selectedItem: {
-    backgroundColor: color.primary,
-    borderRadius: 5,
+  extraSmallText: {
+    fontSize: fontSize.xs,
+    color: color.smoke,
+    paddingLeft: 10,
   },
-  resultText: {
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-  },
-  selectedText: {
-    color: color.white,
-  },
-  resultCompany: {
+  smallText: {
     fontSize: fontSize.small,
+    fontWeight: "semibold",
     color: color.gray,
   },
   list: {
@@ -181,6 +169,7 @@ export default StyleSheet.create({
     paddingBottom: 20,
     borderTopWidth: 4,
     borderTopColor: color.secondary,
+    width: "100%",
   },
 
   image: {
@@ -188,20 +177,16 @@ export default StyleSheet.create({
     height: 200,
     alignItems: "center",
   },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: color.secondary,
-    padding: 12,
-    borderRadius: 5,
-    backgroundColor: color.white,
-  },
-  button: {
+
+  primaryButton: {
     backgroundColor: color.primary,
-    padding: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     borderRadius: 5,
-    width: "100%",
+    marginVertical: 5,
+    justifyContent: "center",
     alignItems: "center",
+    width: "100%",
   },
   buttonText: {
     color: color.white,
@@ -227,5 +212,67 @@ export default StyleSheet.create({
     textAlign: "center",
     marginBottom: 30,
     color: color.gray,
+  },
+
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: color.white,
+    borderRadius: 15,
+    padding: 35,
+    alignItems: "center",
+    shadowColor: color.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: "80%",
+    position: "relative",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 10,
+    color: color.black,
+  },
+  modalButtonsContainer: {
+    flexDirection: "row",
+    marginTop: 10,
+  },
+  modalButton: {
+    borderRadius: 5,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    elevation: 2,
+    backgroundColor: color.green,
+    marginTop: 30,
+  },
+  modalButtonClose: {
+    position: "absolute", // <-- take it out of the normal flow
+    top: 10, // <-- adjust as needed
+    right: 10, // <-- adjust as needed
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    elevation: 2,
+    backgroundColor: color.red,
+    zIndex: 10,
+  },
+  modalText: {
+    color: color.gray,
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: fontSize.medium,
+  },
+  modalButtonText: {
+    textAlign: "center",
+    fontSize: fontSize.small,
+    color: color.white,
+    letterSpacing: 1,
   },
 });

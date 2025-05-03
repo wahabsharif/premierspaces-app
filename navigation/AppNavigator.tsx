@@ -1,17 +1,18 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import SearchPropertyScreen from "../../screens/SearchPropertyScreen";
-import PropertyListScreen from "../../screens/PropertyListScreen";
-import CategoryScreen from "../../screens/CategoryScreen";
-import UploadScreen from "../../screens/UploadScreen";
-import SettingScreen from "../../screens/Settings/SettingScreen";
-import AppLockSettingScreen from "../../screens/Settings/AppLockSettingScreen";
-import ChangeAppPinScreen from "../../screens/Settings/ChangeAppPinScreen";
-import LoginScreen from "../../screens/LoginScreen";
-import JobsScreen from "../../screens/JobsScreen";
-import OpenNewJobScreen from "../../screens/OpenNewJobScreen";
-import JobDetailScreen from "../../screens/JobDetailScreen";
+import SearchPropertyScreen from "../screens/SearchPropertyScreen";
+import CategoryScreen from "../screens/CategoryScreen";
+import UploadScreen from "../screens/UploadScreen";
+import SettingScreen from "../screens/Settings/SettingScreen";
+import AppLockSettingScreen from "../screens/Settings/AppLockSettingScreen";
+import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
+import LoginScreen from "../screens/LoginScreen";
+import JobsScreen from "../screens/JobsScreen";
+import OpenNewJobScreen from "../screens/OpenNewJobScreen";
+import JobDetailScreen from "../screens/JobDetailScreen";
+import MediaPreviewScreen from "../screens/MediaPreviewScreen";
+import FilesScreen from "../screens/FilesScreen";
 
 export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
@@ -45,7 +46,6 @@ export const AppNavigator = ({
       component={SearchPropertyScreen}
     />
     <Stack.Screen name="LoginScreen" component={LoginScreen} />
-    <Stack.Screen name="PropertyListScreen" component={PropertyListScreen} />
     <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
     <Stack.Screen name="UploadScreen" component={UploadScreen} />
     <Stack.Screen name="SettingScreen" component={SettingScreen} />
@@ -65,6 +65,14 @@ export const AppNavigator = ({
     <Stack.Screen
       name="JobDetailScreen"
       component={JobDetailScreen as React.ComponentType<any>}
+    />
+    <Stack.Screen
+      name="MediaPreviewScreen"
+      component={MediaPreviewScreen as React.ComponentType<any>}
+    />
+    <Stack.Screen
+      name="FilesScreen"
+      component={FilesScreen as React.ComponentType<any>}
     />
   </Stack.Navigator>
 );

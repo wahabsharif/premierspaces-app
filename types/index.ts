@@ -9,6 +9,8 @@ export type RootStackParamList = {
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;
+  FilesScreen: undefined;
+  MediaPreviewScreen: { jobId: string; fileCategory: string };
   JobsScreen: undefined;
   JobDetailScreen: { id: string };
 };
@@ -91,4 +93,31 @@ export interface UploadScreenProps {
 
 export interface ChangeAppPinScreenProps {
   navigation: any;
+}
+
+export interface FileItem {
+  id: string;
+  file_name: string;
+  path: string;
+  date_created: string;
+  stream_url: string;
+  property_id: string;
+  job_id: string;
+  user_name: string;
+  job_num: string;
+  main_category: string;
+  sub_category: string;
+}
+
+export interface FileTypeCount {
+  type: string;
+  count: number;
+  icon: string;
+}
+
+export interface GroupedFiles {
+  path: string;
+  formattedPath: string;
+  files: FileItem[];
+  fileTypeCounts: FileTypeCount[];
 }

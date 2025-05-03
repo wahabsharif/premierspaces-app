@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -16,7 +15,7 @@ import {
 import Header from "../components/Common/Header";
 import { baseApiUrl } from "../Constants/env";
 import styles from "../Constants/styles";
-import { color, fontSize } from "../Constants/theme";
+import { color } from "../Constants/theme";
 import { RootStackParamList } from "../types";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
@@ -114,31 +113,29 @@ const SearchPropertyScreen: React.FC = () => {
         style={styles.resultItem}
         onPress={() => handleSelectAndNavigate(item)}
       >
-        <Text style={styles.resultText}>{item.address}</Text>
-        <Text style={styles.resultCompany}>{item.company}</Text>
+        <Text style={styles.smallText}>{item.address}</Text>
+        <Text style={styles.extraSmallText}>{item.company}</Text>
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screenContainer}>
       <Header />
       <View style={styles.container}>
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Search Properties</Text>
         </View>
-        <View style={styles.inputWrapper}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>DOOR NO.</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter door number (e.g., 33, 32B)"
-              value={door_num}
-              onChangeText={setdoor_num}
-            />
-          </View>
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Door No.</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter door number..."
+            value={door_num}
+            onChangeText={setdoor_num}
+          />
         </View>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {loading && <ActivityIndicator color={color.primary} />}
 
@@ -149,7 +146,7 @@ const SearchPropertyScreen: React.FC = () => {
               data={results}
               keyExtractor={(item) => item.id.toString()}
               renderItem={renderResultItem}
-              contentContainerStyle={styles.resultsContainer}
+              contentContainerStyle={{ paddingVertical: 10 }}
             />
           </View>
         )}
@@ -164,19 +161,19 @@ const SearchPropertyScreen: React.FC = () => {
           navigation.navigate("LoginScreen");
         }}
       >
-        <View style={modalStyles.centeredView}>
-          <View style={modalStyles.modalView}>
-            <Text style={modalStyles.modalText}>
-              Session expired. Please log in again.
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>
+              Session expired! Please log in again.
             </Text>
             <TouchableOpacity
-              style={[modalStyles.button, modalStyles.buttonClose]}
+              style={styles.modalButton}
               onPress={() => {
                 setShowSessionExpired(false);
                 navigation.navigate("LoginScreen");
               }}
             >
-              <Text style={modalStyles.textStyle}>LOGIN</Text>
+              <Text style={styles.modalButtonText}>Login</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -184,48 +181,5 @@ const SearchPropertyScreen: React.FC = () => {
     </View>
   );
 };
-
-const modalStyles = StyleSheet.create({
-  centeredView: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalView: {
-    margin: 20,
-    backgroundColor: color.white,
-    borderRadius: 15,
-    padding: 35,
-    alignItems: "center",
-    shadowColor: color.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  button: {
-    borderRadius: 5,
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    elevation: 2,
-  },
-  buttonClose: {
-    backgroundColor: color.primary,
-    marginTop: 30,
-  },
-  textStyle: {
-    color: color.white,
-    fontWeight: "bold",
-    textAlign: "center",
-    fontSize: fontSize.medium,
-  },
-  modalText: {
-    marginVertical: 15,
-    textAlign: "center",
-    fontSize: fontSize.large,
-    fontWeight: "bold",
-  },
-});
 
 export default SearchPropertyScreen;

@@ -39,3 +39,4 @@ yarn-error.*
 credentials.json
 android/
 ios/
+*.lock

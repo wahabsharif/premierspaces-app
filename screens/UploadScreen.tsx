@@ -1,9 +1,9 @@
-import { AntDesign } from "@expo/vector-icons";
+import { AntDesign, MaterialIcons } from "@expo/vector-icons";
 import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Video, ResizeMode } from "expo-av";
+import { ResizeMode, Video } from "expo-av";
 import * as Camera from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
@@ -23,8 +23,9 @@ import {
 import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { ProgressBar } from "../components/Common/ProgressBar";
+import UploadStatusModal from "../components/UploadStatusModal";
 import { baseApiUrl } from "../Constants/env";
-import style from "../Constants/styles";
+import { default as style, default as styles } from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { getFileId } from "../helper";
 import { UploadScreenProps } from "../types";
@@ -64,6 +65,8 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
+  const [micPermission, requestMicPermission] =
+    Camera.useMicrophonePermissions();
   const [storedProperty, setStoredProperty] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -74,12 +77,13 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [jobData, setJobData] = useState<any>(null);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [userData, setUserData] = useState<any>(null);
-
-  // Custom Alert State
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [uploadedCount, setUploadedCount] = useState(0);
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [successCount, setSuccessCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
 
   // Helper function to infer mimeType from file name (for documents)
   const inferMimeType = (fileName: string) => {
@@ -115,6 +119,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     };
     fetchUserData();
   }, []);
+
   useEffect(() => {
     const fetchStoredProperty = async () => {
       try {
@@ -164,16 +169,43 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setSnackbarVisible(true);
   };
 
-  // Pick images or videos from the library
+  // Permission check functions
+  const checkCameraPermission = async () => {
+    if (!permission?.granted) {
+      const { status } = await requestPermission();
+      if (status !== "granted") {
+        showAlert("Permission Required", "Camera permission is required!");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const checkMicPermission = async () => {
+    if (!micPermission?.granted) {
+      const { status } = await requestMicPermission();
+      if (status !== "granted") {
+        showAlert(
+          "Permission Required",
+          "Microphone permission is required for video recording!"
+        );
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Pick images or videos from the gallery
+  // Replace the pickImage function with this updated version:
   const pickImage = async () => {
     setLoadingMedia(true);
     try {
       navigation.setParams({ isPickingImage: true });
       let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        mediaTypes: ["images", "videos"],
         allowsMultipleSelection: true,
-        allowsEditing: true,
-        quality: 1, // Consider reducing quality to compress images
+        allowsEditing: false,
+        quality: 1,
       });
       if (!result.canceled) {
         const newFiles: MediaFile[] = result.assets.map((asset) => {
@@ -181,11 +213,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           const name = asset.uri.split("/").pop() || `file_${Date.now()}`;
           let mimeType = "";
           if (fileType === "image") {
-            mimeType = name.endsWith(".png")
-              ? "image/png"
-              : name.endsWith(".jpg") || name.endsWith(".jpeg")
-              ? "image/jpeg"
-              : "image/jpeg";
+            mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
           } else if (fileType === "video") {
             mimeType = name.endsWith(".mp4") ? "video/mp4" : "video/mp4";
           }
@@ -201,37 +229,65 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
-  // Use the camera to take a photo
-  const takePhoto = async () => {
+  const recordVideo = async () => {
     setLoadingMedia(true);
-    if (!permission?.granted) {
-      const { status } = await requestPermission();
-      if (status !== "granted") {
-        showAlert("Permission Required", "Camera permission is required!");
+    try {
+      const hasCameraPermission = await checkCameraPermission();
+      const hasMicPermission = await checkMicPermission();
+      if (!hasCameraPermission || !hasMicPermission) {
         setLoadingMedia(false);
         return;
       }
-    }
-    try {
       navigation.setParams({ isPickingImage: true });
-      let result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
         quality: 1,
+        videoMaxDuration: 60,
       });
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const name = asset.uri.split("/").pop() || `file_${Date.now()}`;
-        const mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
-        setMedia([...media, { uri: asset.uri, type: "image", name, mimeType }]);
+        const name = asset.uri.split("/").pop() || `video_${Date.now()}.mp4`;
+        const mimeType = "video/mp4";
+        setMedia([...media, { uri: asset.uri, type: "video", name, mimeType }]);
       }
     } catch (error) {
-      showAlert("Error", "Failed to take a photo. Please try again.");
+      showAlert("Error", "Failed to record video. Please try again.");
     } finally {
       navigation.setParams({ isPickingImage: false });
       setLoadingMedia(false);
     }
   };
 
+  // Take a photo
+  const takePhoto = async () => {
+    setLoadingMedia(true);
+    try {
+      const hasCameraPermission = await checkCameraPermission();
+      if (!hasCameraPermission) {
+        setLoadingMedia(false);
+        return;
+      }
+      navigation.setParams({ isPickingImage: true });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 1,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const name = asset.uri.split("/").pop() || `photo_${Date.now()}.jpg`;
+        const mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
+        setMedia([...media, { uri: asset.uri, type: "image", name, mimeType }]);
+      }
+    } catch (error) {
+      showAlert("Error", "Failed to take photo. Please try again.");
+    } finally {
+      navigation.setParams({ isPickingImage: false });
+      setLoadingMedia(false);
+    }
+  };
+
+  // Pick a document
   const pickDocument = async () => {
     setLoadingMedia(true);
     try {
@@ -240,7 +296,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         type: "*/*",
         multiple: false,
       });
-      console.log("DocumentPicker result:", result);
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const doc = result.assets[0];
         const name = doc.name;
@@ -253,10 +308,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           size: doc.size,
         };
         setMedia((prev) => [...prev, newFile]);
-      } else {
-        console.log(
-          "Document picker was cancelled or returned an unexpected result"
-        );
       }
     } catch (error) {
       showAlert("Error", "Failed to pick a document. Please try again.");
@@ -272,7 +323,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setMedia(updatedMedia);
   };
 
-  // Only  a base64 header for images
   const getFileHeader = async (
     uri: string,
     mimeType: string
@@ -312,14 +362,16 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       showAlert("Error", "Please select at least one file to upload.");
       return;
     }
+
     setUploading(true);
     setUploadedCount(0);
+    setSuccessCount(0);
+    setFailedCount(0);
+
     const fileId = getFileId();
-    console.log(`Generated file ID: ${fileId}`);
     const totalFiles = media.length;
     const newUploadProgress = { ...uploadProgress };
 
-    // Create an array of upload tasks
     const tasks = media.map((file, index) => async () => {
       const fileSize = file.size ? file.size : await getFileSize(file.uri);
       if (fileSize === null) return;
@@ -370,88 +422,101 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             },
           }
         );
+
         newUploadProgress[file.uri] = "Complete";
         setUploadProgress({ ...newUploadProgress });
         setUploadedCount((prevCount) => prevCount + 1);
+        setSuccessCount((prevCount) => prevCount + 1);
         return response.data;
       } catch (error) {
         console.error(`Error uploading file ${index + 1}:`, error);
         newUploadProgress[file.uri] = "Failed";
         setUploadProgress({ ...newUploadProgress });
+        setFailedCount((prevCount) => prevCount + 1);
         throw error;
       }
     });
 
     try {
-      // Limit concurrent uploads to 3 at a time.
       await uploadQueue(tasks, 3);
-      showSnackbar("All files uploaded successfully!");
+      setStatusModalVisible(true);
       setMedia([]);
     } catch (error) {
       console.error("Error uploading files:", error);
-      showAlert(
-        "Upload Error",
-        "Some files failed to upload. Please check your network connection and try again."
-      );
+      setStatusModalVisible(true);
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screenContainer}>
       <Header />
       <View style={style.container}>
         <View style={style.headingContainer}>
           <Text style={style.heading}>Upload Files</Text>
         </View>
         {storedProperty && (
-          <View style={internalStyle.propertyInfo}>
-            <Text style={internalStyle.propertyText}>
-              {storedProperty.address}
-            </Text>
-            <Text style={internalStyle.propertyText}>
-              {storedProperty.company}
-            </Text>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{storedProperty.address}</Text>
+            <Text style={styles.extraSmallText}>{storedProperty.company}</Text>
           </View>
         )}
-        <Text style={internalStyle.title}>
+        <Text style={style.subHeading}>
           {category?.category}
           {subCategory ? ` - ${subCategory.sub_category}` : ""}
         </Text>
-        <Text style={internalStyle.buttonHeading}>Choose File From</Text>
-        <View style={internalStyle.buttonContainer}>
+        <Text style={style.subHeading}>Choose File From</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            marginHorizontal: 10,
+            marginVertical: 10,
+          }}
+        >
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.gray },
+              { backgroundColor: color.orange, marginHorizontal: 5 },
             ]}
             onPress={pickImage}
             disabled={uploading}
           >
-            <Entypo name="images" size={28} color="white" />
-            <Text style={internalStyle.actionButtonLabel}>Gallery/Video</Text>
+            <Entypo name="images" size={24} color="white" />
+            <Text style={internalStyle.actionButtonLabel}>Gallery</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.primary },
+              { backgroundColor: color.primary, marginHorizontal: 5 },
             ]}
             onPress={takePhoto}
             disabled={uploading}
           >
-            <Feather name="camera" size={28} color="white" />
-            <Text style={internalStyle.actionButtonLabel}>Camera</Text>
+            <Feather name="camera" size={24} color="white" />
+            <Text style={internalStyle.actionButtonLabel}>Take Photo</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               internalStyle.actionButton,
-              { backgroundColor: color.secondary },
+              { backgroundColor: color.secondary, marginHorizontal: 5 },
+            ]}
+            onPress={recordVideo}
+            disabled={uploading}
+          >
+            <MaterialIcons name="videocam" size={24} color="white" />
+            <Text style={internalStyle.actionButtonLabel}>Record Video</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              internalStyle.actionButton,
+              { backgroundColor: color.lightGreen, marginHorizontal: 5 },
             ]}
             onPress={pickDocument}
             disabled={uploading}
           >
-            <Feather name="file-text" size={28} color="white" />
+            <Feather name="file-text" size={24} color="white" />
             <Text style={internalStyle.actionButtonLabel}>Document</Text>
           </TouchableOpacity>
         </View>
@@ -515,8 +580,8 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         {media.length > 0 && (
           <TouchableOpacity
             style={[
-              internalStyle.uploadButton,
-              uploading && internalStyle.disabledButton,
+              style.primaryButton,
+              uploading && { backgroundColor: color.gray },
             ]}
             onPress={uploadImages}
             disabled={uploading}
@@ -524,85 +589,87 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             {uploading ? (
               <ActivityIndicator color="white" size="small" />
             ) : (
-              <Text style={internalStyle.uploadButtonText}>
+              <Text style={style.buttonText}>
                 Upload {media.length} File{media.length > 1 ? "s" : ""}
               </Text>
             )}
           </TouchableOpacity>
         )}
         <Modal visible={modalVisible} transparent={true} animationType="slide">
-          <View style={internalStyle.modalContainer}>
-            <TouchableOpacity
-              style={internalStyle.closeModal}
-              onPress={() => setModalVisible(false)}
-            >
-              <AntDesign name="close" size={30} color="white" />
-            </TouchableOpacity>
-            {selectedFile && selectedFile.type === "image" && (
-              <Image
-                source={{ uri: selectedFile.uri }}
-                style={internalStyle.fullImage}
-              />
-            )}
-            {selectedFile && selectedFile.type === "video" && (
-              <Video
-                source={{ uri: selectedFile.uri }}
-                style={internalStyle.fullImage}
-                useNativeControls
-                resizeMode={ResizeMode.CONTAIN}
-                isLooping
-              />
-            )}
-            {selectedFile && selectedFile.type === "document" && (
-              <View style={internalStyle.documentPreview}>
-                <Feather name="file-text" size={80} color="gray" />
-                <Text style={{ color: "white", marginTop: 10 }}>
-                  No preview available
-                </Text>
-              </View>
-            )}
-            <FlatList
-              data={media}
-              horizontal
-              keyExtractor={(_, index) => index.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity onPress={() => setSelectedFile(item)}>
-                  {item.type === "image" ? (
-                    <Image
-                      source={{ uri: item.uri }}
-                      style={[
-                        internalStyle.thumbnail,
-                        selectedFile?.uri === item.uri &&
-                          internalStyle.selectedThumbnail,
-                      ]}
-                    />
-                  ) : item.type === "video" ? (
-                    <View
-                      style={[
-                        internalStyle.thumbnail,
-                        { justifyContent: "center", alignItems: "center" },
-                        selectedFile?.uri === item.uri &&
-                          internalStyle.selectedThumbnail,
-                      ]}
-                    >
-                      <Feather name="video" size={20} color="gray" />
-                    </View>
-                  ) : (
-                    <View
-                      style={[
-                        internalStyle.thumbnail,
-                        { justifyContent: "center", alignItems: "center" },
-                        selectedFile?.uri === item.uri &&
-                          internalStyle.selectedThumbnail,
-                      ]}
-                    >
-                      <Feather name="file-text" size={20} color="gray" />
-                    </View>
-                  )}
-                </TouchableOpacity>
+          <View style={style.modalContainer}>
+            <View style={internalStyle.modalView}>
+              <TouchableOpacity
+                style={style.modalButtonClose}
+                onPress={() => setModalVisible(false)}
+              >
+                <AntDesign name="close" size={30} color="white" />
+              </TouchableOpacity>
+              {selectedFile && selectedFile.type === "image" && (
+                <Image
+                  source={{ uri: selectedFile.uri }}
+                  style={internalStyle.fullImage}
+                />
               )}
-              contentContainerStyle={internalStyle.thumbnailContainer}
-            />
+              {selectedFile && selectedFile.type === "video" && (
+                <Video
+                  source={{ uri: selectedFile.uri }}
+                  style={internalStyle.fullImage}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping
+                />
+              )}
+              {selectedFile && selectedFile.type === "document" && (
+                <View style={internalStyle.documentPreview}>
+                  <Feather name="file-text" size={80} color="gray" />
+                  <Text style={{ color: "white", marginTop: 10 }}>
+                    No preview available
+                  </Text>
+                </View>
+              )}
+              <FlatList
+                data={media}
+                horizontal
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity onPress={() => setSelectedFile(item)}>
+                    {item.type === "image" ? (
+                      <Image
+                        source={{ uri: item.uri }}
+                        style={[
+                          internalStyle.thumbnail,
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      />
+                    ) : item.type === "video" ? (
+                      <View
+                        style={[
+                          internalStyle.thumbnail,
+                          { justifyContent: "center", alignItems: "center" },
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      >
+                        <Feather name="video" size={20} color="gray" />
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          internalStyle.thumbnail,
+                          { justifyContent: "center", alignItems: "center" },
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      >
+                        <Feather name="file-text" size={20} color="gray" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={internalStyle.thumbnailContainer}
+              />
+            </View>
           </View>
         </Modal>
         <Portal>
@@ -631,39 +698,35 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           {snackbarMessage}
         </Snackbar>
       </View>
+      <UploadStatusModal
+        visible={statusModalVisible}
+        onClose={() => setStatusModalVisible(false)}
+        successCount={successCount}
+        failedCount={failedCount}
+        totalCount={successCount + failedCount}
+      />
     </View>
   );
 };
 
 const internalStyle = StyleSheet.create({
-  title: {
-    fontSize: fontSize.large,
-    fontWeight: "600",
-    marginBottom: 20,
-    color: color.gray,
-    borderBottomWidth: 1,
-    borderColor: "#ddd",
-    paddingVertical: 10,
+  modalView: {
+    alignItems: "center",
+    width: "100%",
+    position: "relative",
   },
   actionButton: {
-    width: 120,
-    height: 90,
+    flex: 1, // Equal width for all buttons
+    height: 80,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 5,
   },
   actionButtonLabel: {
     marginTop: 4,
-    fontSize: fontSize.medium,
+    fontSize: 12, // Smaller font size to fit
     color: color.white,
     textAlign: "center",
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 10,
   },
   loadingOverlay: {
     position: "absolute",
@@ -726,19 +789,6 @@ const internalStyle = StyleSheet.create({
     fontSize: fontSize.medium,
     fontWeight: "bold",
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  closeModal: {
-    position: "absolute",
-    top: 40,
-    right: 20,
-    zIndex: 10,
-  },
   fullImage: {
     width: "90%",
     height: "70%",
@@ -766,36 +816,6 @@ const internalStyle = StyleSheet.create({
     marginHorizontal: 5,
     borderWidth: 2,
     borderColor: "white",
-  },
-  uploadButton: {
-    backgroundColor: color.primary,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginVertical: 20,
-  },
-  uploadButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "bold",
-  },
-  disabledButton: {
-    backgroundColor: color.gray,
-  },
-  propertyInfo: {
-    padding: 5,
-    borderBottomWidth: 1,
-    borderColor: "#ddd",
-  },
-  propertyText: {
-    fontSize: fontSize.medium,
-    marginBottom: 5,
-  },
-  buttonHeading: {
-    fontSize: fontSize.large,
-    textAlign: "center",
-    fontWeight: "600",
-    marginBottom: 5,
   },
 });
 

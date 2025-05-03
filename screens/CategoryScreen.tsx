@@ -1,19 +1,19 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
+  FlatList,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
-  FlatList,
-  Modal,
+  View,
 } from "react-native";
 import Header from "../components/Common/Header";
-import { color, fontSize } from "../Constants/theme";
-import commonStyles from "../Constants/styles";
 import { baseApiUrl } from "../Constants/env";
+import styles from "../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
 
 interface SubCategory {
   id: number;
@@ -43,7 +43,6 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   const showError = useCallback((title: string, message: string) => {
     setModalVisible(true);
-    // Optionally store title/message in state if needed
   }, []);
 
   const loadUserAndCategories = useCallback(async () => {
@@ -105,9 +104,9 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         onPress={() =>
           onSubCategoryPress(categories.find((c) => c.id === expandedId)!, sub)
         }
-        style={styles.subCategoryItem}
+        style={innerStyles.subCategoryItem}
       >
-        <Text style={styles.subCategoryText}>{sub.sub_category}</Text>
+        <Text style={innerStyles.subCategoryText}>{sub.sub_category}</Text>
         <Ionicons name="arrow-forward" size={16} color={color.primary} />
       </TouchableOpacity>
     ),
@@ -120,10 +119,10 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       return (
         <View>
           <TouchableOpacity
-            style={styles.categoryHeader}
+            style={innerStyles.categoryHeader}
             onPress={() => toggleExpand(cat.id)}
           >
-            <Text style={styles.categoryText}>{cat.category}</Text>
+            <Text style={innerStyles.categoryText}>{cat.category}</Text>
             <Ionicons
               name={isOpen ? "chevron-down" : "chevron-forward"}
               size={20}
@@ -135,7 +134,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               data={cat.sub_categories}
               keyExtractor={(s) => s.id.toString()}
               renderItem={renderSubCategory}
-              contentContainerStyle={styles.subList}
+              contentContainerStyle={innerStyles.subList}
             />
           )}
         </View>
@@ -145,37 +144,47 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screenContainer}>
       <Header />
-      <View style={styles.content}>
-        <Text style={commonStyles.heading}>Select a Category To Upload</Text>
+      <View style={styles.container}>
+        <View style={styles.headingContainer}>
+          <Text style={styles.heading}>Select a Category To Upload</Text>
+        </View>
         {property && (
-          <View style={styles.propertyBox}>
-            <Text style={styles.propertyLabel}>Selected Property:</Text>
-            <Text>{property.address}</Text>
-            <Text>{property.company}</Text>
+          <View style={styles.screenBanner}>
+            <Text style={styles.bannerLabel}>Selected Property:</Text>
+            <Text style={styles.bannerText}>{property.address}</Text>
+            <Text style={styles.extraSmallText}>{property.company}</Text>
           </View>
         )}
         <TouchableOpacity
-          style={styles.jobsButton}
+          style={styles.primaryButton}
           onPress={() => navigation.navigate("JobsScreen")}
         >
-          <Text style={styles.jobsText}>Go To Jobs</Text>
+          <Text style={styles.buttonText}>Go To Jobs</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => navigation.navigate("FilesScreen")}
+        >
+          <Text style={styles.buttonText}>Go To Files</Text>
         </TouchableOpacity>
         <FlatList
           data={categories}
           keyExtractor={(c) => c.id.toString()}
           renderItem={renderCategory}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          style={{ width: "100%" }}
+          ItemSeparatorComponent={() => (
+            <View style={{ height: 1, backgroundColor: color.secondary }} />
+          )}
         />
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => setModalVisible(true)}
+        >
+          <Text style={styles.buttonText}>Report A Problem</Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={styles.reportButton}
-        onPress={() => setModalVisible(true)}
-      >
-        <Text style={styles.reportText}>Report A Problem</Text>
-      </TouchableOpacity>
 
       <Modal
         visible={modalVisible}
@@ -183,14 +192,14 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
             <Text style={styles.modalTitle}>Reporting A Problem</Text>
-            <Text style={styles.modalMessage}>
+            <Text style={styles.modalText}>
               To report a problem, please open a new job or find an existing job
               and upload files from Job Details.
             </Text>
-            <View style={styles.modalButtonsRow}>
+            <View style={styles.modalButtonsContainer}>
               <TouchableOpacity
                 style={[styles.modalButton, { marginRight: 10 }]}
                 onPress={() => {
@@ -201,7 +210,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <Text style={styles.modalButtonText}>Go To Jobs</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalButton}
+                style={styles.modalButtonClose}
                 onPress={() => setModalVisible(false)}
               >
                 <Text style={styles.modalButtonText}>Cancel</Text>
@@ -214,9 +223,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 20, flex: 1 },
+const innerStyles = StyleSheet.create({
   categoryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -233,73 +240,6 @@ const styles = StyleSheet.create({
   },
   subCategoryText: { fontSize: fontSize.medium, color: color.primary },
   subList: { paddingLeft: 20 },
-  separator: { height: 1, backgroundColor: color.secondary },
-  jobsButton: {
-    backgroundColor: color.primary,
-    padding: 12,
-    borderRadius: 5,
-    alignItems: "center",
-    marginVertical: 15,
-  },
-  jobsText: { color: color.white, fontWeight: "600" },
-  reportButton: {
-    backgroundColor: color.primary,
-    padding: 15,
-    borderRadius: 5,
-    margin: 20,
-    alignItems: "center",
-  },
-  reportText: { color: color.white, fontWeight: "600" },
-  propertyBox: {
-    backgroundColor: color.white,
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 15,
-  },
-  propertyLabel: {
-    fontWeight: "600",
-    marginBottom: 5,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "80%",
-    backgroundColor: color.white,
-    borderRadius: 8,
-    padding: 20,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 10,
-    color: color.black,
-  },
-  modalMessage: {
-    fontSize: fontSize.medium,
-    textAlign: "center",
-    marginBottom: 20,
-    color: color.gray,
-  },
-  modalButtonsRow: {
-    flexDirection: "row",
-    marginTop: 10,
-  },
-  modalButton: {
-    backgroundColor: color.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-  },
-  modalButtonText: {
-    color: color.white,
-    fontSize: fontSize.medium,
-    fontWeight: "600",
-  },
 });
 
 export default CategoryScreen;

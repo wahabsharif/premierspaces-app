@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Switch, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { color, fontSize } from "../../Constants/theme";
+import styles from "../../Constants/styles";
 
 interface AppLockToggleProps {
   onLockEnable?: () => void;
@@ -39,27 +40,21 @@ const AppLockToggle: React.FC<AppLockToggleProps> = ({ onLockEnable }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        marginVertical: 10,
+        justifyContent: "space-between",
+        width: "100%",
+        borderBottomColor: color.secondary,
+        borderBottomWidth: 1,
+      }}
+    >
       <Text style={styles.label}>Enable App Lock</Text>
       <Switch onValueChange={toggleSwitch} value={isAppLockEnabled} />
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    justifyContent: "space-between",
-    borderWidth: 2,
-    borderColor: color.secondary,
-  },
-  label: {
-    fontSize: fontSize.medium,
-    color: color.gray,
-  },
-});
 
 export default AppLockToggle;
