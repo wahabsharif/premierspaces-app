@@ -29,7 +29,7 @@ const Header = () => {
           }
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        // // console.error("Error fetching user data:", error);
       }
     };
 
@@ -51,7 +51,7 @@ const Header = () => {
         routes: [{ name: "LoginScreen" }],
       });
     } catch (error) {
-      console.error("Error during logout:", error);
+      // // console.error("Error during logout:", error);
     }
   };
 

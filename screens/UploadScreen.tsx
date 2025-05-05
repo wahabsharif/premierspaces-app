@@ -114,7 +114,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           console.log("Retrieved user data:", parsedUserData);
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        // console.error("Error fetching user data:", error);
       }
     };
     fetchUserData();
@@ -131,7 +131,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           setStoredProperty(parsedProperty);
         }
       } catch (error) {
-        console.error("Error fetching stored property:", error);
+        // console.error("Error fetching stored property:", error);
       }
     };
     fetchStoredProperty();
@@ -146,13 +146,13 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             const parsedJob = JSON.parse(storedJob);
             setJobData(parsedJob);
           } catch (parseError) {
-            console.error("Error parsing job data:", parseError);
+            // console.error("Error parsing job data:", parseError);
           }
         } else {
           console.log("No job data found in AsyncStorage");
         }
       } catch (error) {
-        console.error("Error retrieving job data", error);
+        // console.error("Error retrieving job data", error);
       }
     };
     fetchJobData();
@@ -333,7 +333,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       });
       return `data:${mimeType};base64,${base64Data.slice(0, 50)}...`;
     } catch (error) {
-      console.error("Error reading file as base64:", error);
+      // console.error("Error reading file as base64:", error);
       return "";
     }
   };
@@ -347,12 +347,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     try {
       const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
       if (!fileInfo.exists) {
-        console.error("File does not exist:", uri);
+        // console.error("File does not exist:", uri);
         return null;
       }
       return fileInfo.size;
     } catch (error) {
-      console.error("Error getting file size:", error);
+      // console.error("Error getting file size:", error);
       return null;
     }
   };
@@ -429,7 +429,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         setSuccessCount((prevCount) => prevCount + 1);
         return response.data;
       } catch (error) {
-        console.error(`Error uploading file ${index + 1}:`, error);
+        // console.error(`Error uploading file ${index + 1}:`, error);
         newUploadProgress[file.uri] = "Failed";
         setUploadProgress({ ...newUploadProgress });
         setFailedCount((prevCount) => prevCount + 1);
@@ -442,7 +442,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       setStatusModalVisible(true);
       setMedia([]);
     } catch (error) {
-      console.error("Error uploading files:", error);
+      // console.error("Error uploading files:", error);
       setStatusModalVisible(true);
     } finally {
       setUploading(false);

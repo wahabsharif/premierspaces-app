@@ -45,7 +45,7 @@ const JobsScreen = ({
           setUserData(parsedUser);
         }
       } catch (err) {
-        console.error("Error retrieving stored data", err);
+        // // console.error("Error retrieving stored data", err);
       }
     };
     fetchStoredData();
@@ -83,7 +83,7 @@ const JobsScreen = ({
         setError("No jobs found with the selected property.");
       }
     } catch (err) {
-      console.error("Error fetching jobs", err);
+      // console.error("Error fetching jobs", err);
       setError("Error fetching jobs.");
     } finally {
       setLoading(false);
@@ -135,7 +135,7 @@ const JobsScreen = ({
         console.log("jobData saved to AsyncStorage:", item);
         navigation.navigate("JobDetailScreen", { id: item.id });
       } catch (err) {
-        console.error("Error storing job data", err);
+        // console.error("Error storing job data", err);
       }
     };
 

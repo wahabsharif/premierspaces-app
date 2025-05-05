@@ -64,7 +64,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
         setSubCategoryMap(subMap);
       }
     } catch (err) {
-      console.error("Error fetching categories:", err);
+      // // console.error("Error fetching categories:", err);
     }
   }, []);
 
@@ -93,7 +93,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
         setError("No files found or error loading files");
       }
     } catch (err) {
-      console.error("Error fetching files:", err);
+      // // console.error("Error fetching files:", err);
       setError("Failed to load files. Please try again.");
     } finally {
       setLoading(false);
@@ -236,7 +236,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
         );
         if (storedProperty) setProperty(JSON.parse(storedProperty));
       } catch (error) {
-        console.error("Failed to load property:", error);
+        // // console.error("Failed to load property:", error);
         setError("Failed to load property information");
       }
     };

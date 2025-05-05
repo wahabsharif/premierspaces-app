@@ -142,13 +142,55 @@ const SearchPropertyScreen: React.FC = () => {
 
   const handleSelectAndNavigate = async (item: any) => {
     try {
-      await AsyncStorage.setItem("selectedProperty", JSON.stringify(item));
-      console.log("Property saved to AsyncStorage:", item);
+      // First check if item contains all required fields
+      if (!item || !item.id || !item.address) {
+        // // console.error("Invalid property data:", item);
+        return;
+      }
+
+      // Ensure we have a complete item object
+      const completeItem = {
+        id: item.id,
+        address: item.address,
+        company: item.company || "",
+        // Add any other fields that might be needed by subsequent screens
+        ...item,
+      };
+
+      // Store selected property in AsyncStorage
+      await AsyncStorage.setItem(
+        "selectedProperty",
+        JSON.stringify(completeItem)
+      );
+
+      // Also update the timestamp of when this property was last selected
+      await AsyncStorage.setItem(
+        "lastSelectedPropertyTimestamp",
+        new Date().toString()
+      );
+
+      console.log("Property saved to AsyncStorage:", completeItem);
+
+      // Check if we're in offline mode
+      if (!isConnected) {
+        // Create a special entry for offline navigation
+        await AsyncStorage.setItem(
+          "offlineSelectedProperty",
+          JSON.stringify({
+            ...completeItem,
+            selectedOffline: true,
+            selectionTime: new Date().toString(),
+          })
+        );
+      }
+
+      // Navigate to the next screen
       navigation.navigate("CategoryScreen", {
-        paramKey: item.address,
+        paramKey: completeItem.address,
+        fromOfflineMode: !isConnected,
       });
     } catch (error) {
-      console.error("Error saving property:", error);
+      // // console.error("Error saving property:", error);
     }
   };
 

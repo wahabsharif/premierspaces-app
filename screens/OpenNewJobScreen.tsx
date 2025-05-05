@@ -76,7 +76,7 @@ const OpenNewJobScreen = ({
         }
 
         if (!storedUserData) {
-          console.error("User data not found in storage.");
+          // console.error("User data not found in storage.");
           return;
         }
 
@@ -86,7 +86,7 @@ const OpenNewJobScreen = ({
           (parsedUserData.payload && parsedUserData.payload.userid) ||
           parsedUserData.userid;
         if (!extractedUserId) {
-          console.error("User ID not found in the parsed user data.");
+          // console.error("User ID not found in the parsed user data.");
           return;
         }
         setUserId(extractedUserId);
@@ -95,7 +95,7 @@ const OpenNewJobScreen = ({
           (parsedUserData.payload && parsedUserData.payload.userid) ||
           parsedUserData.userid;
         if (!userId) {
-          console.error("User ID not found in the parsed user data.");
+          // console.error("User ID not found in the parsed user data.");
           return;
         }
 
@@ -109,7 +109,7 @@ const OpenNewJobScreen = ({
           setSelectedJobType(JSON.parse(jobTypeResult));
         }
       } catch (error) {
-        console.error("Error fetching initial data", error);
+        // console.error("Error fetching initial data", error);
       }
     };
 
@@ -123,7 +123,7 @@ const OpenNewJobScreen = ({
       await AsyncStorage.setItem("selectedJobType", JSON.stringify(job));
       console.log("Stored Job Type:", job);
     } catch (error) {
-      console.error("Error storing selected job type", error);
+      // console.error("Error storing selected job type", error);
     }
   }, []);
 
@@ -157,7 +157,7 @@ const OpenNewJobScreen = ({
       return;
     }
     if (!userId) {
-      console.error("User ID not available");
+      // console.error("User ID not available");
       showToast("User ID missing. Please try again later.");
       return;
     }
@@ -181,7 +181,7 @@ const OpenNewJobScreen = ({
       navigation.navigate("JobsScreen");
       setTimeout(resetForm, 500);
     } catch (error) {
-      console.error("Error posting job", error);
+      // console.error("Error posting job", error);
       showToast("Failed to create job. Please try again.");
     } finally {
       setLoading(false);

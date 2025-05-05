@@ -19,7 +19,7 @@ const AppLockToggle: React.FC<AppLockToggleProps> = ({ onLockEnable }) => {
           setIsAppLockEnabled(value === "true");
         }
       } catch (error) {
-        console.error("Error fetching app lock status:", error);
+        // // console.error("Error fetching app lock status:", error);
       }
     };
 
@@ -35,7 +35,7 @@ const AppLockToggle: React.FC<AppLockToggleProps> = ({ onLockEnable }) => {
         onLockEnable();
       }
     } catch (error) {
-      console.error("Error saving app lock status:", error);
+      // // console.error("Error saving app lock status:", error);
     }
   };
 

@@ -69,7 +69,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       }
       if (propJson) setProperty(JSON.parse(propJson));
     } catch (e) {
-      console.error("Error loading local data", e);
+      // // console.error("Error loading local data", e);
     }
   }, []);
 
@@ -94,7 +94,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setError("Job details not found.");
       }
     } catch (e) {
-      console.error(e);
+      // // console.error(e);
       setError("Error fetching job details.");
     } finally {
       setLoading(false);
@@ -114,7 +114,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setContractors(Array.isArray(cd.payload) ? cd.payload : [cd.payload]);
       }
     } catch (e) {
-      console.error(e);
+      // // console.error(e);
     }
   }, [userId, jobId]);
 

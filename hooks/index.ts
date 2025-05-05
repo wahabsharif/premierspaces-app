@@ -5,7 +5,7 @@ export function useReloadOnFocus(reloadFn: () => Promise<void>) {
   useFocusEffect(
     React.useCallback(() => {
       let active = true;
-      reloadFn().catch(console.error);
+      // reloadFn().catch(// console.error);
       return () => {
         active = false;
       };

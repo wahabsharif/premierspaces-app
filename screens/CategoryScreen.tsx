@@ -1,8 +1,10 @@
+// screens/CategoryScreen.tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   StyleSheet,
@@ -10,74 +12,50 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useDispatch, useSelector } from "react-redux";
 import Header from "../components/Common/Header";
-import { baseApiUrl } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-
-interface SubCategory {
-  id: number;
-  sub_category: string;
-}
-
-interface Category {
-  id: number;
-  category: string;
-  sub_categories: SubCategory[];
-}
+import { AppDispatch, RootState } from "../store";
+import {
+  Category,
+  loadCategories,
+  selectCategories,
+  selectCategoryError,
+  selectCategoryLoading,
+  SubCategory,
+} from "../store/categorySlice";
 
 const STORAGE_KEYS = {
-  USER: "userData",
   PROPERTY: "selectedProperty",
   SELECTED: "selectedData",
 };
 
 const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [property, setProperty] = useState<{
+  const dispatch = useDispatch<AppDispatch>();
+  const categories = useSelector((s: RootState) => selectCategories(s));
+  const loading = useSelector((s: RootState) => selectCategoryLoading(s));
+  const error = useSelector((s: RootState) => selectCategoryError(s));
+
+  const [expandedId, setExpandedId] = React.useState<number | null>(null);
+  const [property, setProperty] = React.useState<{
     address: string;
     company: string;
   } | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisible, setModalVisible] = React.useState(false);
 
-  const showError = useCallback((title: string, message: string) => {
-    setModalVisible(true);
-  }, []);
-
-  const loadUserAndCategories = useCallback(async () => {
-    try {
-      const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
-      const user = userJson ? JSON.parse(userJson) : null;
-      const userId = user?.payload?.userid;
-      if (!userId) {
-        showError("Error", "User ID missing. Please log in.");
-        return;
-      }
-      const { data } = await axios.get<{ status: number; payload: Category[] }>(
-        `${baseApiUrl}/fileuploadcats.php?userid=${userId}`
-      );
-      if (data.status === 1) setCategories(data.payload);
-      else showError("Error", "Failed to load categories");
-    } catch (err) {
-      console.error(err);
-      showError("Error", "Unable to fetch categories.");
-    }
-  }, [showError]);
-
-  const loadProperty = useCallback(async () => {
-    try {
-      const propJson = await AsyncStorage.getItem(STORAGE_KEYS.PROPERTY);
-      if (propJson) setProperty(JSON.parse(propJson));
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
-
+  // Load categories (online → cache → offline)
   useEffect(() => {
-    loadUserAndCategories();
-    loadProperty();
-  }, [loadUserAndCategories, loadProperty]);
+    dispatch(loadCategories());
+  }, [dispatch]);
+
+  // Load selected property
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEYS.PROPERTY).then((json) => {
+      if (json) setProperty(JSON.parse(json));
+    });
+    // .catch(// console.error);
+  }, []);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -85,15 +63,11 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   const onSubCategoryPress = useCallback(
     async (category: Category, sub: SubCategory) => {
-      try {
-        await AsyncStorage.setItem(
-          STORAGE_KEYS.SELECTED,
-          JSON.stringify({ category, subCategory: sub })
-        );
-        navigation.navigate("UploadScreen", { category, subCategory: sub });
-      } catch (err) {
-        console.error(err);
-      }
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.SELECTED,
+        JSON.stringify({ category, subCategory: sub })
+      );
+      navigation.navigate("UploadScreen", { category, subCategory: sub });
     },
     [navigation]
   );
@@ -101,9 +75,10 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const renderSubCategory = useCallback(
     ({ item: sub }: { item: SubCategory }) => (
       <TouchableOpacity
-        onPress={() =>
-          onSubCategoryPress(categories.find((c) => c.id === expandedId)!, sub)
-        }
+        onPress={() => {
+          const cat = categories.find((c) => c.id === expandedId)!;
+          onSubCategoryPress(cat, sub);
+        }}
         style={innerStyles.subCategoryItem}
       >
         <Text style={innerStyles.subCategoryText}>{sub.sub_category}</Text>
@@ -143,6 +118,31 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     [expandedId, toggleExpand, renderSubCategory]
   );
 
+  // UI states
+  if (loading) {
+    return (
+      <View style={[styles.screenContainer]}>
+        <ActivityIndicator size="large" color={color.primary} />
+      </View>
+    );
+  }
+
+  if (error && categories.length === 0) {
+    return (
+      <View style={[styles.screenContainer]}>
+        <Text style={{ color: color.red, fontSize: fontSize.medium }}>
+          {error}
+        </Text>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => dispatch(loadCategories())}
+        >
+          <Text style={styles.buttonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.screenContainer}>
       <Header />
@@ -150,6 +150,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Select a Category To Upload</Text>
         </View>
+
         {property && (
           <View style={styles.screenBanner}>
             <Text style={styles.bannerLabel}>Selected Property:</Text>
@@ -157,6 +158,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text style={styles.extraSmallText}>{property.company}</Text>
           </View>
         )}
+
         <TouchableOpacity
           style={styles.primaryButton}
           onPress={() => navigation.navigate("JobsScreen")}
@@ -169,6 +171,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         >
           <Text style={styles.buttonText}>Go To Files</Text>
         </TouchableOpacity>
+
         <FlatList
           data={categories}
           keyExtractor={(c) => c.id.toString()}
@@ -178,6 +181,7 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <View style={{ height: 1, backgroundColor: color.secondary }} />
           )}
         />
+
         <TouchableOpacity
           style={styles.primaryButton}
           onPress={() => setModalVisible(true)}

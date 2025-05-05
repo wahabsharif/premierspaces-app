@@ -46,7 +46,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         );
       }
     } catch (error) {
-      console.error("Biometric authentication error:", error);
+      // console.error("Biometric authentication error:", error);
       showAlert(
         "Error",
         "Biometric authentication failed. Please try again or use PIN."
@@ -109,7 +109,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           setIsSettingPin(true);
         }
       } catch (error) {
-        console.error("Auth initialization error:", error);
+        // console.error("Auth initialization error:", error);
         if (isMounted) {
           setIsSettingPin(true);
         }

@@ -47,7 +47,7 @@ export const login = createAsyncThunk<
       const stored = await AsyncStorage.getItem("userData");
       console.log("✅ Latest userData in AsyncStorage:", stored);
     } catch (e) {
-      console.error("❌ AsyncStorage error:", e);
+      // // console.error("❌ AsyncStorage error:", e);
     }
 
     return data;

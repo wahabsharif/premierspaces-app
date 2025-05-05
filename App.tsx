@@ -7,17 +7,20 @@ import {
   AppState,
   AppStateStatus,
   ImageBackground,
+  LogBox,
   SafeAreaView,
   StyleSheet,
 } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
-import ToastManager, { Toast } from "toastify-react-native";
 import { Provider as ReduxProvider } from "react-redux";
+import ToastManager, { Toast } from "toastify-react-native";
 import NetworkStatus from "./components/Common/NetworkStatus";
 import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
+LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
+// LogBox.ignoreAllLogs();
 
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
