@@ -3,6 +3,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { baseApiUrl } from "../Constants/env";
+import { Toast } from "toastify-react-native";
 
 // Define the shape of our auth state
 interface AuthState {
@@ -37,7 +38,7 @@ export const login = createAsyncThunk<
     const data = response.data;
 
     if (data.status !== 1) {
-      return rejectWithValue("Invalid credentials");
+      return rejectWithValue(data.message || "Invalid credentials");
     }
 
     // Store full response structure
@@ -88,6 +89,7 @@ const authSlice = createSlice({
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error.message || "Login failed";
+        Toast.error(state.error);
       });
   },
 });

@@ -1,5 +1,6 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../types";
 
 import SearchPropertyScreen from "../screens/SearchPropertyScreen";
 import CategoryScreen from "../screens/CategoryScreen";
@@ -18,23 +19,18 @@ export type AppNavigatorProps = {
   setIsPickingImage: (value: boolean) => void;
 };
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export const AppNavigator = ({
-  setIsPickingImage,
-}: {
-  setIsPickingImage: (value: boolean) => void;
-}) => (
+export const AppNavigator = ({ setIsPickingImage }: AppNavigatorProps) => (
   <Stack.Navigator
+    initialRouteName="SearchPropertyScreen"
     screenOptions={{ headerShown: false }}
-    screenListeners={({
-      route,
-    }: {
-      route: { params?: { isPickingImage?: boolean } };
-    }) => ({
+    screenListeners={() => ({
       state: (e) => {
-        // Update isPickingImage based on route params
-        const currentParams = route.params;
+        const route = e.data.state.routes[e.data.state.index];
+        const currentParams = route.params as
+          | { isPickingImage?: boolean }
+          | undefined;
         if (currentParams?.isPickingImage !== undefined) {
           setIsPickingImage(currentParams.isPickingImage);
         }
@@ -54,25 +50,10 @@ export const AppNavigator = ({
       component={AppLockSettingScreen}
     />
     <Stack.Screen name="ChangeAppPinScreen" component={ChangeAppPinScreen} />
-    <Stack.Screen
-      name="JobsScreen"
-      component={JobsScreen as React.ComponentType<any>}
-    />
-    <Stack.Screen
-      name="OpenNewJobScreen"
-      component={OpenNewJobScreen as React.ComponentType<any>}
-    />
-    <Stack.Screen
-      name="JobDetailScreen"
-      component={JobDetailScreen as React.ComponentType<any>}
-    />
-    <Stack.Screen
-      name="MediaPreviewScreen"
-      component={MediaPreviewScreen as React.ComponentType<any>}
-    />
-    <Stack.Screen
-      name="FilesScreen"
-      component={FilesScreen as React.ComponentType<any>}
-    />
+    <Stack.Screen name="JobsScreen" component={JobsScreen} />
+    <Stack.Screen name="OpenNewJobScreen" component={OpenNewJobScreen} />
+    <Stack.Screen name="JobDetailScreen" component={JobDetailScreen} />
+    <Stack.Screen name="MediaPreviewScreen" component={MediaPreviewScreen} />
+    <Stack.Screen name="FilesScreen" component={FilesScreen} />
   </Stack.Navigator>
 );

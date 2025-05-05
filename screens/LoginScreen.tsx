@@ -16,7 +16,12 @@ import { fontSize } from "../Constants/theme";
 import { AppDispatch, RootState } from "../store";
 import { login } from "../store/authSlice";
 
-const LoginScreen = ({ navigation }: any) => {
+type LoginScreenProps = {
+  navigation?: any;
+  onLoginSuccess?: () => void;
+};
+
+const LoginScreen = ({ navigation, onLoginSuccess }: LoginScreenProps) => {
   const dispatch = useDispatch<AppDispatch>();
   const { loading, error } = useSelector((state: RootState) => state.auth);
 
@@ -24,14 +29,26 @@ const LoginScreen = ({ navigation }: any) => {
   const [pin, setPin] = useState("");
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+
   const handleLogin = () => {
     dispatch(login({ initials, pin }))
       .unwrap()
       .then(() => {
-        navigation.replace("SearchPropertyScreen");
+        if (onLoginSuccess) {
+          // Called when used from App.js
+          onLoginSuccess();
+        } else if (navigation) {
+          // Called when used from within navigation stack
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "SearchPropertyScreen" }],
+          });
+        }
       })
       .catch((err) => {
         console.log("Login error:", err);
+        setAlertMessage(err.toString());
+        setAlertVisible(true);
       });
   };
 
