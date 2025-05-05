@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import axios from "axios";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,9 +13,17 @@ import {
   View,
 } from "react-native";
 import Header from "../components/Common/Header";
-import { baseApiUrl } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
+import { useAppDispatch, useAppSelector } from "../hooks/reduxHooks";
+import {
+  checkConnectivity,
+  clearFilter,
+  fetchAllProperties,
+  filterProperties,
+  loadCachedProperties,
+  setConnectionStatus,
+} from "../store/propertySlice";
 import { RootStackParamList } from "../types";
 
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
@@ -25,75 +33,112 @@ type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
 
 const SearchPropertyScreen: React.FC = () => {
   const [door_num, setdoor_num] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [results, setResults] = useState<any[]>([]);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
+  const [showNoResultsError, setShowNoResultsError] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const navigation = useNavigation<SearchPropertyScreenNavigationProp>();
 
-  const handleSearch = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      const userDataJson = await AsyncStorage.getItem("userData");
-      const userData = userDataJson ? JSON.parse(userDataJson) : null;
-      const userid = userData?.payload?.userid;
+  // Redux state
+  const dispatch = useAppDispatch();
+  const { filteredProperties, loading, error, isConnected, lastUpdated } =
+    useAppSelector((state) => state.property);
 
-      if (!userid) {
-        setError("User ID not found. Please log in again.");
-        setResults([]);
-        return;
-      }
+  // Check network connectivity and load appropriate data
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isConnected = state.isConnected ?? false;
+      dispatch(setConnectionStatus(isConnected));
 
-      const url = `${baseApiUrl}/searchproperty.php?userid=${userid}&door_num=${door_num}`;
-      const response = await axios.get(url);
-      const data = response.data;
-
-      if (data.status === 0 && data.payload?.message === "Session expired") {
-        setShowSessionExpired(true);
-        setResults([]);
-        return;
-      }
-
-      if (data.status === 1 && data.payload && data.payload.length > 0) {
-        setResults(data.payload);
+      if (isConnected) {
+        dispatch(fetchAllProperties())
+          .unwrap()
+          .catch((error) => {
+            if (error === "Session expired") {
+              setShowSessionExpired(true);
+            }
+          });
       } else {
-        setError(`No property found with ( ${door_num} )`);
-        setResults([]);
+        // Load cached data when offline
+        dispatch(loadCachedProperties());
       }
-    } catch (err: any) {
-      console.error("Error occurred during fetch:", err);
-      if (err.response?.status === 503) {
-        setError("Service is temporarily unavailable. Please try again later.");
-      } else {
-        setError(`No property found with ( ${door_num} )`);
-      }
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
 
+    // Initial connectivity check and data loading
+    dispatch(checkConnectivity()).then((result) => {
+      if (result.payload) {
+        dispatch(fetchAllProperties())
+          .unwrap()
+          .catch((error) => {
+            if (error === "Session expired") {
+              setShowSessionExpired(true);
+            }
+          });
+      } else {
+        dispatch(loadCachedProperties());
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [dispatch]);
+
+  // Handle search input with debounce
   useEffect(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
+
+    // Also clear the error timeout when input changes
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+      setShowNoResultsError(false);
+    }
+
     if (door_num.trim() === "") {
-      setResults([]);
-      setError("");
+      dispatch(clearFilter());
+      setShowNoResultsError(false);
       return;
     }
+
     debounceRef.current = setTimeout(() => {
-      handleSearch();
+      dispatch(filterProperties(door_num));
     }, 500);
 
     return () => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
     };
-  }, [door_num]);
+  }, [door_num, dispatch]);
+
+  // Effect for delayed error message
+  useEffect(() => {
+    // Clear any existing timeout when loading state or results change
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+      setShowNoResultsError(false);
+    }
+
+    // Only set timeout if we have a non-empty search, no results, and not loading
+    if (door_num.trim() !== "" && filteredProperties.length === 0 && !loading) {
+      errorTimeoutRef.current = setTimeout(() => {
+        setShowNoResultsError(true);
+      }, 500);
+    } else {
+      setShowNoResultsError(false);
+    }
+
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, [door_num, filteredProperties.length, loading]);
 
   const handleSelectAndNavigate = async (item: any) => {
     try {
@@ -135,20 +180,24 @@ const SearchPropertyScreen: React.FC = () => {
             onChangeText={setdoor_num}
           />
         </View>
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
         {loading && <ActivityIndicator color={color.primary} />}
 
-        {results.length > 0 && (
+        {filteredProperties.length > 0 && (
           <View style={styles.list}>
             <Text style={styles.subHeading}>Property List</Text>
             <FlatList
-              data={results}
+              data={filteredProperties}
               keyExtractor={(item) => item.id.toString()}
               renderItem={renderResultItem}
               contentContainerStyle={{ paddingVertical: 10 }}
             />
           </View>
+        )}
+
+        {showNoResultsError && (
+          <Text style={styles.errorText}>
+            No property found with ({door_num})
+          </Text>
         )}
       </View>
 

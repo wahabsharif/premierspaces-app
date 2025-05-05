@@ -51,7 +51,6 @@ export default function App() {
           await AsyncStorage.setItem("app_version", currentVersion);
         }
       } catch (error) {
-        console.error("Error initializing app:", error);
         Toast.error("Failed to initialize app");
       } finally {
         setIsLoading(false);
@@ -76,7 +75,6 @@ export default function App() {
           Toast.info("App locked for security");
         }
       } catch (error) {
-        console.error("Error handling app state change:", error);
         Toast.error("Error handling app state");
       }
     };
