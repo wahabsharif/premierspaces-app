@@ -23,7 +23,7 @@ import { fetchJobTypes } from "./store/createJobSlice";
 import { fontSize } from "./Constants/theme";
 import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
-import { baseApiUrl, JOB_TYPES_CACHE_KEY } from "./Constants/env";
+import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "./Constants/env";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 // LogBox.ignoreAllLogs();
@@ -71,7 +71,7 @@ export default function App() {
 
       if (isConnected) {
         const resp = await axios.get<PrefetchJobTypesResponse>(
-          `${baseApiUrl}/jobtypes.php?userid=${userId}`
+          `${BASE_API_URL}/jobtypes.php?userid=${userId}`
         );
         const jobTypes = resp.data.payload;
 

@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import Header from "../components/Common/Header";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 import commonStyles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { Job, RootStackParamList } from "../types";
@@ -59,7 +59,7 @@ const JobsScreen = ({
 
     try {
       const userid = userData.payload?.userid ?? userData.userid;
-      const endpoint = `${baseApiUrl}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
+      const endpoint = `${BASE_API_URL}/getjobs.php?userid=${userid}&property_id=${propertyData.id}`;
       const response = await fetch(endpoint);
       const json = await response.json();
 

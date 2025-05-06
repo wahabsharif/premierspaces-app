@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 import NetInfo from "@react-native-community/netinfo";
 
 interface Property {
@@ -45,7 +45,7 @@ export const fetchAllProperties = createAsyncThunk(
       }
 
       // Fetch all properties
-      const url = `${baseApiUrl}/searchproperty.php?userid=${userid}`;
+      const url = `${BASE_API_URL}/searchproperty.php?userid=${userid}`;
       const response = await axios.get(url);
       const data = response.data;
 

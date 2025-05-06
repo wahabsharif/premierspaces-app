@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import Header from "../components/Common/Header";
@@ -49,7 +49,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
       if (!userId) return;
 
       const { data } = await axios.get(
-        `${baseApiUrl}/fileuploadcats.php?userid=${userId}`
+        `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
       );
       if (data.status === 1 && Array.isArray(data.payload)) {
         const catMap: CategoryMap = {};
@@ -83,7 +83,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
       }
 
       const { data } = await axios.get(
-        `${baseApiUrl}/get-files.php?userid=${userId}&property_id=${property.id}`
+        `${BASE_API_URL}/get-files.php?userid=${userId}&property_id=${property.id}`
       );
 
       if (data.status === 1 && data.payload) {

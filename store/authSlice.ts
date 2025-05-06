@@ -2,7 +2,7 @@
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 import { Toast } from "toastify-react-native";
 
 // Define the shape of our auth state
@@ -31,7 +31,7 @@ export const login = createAsyncThunk<
   { rejectValue: string }
 >("auth/login", async ({ initials, pin }, { rejectWithValue }) => {
   try {
-    const response = await axios.post(`${baseApiUrl}/login.php`, {
+    const response = await axios.post(`${BASE_API_URL}/login.php`, {
       userid: 0,
       payload: { initials, pin },
     });

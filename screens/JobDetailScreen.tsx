@@ -12,7 +12,7 @@ import {
   FlatList,
 } from "react-native";
 import Header from "../components/Common/Header";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 import { color, fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
 import styles from "../Constants/styles";
@@ -84,7 +84,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       const { data: jd } = await axios.get<{
         status: number;
         payload: JobDetail | JobDetail[];
-      }>(`${baseApiUrl}/getjobs.php`, {
+      }>(`${BASE_API_URL}/getjobs.php`, {
         params: { userid: userId, id: jobId },
       });
       if (jd.status === 1) {
@@ -107,7 +107,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       const { data: cd } = await axios.get<{
         status: number;
         payload: Contractor | Contractor[];
-      }>(`${baseApiUrl}/get-contractor-data.php`, {
+      }>(`${BASE_API_URL}/get-contractor-data.php`, {
         params: { userid: userId, job_id: jobId },
       });
       if (cd.status === 1) {

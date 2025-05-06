@@ -3,7 +3,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import NetInfo from "@react-native-community/netinfo";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 
 export interface SubCategory {
   id: number;
@@ -52,7 +52,7 @@ export const loadCategories = createAsyncThunk<
       }
 
       const resp = await axios.get<{ status: number; payload: Category[] }>(
-        `${baseApiUrl}/fileuploadcats.php?userid=${userId}`
+        `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
       );
 
       if (resp.data.status !== 1) {

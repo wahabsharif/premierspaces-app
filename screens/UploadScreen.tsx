@@ -24,7 +24,7 @@ import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
 import Header from "../components/Common/Header";
 import { ProgressBar } from "../components/Common/ProgressBar";
 import UploadStatusModal from "../components/UploadStatusModal";
-import { baseApiUrl } from "../Constants/env";
+import { BASE_API_URL } from "../Constants/env";
 import { default as style, default as styles } from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { getFileId } from "../helper";
@@ -407,7 +407,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       } as any);
       try {
         const response = await axios.post(
-          `${baseApiUrl}/media-uploader.php`,
+          `${BASE_API_URL}/media-uploader.php`,
           formData,
           {
             headers: { "Content-Type": "multipart/form-data" },

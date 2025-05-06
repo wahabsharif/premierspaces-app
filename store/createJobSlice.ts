@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
-  baseApiUrl,
+  BASE_API_URL,
   JOB_TYPES_CACHE_EXPIRY,
   JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
@@ -70,7 +70,9 @@ export const fetchJobTypes = createAsyncThunk<
 
   try {
     // Try network first
-    const resp = await axios.get(`${baseApiUrl}/jobtypes.php?userid=${userId}`);
+    const resp = await axios.get(
+      `${BASE_API_URL}/jobtypes.php?userid=${userId}`
+    );
     const jobTypes = resp.data.payload as Job[];
     // Save fresh data
     saveToCache(cacheKey, jobTypes);
@@ -93,7 +95,7 @@ export const createJob = createAsyncThunk<
 >("job/create", async ({ userId, jobData }, { rejectWithValue }) => {
   try {
     const postData = { userid: userId, payload: jobData };
-    const response = await axios.post(`${baseApiUrl}/newjob.php`, postData);
+    const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
     return response.data;
   } catch (err: any) {
     return rejectWithValue(err.response?.data?.message || err.message);
