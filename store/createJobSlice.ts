@@ -1,7 +1,7 @@
-// store/createJobSlice.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
+import NetInfo from "@react-native-community/netinfo";
 import {
   BASE_API_URL,
   JOB_TYPES_CACHE_EXPIRY,
@@ -9,6 +9,8 @@ import {
 } from "../Constants/env";
 import { Job } from "../types";
 import { RootState } from "./index";
+import { saveOfflineJob } from "../services/offlineJobService";
+import { syncManager } from "../services/syncManager";
 
 // Cache utility functions
 export const saveToCache = async (key: string, data: any) => {
@@ -42,6 +44,7 @@ export interface JobState {
   loading: boolean;
   error: string | null;
   success: boolean;
+  pendingCount: number;
 }
 
 export interface JobTypeState {
@@ -87,18 +90,77 @@ export const fetchJobTypes = createAsyncThunk<
   }
 });
 
-// Thunk: create a new job
+// Thunk: create a new job with offline support
 export const createJob = createAsyncThunk<
   any,
   { userId: string; jobData: Job },
   { rejectValue: string }
 >("job/create", async ({ userId, jobData }, { rejectWithValue }) => {
   try {
-    const postData = { userid: userId, payload: jobData };
-    const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
-    return response.data;
+    // Check network status
+    const netInfo = await NetInfo.fetch();
+
+    if (netInfo.isConnected) {
+      // Online: send immediately to server
+      const postData = { userid: userId, payload: jobData };
+      const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
+      return response.data;
+    } else {
+      // Offline: store locally for later sync
+      const offlineId = await saveOfflineJob(userId, jobData);
+
+      // Return a custom response that mimics the server
+      return {
+        message: "Job saved offline and will be synced when online",
+        offlineId,
+        isOffline: true,
+      };
+    }
   } catch (err: any) {
-    return rejectWithValue(err.response?.data?.message || err.message);
+    return rejectWithValue(err.message || "Failed to create job");
+  }
+});
+
+// Thunk: sync all pending jobs
+export const syncPendingJobs = createAsyncThunk<
+  { syncedCount: number; failedCount: number },
+  void,
+  { rejectValue: string }
+>("job/syncPending", async (_, { rejectWithValue }) => {
+  try {
+    return new Promise((resolve, reject) => {
+      let complete = false;
+
+      // Add a listener for sync completion
+      const unsubscribe = syncManager.addSyncListener((syncState) => {
+        if (syncState.status === "complete" && !complete) {
+          complete = true;
+          unsubscribe();
+          resolve({
+            syncedCount: syncState.syncedCount || 0,
+            failedCount: syncState.failedCount || 0,
+          });
+        } else if (syncState.status === "error" && !complete) {
+          complete = true;
+          unsubscribe();
+          reject(new Error(syncState.message));
+        }
+      });
+
+      // Start the sync
+      syncManager.manualSync();
+
+      // Safety timeout - resolve after 30s if not completed
+      setTimeout(() => {
+        if (!complete) {
+          complete = true;
+          unsubscribe();
+          resolve({ syncedCount: 0, failedCount: 0 });
+        }
+      }, 30000);
+    });
+  } catch (err: any) {
+    return rejectWithValue(err.message || "Failed to sync jobs");
   }
 });
 
@@ -106,6 +168,7 @@ const initialJobState: JobState = {
   loading: false,
   error: null,
   success: false,
+  pendingCount: 0,
 };
 
 const initialJobTypeState: JobTypeState = {
@@ -125,6 +188,9 @@ const slice = createSlice({
     resetJobTypes: (state) => {
       state.jobTypes = initialJobTypeState;
     },
+    updatePendingCount: (state, action: PayloadAction<number>) => {
+      state.job.pendingCount = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -133,9 +199,13 @@ const slice = createSlice({
         state.job.error = null;
         state.job.success = false;
       })
-      .addCase(createJob.fulfilled, (state) => {
+      .addCase(createJob.fulfilled, (state, action) => {
         state.job.loading = false;
         state.job.success = true;
+        // If job was saved offline, increment pending count
+        if (action.payload?.isOffline) {
+          state.job.pendingCount += 1;
+        }
       })
       .addCase(createJob.rejected, (state, action) => {
         state.job.loading = false;
@@ -156,11 +226,21 @@ const slice = createSlice({
       .addCase(fetchJobTypes.rejected, (state, action) => {
         state.jobTypes.loading = false;
         state.jobTypes.error = action.payload || "Failed to load job types";
+      })
+      .addCase(syncPendingJobs.fulfilled, (state, action) => {
+        // Update pending count after sync
+        if (action.payload.syncedCount > 0) {
+          state.job.pendingCount = Math.max(
+            0,
+            state.job.pendingCount - action.payload.syncedCount
+          );
+        }
       });
   },
 });
 
-export const { resetJobState, resetJobTypes } = slice.actions;
+export const { resetJobState, resetJobTypes, updatePendingCount } =
+  slice.actions;
 export const selectJobState = (state: RootState) => state.job.job;
 export const selectJobTypes = (state: RootState) => state.job.jobTypes;
 export const selectIsJobTypesStale = (state: RootState) => {
@@ -168,5 +248,7 @@ export const selectIsJobTypesStale = (state: RootState) => {
   if (!last) return true;
   return Date.now() - last > JOB_TYPES_CACHE_EXPIRY;
 };
+export const selectPendingJobsCount = (state: RootState) =>
+  state.job.job.pendingCount;
 
 export default slice.reducer;

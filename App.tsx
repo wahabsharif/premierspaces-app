@@ -1,6 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { NavigationContainer } from "@react-navigation/native";
+import axios from "axios";
 import * as Application from "expo-application";
+import { SQLiteProvider } from "expo-sqlite";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,15 +18,13 @@ import { Provider as PaperProvider } from "react-native-paper";
 import { Provider as ReduxProvider } from "react-redux";
 import ToastManager, { Toast } from "toastify-react-native";
 import NetworkStatus from "./components/Common/NetworkStatus";
+import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "./Constants/env";
+import { fontSize } from "./Constants/theme";
 import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
 import { fetchJobTypes } from "./store/createJobSlice";
-import { fontSize } from "./Constants/theme";
-import NetInfo from "@react-native-community/netinfo";
-import axios from "axios";
-import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "./Constants/env";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 // LogBox.ignoreAllLogs();
@@ -184,45 +185,47 @@ export default function App() {
 
   return (
     <PaperProvider>
-      <ReduxProvider store={store}>
-        <SafeAreaView style={styles.container}>
-          <NetworkStatus />
-          <ToastManager
-            position="bottom"
-            style={{
-              flexDirection: "column-reverse",
-              justifyContent: "flex-end",
-              fontSize: fontSize.xs,
-              width: "100%",
-              padding: 10,
-            }}
-          />
+      <SQLiteProvider databaseName="premierDatabase.db">
+        <ReduxProvider store={store}>
+          <SafeAreaView style={styles.container}>
+            <NetworkStatus />
+            <ToastManager
+              position="bottom"
+              style={{
+                flexDirection: "column-reverse",
+                justifyContent: "flex-end",
+                fontSize: fontSize.xs,
+                width: "100%",
+                padding: 10,
+              }}
+            />
 
-          <ImageBackground source={backgroundImage} style={styles.background}>
-            <NavigationContainer>
-              {isUnlocked ? (
-                isLoggedIn ? (
-                  <AppNavigator setIsPickingImage={setIsPickingImage} />
+            <ImageBackground source={backgroundImage} style={styles.background}>
+              <NavigationContainer>
+                {isUnlocked ? (
+                  isLoggedIn ? (
+                    <AppNavigator setIsPickingImage={setIsPickingImage} />
+                  ) : (
+                    <LoginScreen
+                      onLoginSuccess={() => {
+                        setIsLoggedIn(true);
+                        Toast.success("Login successful!");
+                      }}
+                    />
+                  )
                 ) : (
-                  <LoginScreen
-                    onLoginSuccess={() => {
-                      setIsLoggedIn(true);
-                      Toast.success("Login successful!");
+                  <LockScreen
+                    onUnlock={() => {
+                      setIsUnlocked(true);
+                      Toast.success("Unlocked!");
                     }}
                   />
-                )
-              ) : (
-                <LockScreen
-                  onUnlock={() => {
-                    setIsUnlocked(true);
-                    Toast.success("Unlocked!");
-                  }}
-                />
-              )}
-            </NavigationContainer>
-          </ImageBackground>
-        </SafeAreaView>
-      </ReduxProvider>
+                )}
+              </NavigationContainer>
+            </ImageBackground>
+          </SafeAreaView>
+        </ReduxProvider>
+      </SQLiteProvider>
     </PaperProvider>
   );
 }
