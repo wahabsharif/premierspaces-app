@@ -1,7 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import React, { useEffect, useState } from "react";
 import { Animated, Text } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "../../Constants/styles";
 import { color } from "../../Constants/theme";
 
@@ -11,7 +10,6 @@ const NetworkStatus: React.FC<Props> = ({ offset = 0 }) => {
   const [isConnected, setIsConnected] = useState<boolean | null>(true);
   const [visible, setVisible] = useState<boolean>(false);
   const opacity = useState(new Animated.Value(0))[0];
-  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // Subscribe to network state updates

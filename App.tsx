@@ -8,9 +8,9 @@ import {
   AppStateStatus,
   ImageBackground,
   StyleSheet,
+  SafeAreaView,
 } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Provider as ReduxProvider } from "react-redux";
 import ToastManager, { Toast } from "toastify-react-native";
 import NetworkStatus from "./components/Common/NetworkStatus";
