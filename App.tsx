@@ -19,14 +19,78 @@ import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
+import { fetchJobTypes } from "./store/createJobSlice";
+import { fontSize } from "./Constants/theme";
+import NetInfo from "@react-native-community/netinfo";
+import axios from "axios";
+import { baseApiUrl, JOB_TYPES_CACHE_KEY } from "./Constants/env";
+
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 // LogBox.ignoreAllLogs();
+
+// Cache utility functions
+const saveToCache = async (key: string, data: any) => {
+  try {
+    await AsyncStorage.setItem(
+      key,
+      JSON.stringify({
+        timestamp: Date.now(),
+        data,
+      })
+    );
+  } catch (error) {
+    console.error("Error saving to cache:", error);
+  }
+};
 
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Prefetch job types when app loads
+  interface JobType {
+    id: string;
+    name: string;
+    [key: string]: any; // Add additional fields if necessary
+  }
+
+  interface PrefetchJobTypesResponse {
+    payload: JobType[];
+  }
+
+  const prefetchJobTypes = async (userId: string): Promise<void> => {
+    if (!userId) return;
+
+    try {
+      const cacheKey = `${JOB_TYPES_CACHE_KEY}_${userId}`;
+      const isConnected = await NetInfo.fetch().then(
+        (state) => state.isConnected
+      );
+
+      if (isConnected) {
+        const resp = await axios.get<PrefetchJobTypesResponse>(
+          `${baseApiUrl}/jobtypes.php?userid=${userId}`
+        );
+        const jobTypes = resp.data.payload;
+
+        if (jobTypes && Array.isArray(jobTypes)) {
+          await saveToCache(cacheKey, jobTypes);
+          console.log(
+            "Job types cached successfully during app initialization"
+          );
+
+          // Also dispatch to Redux store to keep it in sync
+          store.dispatch(fetchJobTypes({ userId }));
+        }
+      } else {
+        console.log("Offline during initialization, will use existing cache");
+      }
+    } catch (error) {
+      console.error("Error prefetching job types:", error);
+    }
+  };
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -40,6 +104,13 @@ export default function App() {
         if (userData) {
           setIsLoggedIn(true);
           Toast.success("Welcome back!");
+
+          // Get userId and prefetch job types
+          const userObj = JSON.parse(userData);
+          const userId = userObj.payload?.userid ?? userObj.userid;
+          if (userId) {
+            prefetchJobTypes(userId);
+          }
         } else {
           setIsLoggedIn(false);
         }
@@ -77,6 +148,18 @@ export default function App() {
           setIsUnlocked(false);
           Toast.info("App locked for security");
         }
+
+        // Refresh job types when app comes to foreground
+        if (nextAppState === "active" && isLoggedIn) {
+          const userData = await AsyncStorage.getItem("userData");
+          if (userData) {
+            const userObj = JSON.parse(userData);
+            const userId = userObj.payload?.userid ?? userObj.userid;
+            if (userId) {
+              prefetchJobTypes(userId);
+            }
+          }
+        }
       } catch (error) {
         Toast.error("Error handling app state");
       }
@@ -87,7 +170,7 @@ export default function App() {
       handleAppStateChange
     );
     return () => subscription.remove();
-  }, [isPickingImage]);
+  }, [isPickingImage, isLoggedIn]);
 
   const backgroundImage = require("./assets/background.jpg");
 
@@ -109,6 +192,9 @@ export default function App() {
             style={{
               flexDirection: "column-reverse",
               justifyContent: "flex-end",
+              fontSize: fontSize.xs,
+              width: "100%",
+              padding: 10,
             }}
           />
 

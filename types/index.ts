@@ -21,10 +21,6 @@ export interface PropertyData {
   id: string;
 }
 
-export interface JobType {
-  id: number;
-  job_type: string;
-}
 export interface Job {
   id: string;
   job_num: string;
@@ -74,9 +70,6 @@ export interface Job {
   image_file_count: string;
   doc_file_count: string;
   video_file_count: string;
-}
-
-export interface TasksState {
   [key: string]: string;
 }
 

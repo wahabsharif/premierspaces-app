@@ -3,20 +3,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Dimensions,
   FlatList,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  ToastAndroid,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { Toast } from "toastify-react-native";
 import Header from "../components/Common/Header";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
@@ -28,14 +26,12 @@ import {
   resetJobTypes,
   selectJobState,
   selectJobTypes,
+  selectIsJobTypesStale,
 } from "../store/createJobSlice";
-import {
-  JobType,
-  PropertyData,
-  RootStackParamList,
-  TasksState,
-} from "../types";
+import { PropertyData, RootStackParamList, Job } from "../types";
+import NetInfo from "@react-native-community/netinfo";
 
+type TasksState = Record<string, string>;
 const TASK_KEYS = Array.from({ length: 10 }, (_, i) => `task${i + 1}`);
 
 const OpenNewJobScreen = ({
@@ -45,84 +41,96 @@ const OpenNewJobScreen = ({
   const { loading, success, error } = useSelector(selectJobState);
   const { items: jobTypes, loading: typesLoading } =
     useSelector(selectJobTypes);
+  const isStale = useSelector(selectIsJobTypesStale);
 
   const [propertyData, setPropertyData] = useState<PropertyData | null>(null);
-  const [selectedJobType, setSelectedJobType] = useState<JobType | null>(null);
+  const [selectedJobType, setSelectedJobType] = useState<Job | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({
-    top: 0,
-    left: 0,
-    width: 0,
-  });
   const dropdownRef = useRef<View>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+
   const [userId, setUserId] = useState<string>("");
-  const emptyTasks = TASK_KEYS.reduce((acc, key) => {
-    acc[key] = "";
-    return acc;
-  }, {} as TasksState);
-  const [jobTasks, setJobTasks] = useState(emptyTasks);
-  const initialHeights = TASK_KEYS.reduce((acc, key) => {
-    acc[key] = 40;
-    return acc;
-  }, {} as Record<string, number>);
+  const [isOnline, setIsOnline] = useState(true);
+  const emptyTasks = TASK_KEYS.reduce(
+    (a, k) => ({ ...a, [k]: "" }),
+    {} as TasksState
+  );
+  const [jobTasks, setJobTasks] = useState<TasksState>(emptyTasks);
+  const initialHeights = TASK_KEYS.reduce(
+    (a, k) => ({ ...a, [k]: 40 }),
+    {} as Record<string, number>
+  );
   const [inputHeights, setInputHeights] = useState(initialHeights);
 
+  const showSuccess = useCallback((msg: string) => Toast.success(msg), []);
+  const showError = useCallback((msg: string) => Toast.error(msg), []);
+  const showInfo = useCallback((msg: string) => Toast.info(msg), []);
+
+  // Network status monitoring
   useEffect(() => {
-    const fetchInitial = async () => {
-      const [propertyRes, userRes, typeRes] = await Promise.all([
-        AsyncStorage.getItem("selectedProperty"),
-        AsyncStorage.getItem("userData"),
-        AsyncStorage.getItem("selectedJobType"),
-      ]);
-      if (propertyRes) setPropertyData(JSON.parse(propertyRes));
-      if (!userRes) return;
-      const parsed = JSON.parse(userRes);
-      const uid = (parsed.payload?.userid || parsed.userid) as string;
-      setUserId(uid);
-      dispatch(fetchJobTypes({ userId: uid }));
-      if (typeRes) setSelectedJobType(JSON.parse(typeRes));
-    };
-    fetchInitial();
+    const unsub = NetInfo.addEventListener((state) => {
+      const online = state.isConnected ?? false;
+      setIsOnline(online);
+      if (online && userId && isStale) {
+        dispatch(fetchJobTypes({ userId }));
+        showInfo("Connected. Refreshing job types.");
+      }
+    });
+    return unsub;
+  }, [dispatch, userId, isStale]);
+
+  // Initial data loading
+  useEffect(() => {
+    (async () => {
+      try {
+        const [propStr, userStr, typeStr] = await Promise.all([
+          AsyncStorage.getItem("selectedProperty"),
+          AsyncStorage.getItem("userData"),
+          AsyncStorage.getItem("selectedJobType"),
+        ]);
+
+        if (propStr) setPropertyData(JSON.parse(propStr));
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          const uid = u.payload?.userid ?? u.userid;
+          setUserId(uid);
+
+          // Only fetch job types if they are stale - we rely on app initialization to have pre-cached them
+          if (isStale) {
+            dispatch(fetchJobTypes({ userId: uid }));
+          }
+        }
+        if (typeStr) setSelectedJobType(JSON.parse(typeStr));
+      } catch {
+        showError("Error loading initial data");
+      }
+    })();
     return () => {
       dispatch(resetJobTypes());
     };
-  }, []);
+  }, [dispatch, isStale]);
 
   useEffect(() => {
     if (success) {
-      showToast("Job created successfully!");
+      showSuccess("Job created successfully!");
       navigation.navigate("JobsScreen");
       dispatch(resetJobState());
       resetForm();
     }
     if (error) {
-      showToast(error);
+      showError(error);
       dispatch(resetJobState());
     }
   }, [success, error]);
 
-  const handleSelectJobType = useCallback(async (job: JobType) => {
+  const handleSelectJobType = useCallback(async (job: Job) => {
     setSelectedJobType(job);
     setDropdownOpen(false);
     await AsyncStorage.setItem("selectedJobType", JSON.stringify(job));
   }, []);
 
-  const handleTaskChange = useCallback((key: string, value: string) => {
-    setJobTasks((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const showToast = useCallback((message: string) => {
-    if (Platform.OS === "android") {
-      ToastAndroid.showWithGravityAndOffset(
-        message,
-        ToastAndroid.LONG,
-        ToastAndroid.BOTTOM,
-        0,
-        100
-      );
-    } else {
-      Alert.alert("Notice", message, [{ text: "OK" }]);
-    }
+  const handleTaskChange = useCallback((key: string, val: string) => {
+    setJobTasks((prev) => ({ ...prev, [key]: val }));
   }, []);
 
   const resetForm = useCallback(() => {
@@ -132,40 +140,44 @@ const OpenNewJobScreen = ({
   }, []);
 
   const handleSubmit = useCallback(() => {
-    if (!propertyData?.id || !selectedJobType?.id) {
-      showToast("Please select property and job type");
-      return;
-    }
-    dispatch(
-      createJob({
-        userId,
-        jobData: {
-          property_id: propertyData.id,
-          job_type: selectedJobType.id.toString(),
-          tasks: jobTasks,
-        },
-      })
-    );
-  }, [propertyData, selectedJobType, jobTasks, userId]);
+    if (!isOnline) return showError("Cannot create job while offline");
+    if (!propertyData?.id || !selectedJobType?.id)
+      return showError("Select property and job type");
+    const payload = {
+      property_id: propertyData.id,
+      job_type: `${selectedJobType.id}`,
+      ...TASK_KEYS.reduce(
+        (acc, key) => ({ ...acc, [key]: jobTasks[key] || "" }),
+        {}
+      ),
+    } as Job;
+    dispatch(createJob({ userId, jobData: payload }));
+  }, [dispatch, isOnline, propertyData, selectedJobType, jobTasks, userId]);
 
   const measureDropdown = useCallback(() => {
-    dropdownRef.current?.measure((x, y, w, h, px, py) => {
-      setDropdownPosition({ top: py + h, left: px, width: w });
-    });
+    dropdownRef.current?.measure((x, y, w, h, px, py) =>
+      setDropdownPos({ top: py + h, left: px, width: w })
+    );
   }, []);
 
-  const openDropdown = useCallback(() => {
-    measureDropdown();
-    setDropdownOpen(true);
-  }, [measureDropdown]);
+  interface ContentSizeChangeEvent {
+    nativeEvent: {
+      contentSize: {
+        height: number;
+      };
+    };
+  }
 
-  const handleContentSizeChange = useCallback((key: string, e: any) => {
-    const h = e.nativeEvent.contentSize.height;
-    setInputHeights((prev) => ({ ...prev, [key]: Math.max(40, h) }));
-  }, []);
+  const handleContentSizeChange = useCallback(
+    (key: string, e: ContentSizeChangeEvent) => {
+      const h = e.nativeEvent.contentSize.height;
+      setInputHeights((prev) => ({ ...prev, [key]: Math.max(40, h) }));
+    },
+    []
+  );
 
   const renderDropdownItem = useCallback(
-    ({ item }: { item: JobType }) => (
+    ({ item }: { item: Job }) => (
       <TouchableOpacity
         style={innerStyles.dropdownItem}
         onPress={() => handleSelectJobType(item)}
@@ -196,7 +208,10 @@ const OpenNewJobScreen = ({
             <TouchableOpacity
               ref={dropdownRef}
               style={innerStyles.dropdown}
-              onPress={openDropdown}
+              onPress={() => {
+                measureDropdown();
+                setDropdownOpen(true);
+              }}
             >
               <View style={innerStyles.dropdownInner}>
                 <Text style={styles.smallText}>
@@ -215,7 +230,7 @@ const OpenNewJobScreen = ({
             </TouchableOpacity>
             <Modal
               visible={dropdownOpen}
-              transparent={true}
+              transparent
               animationType="fade"
               onRequestClose={() => setDropdownOpen(false)}
             >
@@ -229,21 +244,29 @@ const OpenNewJobScreen = ({
                     innerStyles.dropdownListContainer,
                     {
                       position: "absolute",
-                      top: dropdownPosition.top,
-                      left: dropdownPosition.left,
-                      width: dropdownPosition.width,
+                      top: dropdownPos.top,
+                      left: dropdownPos.left,
+                      width: dropdownPos.width,
                       maxHeight:
-                        Dimensions.get("window").height -
-                        dropdownPosition.top -
-                        20,
+                        Dimensions.get("window").height - dropdownPos.top - 20,
                     },
                   ]}
                 >
-                  <FlatList
-                    data={jobTypes}
-                    keyExtractor={(i) => i.id.toString()}
-                    renderItem={renderDropdownItem}
-                  />
+                  {jobTypes.length === 0 ? (
+                    <View style={innerStyles.noDataContainer}>
+                      <Text style={styles.smallText}>
+                        {isOnline
+                          ? "No job types available"
+                          : "No cached job types"}
+                      </Text>
+                    </View>
+                  ) : (
+                    <FlatList
+                      data={jobTypes}
+                      keyExtractor={(i) => i.id.toString()}
+                      renderItem={renderDropdownItem}
+                    />
+                  )}
                 </View>
               </TouchableOpacity>
             </Modal>
@@ -264,13 +287,17 @@ const OpenNewJobScreen = ({
           <TouchableOpacity
             style={[
               styles.primaryButton,
-              loading && { backgroundColor: color.gray },
+              (loading || !isOnline) && { backgroundColor: color.gray },
             ]}
             onPress={handleSubmit}
-            disabled={loading}
+            disabled={loading || !isOnline}
           >
             <Text style={styles.buttonText}>
-              {loading ? "Submitting..." : "Submit"}
+              {loading
+                ? "Submitting..."
+                : !isOnline
+                ? "Offline (Cannot Submit)"
+                : "Submit"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -280,11 +307,7 @@ const OpenNewJobScreen = ({
 };
 
 const innerStyles = StyleSheet.create({
-  dropdownContainer: {
-    position: "relative",
-    margin: 10,
-    width: "100%",
-  },
+  dropdownContainer: { position: "relative", margin: 10, width: "100%" },
   dropdown: {
     height: 40,
     borderRadius: 8,
@@ -315,6 +338,7 @@ const innerStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: color.secondary,
   },
+  noDataContainer: { padding: 15, alignItems: "center" },
 });
 
 export default OpenNewJobScreen;
