@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
-import Header from "../components/Common/Header";
+import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { AppDispatch, RootState } from "../store";

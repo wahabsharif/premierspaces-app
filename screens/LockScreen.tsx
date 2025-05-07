@@ -1,12 +1,11 @@
 import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useState, useCallback } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Image, Text, View } from "react-native";
 import { Button, Card, Dialog, Portal } from "react-native-paper";
-import PinInput from "../components/AppLock/PinInput";
+import { PinInput } from "../components";
 import styles from "../Constants/styles";
-import { color } from "../Constants/theme";
 
 interface LockScreenProps {
   onUnlock: () => void;

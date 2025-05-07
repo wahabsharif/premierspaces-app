@@ -10,12 +10,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Header from "../components/Common/Header";
+import { Header } from "../components";
 import { BASE_API_URL } from "../Constants/env";
-import commonStyles from "../Constants/styles";
+import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { Job, RootStackParamList } from "../types";
-import styles from "../Constants/styles";
 
 const JobsScreen = ({
   navigation,

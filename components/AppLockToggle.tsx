@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { View, Switch, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { color, fontSize } from "../../Constants/theme";
-import styles from "../../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
+import styles from "../Constants/styles";
 
 interface AppLockToggleProps {
   onLockEnable?: () => void;

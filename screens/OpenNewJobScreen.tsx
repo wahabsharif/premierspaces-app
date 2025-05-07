@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Toast } from "toastify-react-native";
-import Header from "../components/Common/Header";
+import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
 import { syncManager } from "../services/syncManager";

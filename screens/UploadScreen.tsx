@@ -21,9 +21,7 @@ import {
   View,
 } from "react-native";
 import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
-import Header from "../components/Common/Header";
-import { ProgressBar } from "../components/Common/ProgressBar";
-import UploadStatusModal from "../components/UploadStatusModal";
+import { Header, ProgressBar, UploadStatusModal } from "../components";
 import { BASE_API_URL } from "../Constants/env";
 import { default as style, default as styles } from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";

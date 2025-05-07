@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
-import { color, fontSize } from "../../Constants/theme";
-import { ProgressBarProps } from "../../types";
-export const ProgressBar: React.FC<ProgressBarProps> = ({
+import { color, fontSize } from "../Constants/theme";
+import { ProgressBarProps } from "../types";
+const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   uploadedCount,
   totalCount,
@@ -49,3 +49,5 @@ const progressStyles = StyleSheet.create({
     color: color.gray,
   },
 });
+
+export default ProgressBar;

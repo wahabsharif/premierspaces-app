@@ -1,34 +1,29 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  Image,
-  ActivityIndicator,
-  StyleSheet,
-  Dimensions,
-  Modal,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Alert,
-  Platform,
-  Pressable,
-} from "react-native";
-import {
-  Video,
-  AVPlaybackStatus,
-  ResizeMode,
-  VideoFullscreenUpdate,
-} from "expo-av";
-import * as VideoThumbnails from "expo-video-thumbnails";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../types";
-import styles from "../Constants/styles";
-import Header from "../components/Common/Header";
-import VideoThumbnail from "../components/Common/VideoThumbnail";
+import {
+  AVPlaybackStatus,
+  ResizeMode,
+  Video,
+  VideoFullscreenUpdate,
+} from "expo-av";
 import * as ScreenOrientation from "expo-screen-orientation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import styles from "../Constants/styles";
+import { Header, VideoThumbnail } from "../components";
+import { RootStackParamList } from "../types";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NUM_COLUMNS = 2;

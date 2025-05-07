@@ -1,22 +1,22 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import axios from "axios";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  FlatList,
 } from "react-native";
-import Header from "../components/Common/Header";
+import { Header } from "../components";
 import { BASE_API_URL } from "../Constants/env";
-import { color, fontSize } from "../Constants/theme";
-import { RootStackParamList } from "../types";
 import styles from "../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
 import { useReloadOnFocus } from "../hooks";
+import { RootStackParamList } from "../types";
 
 interface Property {
   address: string;

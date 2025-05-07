@@ -4,9 +4,9 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import React, { useEffect, useState } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
-import styles from "../../Constants/styles";
-import { RootStackParamList } from "../../types";
-import { fontSize } from "../../Constants/theme";
+import styles from "../Constants/styles";
+import { RootStackParamList } from "../types";
+import { fontSize } from "../Constants/theme";
 
 type HeaderNavigationProp = StackNavigationProp<
   RootStackParamList,

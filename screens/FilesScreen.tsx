@@ -13,9 +13,9 @@ import {
 import { BASE_API_URL } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import Header from "../components/Common/Header";
-import { FileItem, FileTypeCount, GroupedFiles } from "../types";
+import { Header } from "../components";
 import { formatDate } from "../helper";
+import { FileItem, FileTypeCount, GroupedFiles } from "../types";
 
 const STORAGE_KEYS = {
   USER: "userData",

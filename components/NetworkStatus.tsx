@@ -1,8 +1,8 @@
 import NetInfo from "@react-native-community/netinfo";
 import React, { useEffect, useState } from "react";
 import { Animated, Text } from "react-native";
-import styles from "../../Constants/styles";
-import { color } from "../../Constants/theme";
+import styles from "../Constants/styles";
+import { color } from "../Constants/theme";
 
 type Props = { offset?: number };
 

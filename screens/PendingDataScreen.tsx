@@ -12,10 +12,10 @@ import {
   View,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { Header } from "../components";
+import { SYNC_EVENTS } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import Header from "../components/Common/Header";
-import { SYNC_EVENTS } from "../Constants/env";
 import { formatDate } from "../helper";
 import { getAllJobs } from "../services/jobService";
 import { AppDispatch } from "../store";

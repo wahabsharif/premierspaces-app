@@ -17,7 +17,7 @@ import {
 import { Provider as PaperProvider } from "react-native-paper";
 import { Provider as ReduxProvider } from "react-redux";
 import ToastManager, { Toast } from "toastify-react-native";
-import NetworkStatus from "./components/Common/NetworkStatus";
+import { DataSyncManager, NetworkStatus } from "./components";
 import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "./Constants/env";
 import { fontSize } from "./Constants/theme";
 import { AppNavigator } from "./navigation/AppNavigator";
@@ -25,7 +25,6 @@ import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
 import { fetchJobTypes } from "./store/jobSlice";
-import DataSyncManager from "./components/DataSyncManager";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 // LogBox.ignoreAllLogs();

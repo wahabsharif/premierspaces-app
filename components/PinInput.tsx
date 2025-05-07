@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { StyleSheet, View, TouchableOpacity, Animated } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { color } from "../../Constants/theme";
+import { color } from "../Constants/theme";
 
 interface PinInputProps {
   onSubmit: (pin: string) => void;

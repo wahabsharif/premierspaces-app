@@ -1,11 +1,11 @@
+import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import React, { useState } from "react";
 import { Image, View } from "react-native";
 import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
-import PinInput from "../../components/AppLock/PinInput";
+import { PinInput } from "../../components";
 import styles from "../../Constants/styles";
 import { ChangeAppPinScreenProps } from "../../types";
-import Constants from "expo-constants";
 
 const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   navigation,

@@ -1,7 +1,7 @@
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
-import Header from "../../components/Common/Header";
+import { Header } from "../../components";
 import styles from "../../Constants/styles";
 import { fontSize } from "../../Constants/theme";
 import { RootStackParamList } from "../../types";

@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Header from "../components/Common/Header";
+import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
 import { useAppDispatch, useAppSelector } from "../hooks/reduxHooks";
