@@ -36,7 +36,7 @@ const Header = () => {
     fetchUserData();
   }, []);
 
-  const dropdownOptions = ["Home", "Settings", "Logout"];
+  const dropdownOptions = ["Home", "Settings", "Pending Data", "Logout"];
 
   const handleDropdownPress = () => {
     setDropdownVisible((prev) => !prev);
@@ -61,6 +61,8 @@ const Header = () => {
       navigation.navigate("SettingScreen");
     } else if (option === "Home") {
       navigation.navigate("SearchPropertyScreen");
+    } else if (option === "Pending Data") {
+      navigation.navigate("PendingDataScreen");
     } else if (option === "Logout") {
       handleLogout();
     }

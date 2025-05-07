@@ -8,6 +8,7 @@ import UploadScreen from "../screens/UploadScreen";
 import SettingScreen from "../screens/Settings/SettingScreen";
 import AppLockSettingScreen from "../screens/Settings/AppLockSettingScreen";
 import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
+import PendingDataScreen from "../screens/Pendings/PendingDataScreen";
 import LoginScreen from "../screens/LoginScreen";
 import JobsScreen from "../screens/JobsScreen";
 import OpenNewJobScreen from "../screens/OpenNewJobScreen";
@@ -55,5 +56,6 @@ export const AppNavigator = ({ setIsPickingImage }: AppNavigatorProps) => (
     <Stack.Screen name="JobDetailScreen" component={JobDetailScreen} />
     <Stack.Screen name="MediaPreviewScreen" component={MediaPreviewScreen} />
     <Stack.Screen name="FilesScreen" component={FilesScreen} />
+    <Stack.Screen name="PendingDataScreen" component={PendingDataScreen} />
   </Stack.Navigator>
 );
