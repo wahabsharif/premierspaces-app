@@ -1,11 +1,10 @@
 import * as SQLite from "expo-sqlite";
+import "react-native-get-random-values";
+import { v4 as uuidv4 } from "uuid";
 import { Job } from "../types";
 
-// Database initialization function
 const initializeDatabase = async () => {
-  console.log("[DB] Opening premierDatabase…");
   const db = await SQLite.openDatabaseAsync("premierDatabase");
-  console.log("[DB] Initialized with handle:", db);
 
   // Initialize table
   await db.execAsync(`
@@ -41,15 +40,12 @@ const initializeDatabase = async () => {
       video_file_count TEXT
     );
   `);
-  console.log("[DB] jobs table ready");
 
   return db;
 };
 
-// Initialize database promise
 const dbPromise = initializeDatabase();
 
-// Column definitions
 const COLUMNS = [
   "id",
   "job_num",
@@ -101,7 +97,6 @@ const COLUMNS = [
   "video_file_count",
 ];
 
-// SQL statements using placeholders
 const SQL = {
   INSERT: `INSERT INTO jobs (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(
     () => "?"
@@ -114,40 +109,40 @@ const SQL = {
   DELETE: `DELETE FROM jobs WHERE id = ?;`,
 };
 
-/**
- * Create a new job
- */
 export async function createJob(job: Job): Promise<string> {
   const db = await dbPromise;
-  console.log("[createJob] Inserting job:", job);
+
+  if (!job.id || job.id.trim() === "") {
+    job.id = uuidv4();
+  }
+
+  if (!job.date_created) {
+    job.date_created = new Date().toISOString();
+  }
+
   const statement = await db.prepareAsync(SQL.INSERT);
   try {
-    const params = COLUMNS.map((col) => (job as any)[col]);
-    console.log("[createJob] SQL params:", params);
+    const params = COLUMNS.map((col) => {
+      const value = (job as any)[col];
+      return value !== undefined ? value : null;
+    });
+
     const result = await statement.executeAsync(params);
-    console.log("[createJob] Result:", result);
-    return result.lastInsertRowId?.toString() ?? "";
+    return job.id;
   } catch (err) {
     console.error("[createJob] ERROR:", err);
     throw err;
   } finally {
     await statement.finalizeAsync();
-    console.log("[createJob] Statement finalized");
   }
 }
 
-/**
- * Get a job by ID
- */
 export async function getJobById(id: string): Promise<Job | null> {
-  console.log("[getJobById] Fetching job id=", id);
-
   const db = await dbPromise;
   const statement = await db.prepareAsync(SQL.SELECT_BY_ID);
   try {
     const result = await statement.executeAsync([id]);
     const row = await result.getFirstAsync();
-    console.log("[getJobById] Row:", row);
 
     return row as Job | null;
   } finally {
@@ -155,21 +150,14 @@ export async function getJobById(id: string): Promise<Job | null> {
   }
 }
 
-/**
- * Get all jobs
- * Updated to properly handle SQLite query results
- */
 export async function getAllJobs(): Promise<Job[]> {
-  console.log("[getAllJobs] Fetching all jobs");
   const db = await dbPromise;
 
   try {
     const statement = await db.prepareAsync(SQL.SELECT_ALL);
     const result = await statement.executeAsync([]);
 
-    // Get all rows from the result
     const rows = await result.getAllAsync();
-    console.log(`[getAllJobs] Found ${rows.length} jobs`);
 
     return rows as Job[];
   } catch (error) {
@@ -177,13 +165,7 @@ export async function getAllJobs(): Promise<Job[]> {
     throw error;
   }
 }
-
-/**
- * Update an existing job
- */
 export async function updateJob(job: Job): Promise<number> {
-  console.log("[updateJob] Updating job:", job.id);
-
   const db = await dbPromise;
   const statement = await db.prepareAsync(SQL.UPDATE);
   try {
@@ -192,7 +174,6 @@ export async function updateJob(job: Job): Promise<number> {
     );
     params.push(job.id);
     const result = await statement.executeAsync(params);
-    console.log("[updateJob] Changes:", result.changes);
 
     return result.changes;
   } finally {
@@ -200,17 +181,11 @@ export async function updateJob(job: Job): Promise<number> {
   }
 }
 
-/**
- * Delete a job by ID
- */
 export async function deleteJob(id: string): Promise<number> {
-  console.log("[deleteJob] Deleting job id=", id);
-
   const db = await dbPromise;
   const statement = await db.prepareAsync(SQL.DELETE);
   try {
     const result = await statement.executeAsync([id]);
-    console.log("[deleteJob] Rows deleted:", result.changes);
 
     return result.changes;
   } finally {

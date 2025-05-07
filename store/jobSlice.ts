@@ -1,18 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
-import NetInfo from "@react-native-community/netinfo";
 import {
   BASE_API_URL,
   JOB_TYPES_CACHE_EXPIRY,
   JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
+import { createJob as createOfflineJob } from "../services/jobService";
+import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
 import { RootState } from "./index";
-import { saveOfflineJob } from "../services/offlineJobService";
-import { syncManager } from "../services/syncManager";
 
-// Cache utility functions
 export const saveToCache = async (key: string, data: any) => {
   try {
     await AsyncStorage.setItem(
@@ -54,17 +53,13 @@ export interface JobTypeState {
   lastFetched: number | null;
 }
 
-// Thunk: fetch job types with offline cache fallback
 export const fetchJobTypes = createAsyncThunk<
   Job[],
   { userId: string },
   { rejectValue: string; state: RootState }
 >("jobTypes/fetch", async ({ userId }, { rejectWithValue, getState }) => {
-  console.log("[Slice][fetchJobTypes] Called for user:", userId);
-
   const cacheKey = `${JOB_TYPES_CACHE_KEY}_${userId}`;
 
-  // Check if we already have fresh data in Redux store
   const { lastFetched, items } = getState().job.jobTypes;
   const isFresh =
     lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
@@ -74,14 +69,11 @@ export const fetchJobTypes = createAsyncThunk<
   }
 
   try {
-    console.log("[Slice] Attempting remote fetch…");
     const resp = await axios.get(
       `${BASE_API_URL}/jobtypes.php?userid=${userId}`
     );
-    console.log("[Slice] Remote fetch success, payload:", resp.data.payload);
 
     const jobTypes = resp.data.payload as Job[];
-    // Save fresh data
     saveToCache(cacheKey, jobTypes);
     return jobTypes;
   } catch (err: any) {
@@ -94,26 +86,21 @@ export const fetchJobTypes = createAsyncThunk<
   }
 });
 
-// Thunk: create a new job with offline support
 export const createJob = createAsyncThunk<
   any,
   { userId: string; jobData: Job },
   { rejectValue: string }
 >("job/create", async ({ userId, jobData }, { rejectWithValue }) => {
   try {
-    // Check network status
     const netInfo = await NetInfo.fetch();
 
     if (netInfo.isConnected) {
-      // Online: send immediately to server
       const postData = { userid: userId, payload: jobData };
       const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
       return response.data;
     } else {
-      // Offline: store locally for later sync
-      const offlineId = await saveOfflineJob(userId, jobData);
+      const offlineId = await createOfflineJob(jobData);
 
-      // Return a custom response that mimics the server
       return {
         message: "Job saved offline and will be synced when online",
         offlineId,
@@ -125,7 +112,6 @@ export const createJob = createAsyncThunk<
   }
 });
 
-// Thunk: sync all pending jobs
 export const syncPendingJobs = createAsyncThunk<
   { syncedCount: number; failedCount: number },
   void,
@@ -134,8 +120,6 @@ export const syncPendingJobs = createAsyncThunk<
   try {
     return new Promise((resolve, reject) => {
       let complete = false;
-
-      // Add a listener for sync completion
       const unsubscribe = syncManager.addSyncListener((syncState) => {
         if (syncState.status === "complete" && !complete) {
           complete = true;
@@ -151,10 +135,8 @@ export const syncPendingJobs = createAsyncThunk<
         }
       });
 
-      // Start the sync
       syncManager.manualSync();
 
-      // Safety timeout - resolve after 30s if not completed
       setTimeout(() => {
         if (!complete) {
           complete = true;
@@ -206,7 +188,6 @@ const slice = createSlice({
       .addCase(createJob.fulfilled, (state, action) => {
         state.job.loading = false;
         state.job.success = true;
-        // If job was saved offline, increment pending count
         if (action.payload?.isOffline) {
           state.job.pendingCount += 1;
         }
@@ -232,7 +213,6 @@ const slice = createSlice({
         state.jobTypes.error = action.payload || "Failed to load job types";
       })
       .addCase(syncPendingJobs.fulfilled, (state, action) => {
-        // Update pending count after sync
         if (action.payload.syncedCount > 0) {
           state.job.pendingCount = Math.max(
             0,

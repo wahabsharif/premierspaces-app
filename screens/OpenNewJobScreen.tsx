@@ -1,5 +1,6 @@
 import AntDesign from "@expo/vector-icons/AntDesign";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -12,28 +13,24 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Alert,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Toast } from "toastify-react-native";
 import Header from "../components/Common/Header";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
+import { syncManager } from "../services/syncManager";
 import { AppDispatch } from "../store";
 import {
   createJob,
   fetchJobTypes,
   resetJobState,
   resetJobTypes,
+  selectIsJobTypesStale,
   selectJobState,
   selectJobTypes,
-  selectIsJobTypesStale,
-  selectPendingJobsCount,
-  syncPendingJobs,
-} from "../store/createJobSlice";
-import { PropertyData, RootStackParamList, Job } from "../types";
-import NetInfo from "@react-native-community/netinfo";
-import { syncManager } from "../services/syncManager";
+} from "../store/jobSlice";
+import { Job, PropertyData, RootStackParamList } from "../types";
 
 type TasksState = Record<string, string>;
 const TASK_KEYS = Array.from({ length: 10 }, (_, i) => `task${i + 1}`);
@@ -43,7 +40,6 @@ const OpenNewJobScreen = ({
 }: NativeStackScreenProps<RootStackParamList, "OpenNewJobScreen">) => {
   const dispatch = useDispatch<AppDispatch>();
   const { loading, success, error } = useSelector(selectJobState);
-  const pendingCount = useSelector(selectPendingJobsCount);
   const { items: jobTypes, loading: typesLoading } =
     useSelector(selectJobTypes);
   const isStale = useSelector(selectIsJobTypesStale);
@@ -68,29 +64,23 @@ const OpenNewJobScreen = ({
   const [inputHeights, setInputHeights] = useState(initialHeights);
   const [syncState, setSyncState] = useState({ syncing: false, message: "" });
 
-  const showSuccess = useCallback((msg: string) => Toast.success(msg), []);
-  const showError = useCallback((msg: string) => Toast.error(msg), []);
-  const showInfo = useCallback((msg: string) => Toast.info(msg), []);
+  const showSuccess = useCallback((msg: string) => {
+    Toast.success(msg);
+  }, []);
 
-  // Network status monitoring
+  const showError = useCallback((msg: string) => {
+    Toast.error(msg);
+  }, []);
+
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       const online = state.isConnected ?? false;
       setIsOnline(online);
-      if (online && userId && isStale) {
-        dispatch(fetchJobTypes({ userId }));
-        if (pendingCount > 0) {
-          showInfo("Connected. Syncing pending jobs...");
-          dispatch(syncPendingJobs());
-        } else {
-          showInfo("Connected. Refreshing job types.");
-        }
-      }
     });
-    return unsub;
-  }, [dispatch, userId, isStale, pendingCount]);
 
-  // Sync status listener
+    return unsub;
+  }, [dispatch, userId, isStale]);
+
   useEffect(() => {
     const unsubscribe = syncManager.addSyncListener((state) => {
       setSyncState({
@@ -102,7 +92,6 @@ const OpenNewJobScreen = ({
     return unsubscribe;
   }, []);
 
-  // Initial data loading
   useEffect(() => {
     (async () => {
       try {
@@ -112,22 +101,31 @@ const OpenNewJobScreen = ({
           AsyncStorage.getItem("selectedJobType"),
         ]);
 
-        if (propStr) setPropertyData(JSON.parse(propStr));
+        if (propStr) {
+          const parsedProp = JSON.parse(propStr);
+          setPropertyData(parsedProp);
+        }
+
         if (userStr) {
           const u = JSON.parse(userStr);
           const uid = u.payload?.userid ?? u.userid;
           setUserId(uid);
 
-          // Only fetch job types if they are stale - we rely on app initialization to have pre-cached them
           if (isStale) {
             dispatch(fetchJobTypes({ userId: uid }));
+          } else {
           }
         }
-        if (typeStr) setSelectedJobType(JSON.parse(typeStr));
-      } catch {
+
+        if (typeStr) {
+          const parsedType = JSON.parse(typeStr);
+          setSelectedJobType(parsedType);
+        }
+      } catch (error) {
         showError("Error loading initial data");
       }
     })();
+
     return () => {
       dispatch(resetJobTypes());
     };
@@ -153,7 +151,12 @@ const OpenNewJobScreen = ({
   const handleSelectJobType = useCallback(async (job: Job) => {
     setSelectedJobType(job);
     setDropdownOpen(false);
-    await AsyncStorage.setItem("selectedJobType", JSON.stringify(job));
+
+    try {
+      await AsyncStorage.setItem("selectedJobType", JSON.stringify(job));
+    } catch (error) {
+      error instanceof Object ? error : { message: String(error) };
+    }
   }, []);
 
   const handleTaskChange = useCallback((key: string, val: string) => {
@@ -167,36 +170,15 @@ const OpenNewJobScreen = ({
   }, []);
 
   const handleSubmit = useCallback(() => {
-    if (!propertyData?.id || !selectedJobType?.id)
+    if (!propertyData?.id || !selectedJobType?.id) {
       return showError("Select property and job type");
-
-    // If offline, confirm with user
-    if (!isOnline) {
-      Alert.alert(
-        "Offline Mode",
-        "You're currently offline. The job will be saved locally and synced when you reconnect to the internet.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Save Offline",
-            onPress: () => {
-              const payload = {
-                property_id: propertyData.id,
-                job_type: `${selectedJobType.id}`,
-                ...TASK_KEYS.reduce(
-                  (acc, key) => ({ ...acc, [key]: jobTasks[key] || "" }),
-                  {}
-                ),
-              } as Job;
-              dispatch(createJob({ userId, jobData: payload }));
-            },
-          },
-        ]
-      );
-      return;
     }
 
-    // If online, proceed normally
+    // Check if task1 is filled out (required)
+    if (!jobTasks.task1 || jobTasks.task1.trim() === "") {
+      return showError("Task 1 is required");
+    }
+
     const payload = {
       property_id: propertyData.id,
       job_type: `${selectedJobType.id}`,
@@ -205,23 +187,15 @@ const OpenNewJobScreen = ({
         {}
       ),
     } as Job;
+
     dispatch(createJob({ userId, jobData: payload }));
   }, [dispatch, isOnline, propertyData, selectedJobType, jobTasks, userId]);
 
-  const handleSyncNow = useCallback(() => {
-    if (isOnline && pendingCount > 0) {
-      dispatch(syncPendingJobs());
-    } else if (!isOnline) {
-      showInfo("You're offline. Sync will start when connected.");
-    } else {
-      showInfo("No pending jobs to sync.");
-    }
-  }, [dispatch, isOnline, pendingCount]);
-
   const measureDropdown = useCallback(() => {
-    dropdownRef.current?.measure((x, y, w, h, px, py) =>
-      setDropdownPos({ top: py + h, left: px, width: w })
-    );
+    dropdownRef.current?.measure((x, y, w, h, px, py) => {
+      const newPos = { top: py + h, left: px, width: w };
+      setDropdownPos(newPos);
+    });
   }, []);
 
   interface ContentSizeChangeEvent {
@@ -261,13 +235,6 @@ const OpenNewJobScreen = ({
       >
         <View style={styles.container}>
           <Text style={styles.heading}>Create New Job</Text>
-
-          {syncState.syncing && (
-            <View style={innerStyles.syncingBanner}>
-              <Text style={innerStyles.syncingText}>{syncState.message}</Text>
-            </View>
-          )}
-
           {propertyData && (
             <View style={styles.screenBanner}>
               <Text style={styles.bannerLabel}>Selected Property:</Text>
@@ -303,12 +270,16 @@ const OpenNewJobScreen = ({
               visible={dropdownOpen}
               transparent
               animationType="fade"
-              onRequestClose={() => setDropdownOpen(false)}
+              onRequestClose={() => {
+                setDropdownOpen(false);
+              }}
             >
               <TouchableOpacity
                 style={styles.modalContainer}
                 activeOpacity={1}
-                onPress={() => setDropdownOpen(false)}
+                onPress={() => {
+                  setDropdownOpen(false);
+                }}
               >
                 <View
                   style={[
@@ -347,11 +318,21 @@ const OpenNewJobScreen = ({
             <View key={key} style={styles.inputContainer}>
               <TextInput
                 multiline
-                placeholder={`Enter ${key}`}
+                placeholder={
+                  key === "task1" ? "Enter task1 (required)" : `Enter ${key}`
+                }
                 value={jobTasks[key]}
                 onChangeText={(text) => handleTaskChange(key, text)}
                 onContentSizeChange={(e) => handleContentSizeChange(key, e)}
-                style={[styles.input, { height: inputHeights[key] }]}
+                style={[
+                  styles.input,
+                  { height: inputHeights[key] },
+                  key === "task1" &&
+                    !jobTasks.task1 && {
+                      borderColor: color.primary,
+                      borderWidth: 2,
+                    },
+                ]}
               />
             </View>
           ))}
@@ -364,11 +345,7 @@ const OpenNewJobScreen = ({
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {loading
-                ? "Submitting..."
-                : !isOnline
-                ? "Save Offline"
-                : "Submit"}
+              {loading ? "Submitting..." : !isOnline ? "Save" : "Submit"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -410,36 +387,6 @@ const innerStyles = StyleSheet.create({
     borderBottomColor: color.secondary,
   },
   noDataContainer: { padding: 15, alignItems: "center" },
-  statusBanner: {
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 10,
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  syncButton: {
-    backgroundColor: color.primary,
-    padding: 8,
-    borderRadius: 5,
-  },
-  syncButtonText: {
-    color: color.white,
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  syncingBanner: {
-    backgroundColor: "#e8f0fe",
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 10,
-    width: "100%",
-  },
-  syncingText: {
-    textAlign: "center",
-    fontStyle: "italic",
-  },
 });
 
 export default OpenNewJobScreen;
