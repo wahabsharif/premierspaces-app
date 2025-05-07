@@ -111,7 +111,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         if (storedUserData) {
           const parsedUserData = JSON.parse(storedUserData);
           setUserData(parsedUserData);
-          console.log("Retrieved user data:", parsedUserData);
+          console.log("User Data:", parsedUserData);
         }
       } catch (error) {
         // console.error("Error fetching user data:", error);

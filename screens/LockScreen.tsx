@@ -28,18 +28,14 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   // Create a memoized version of the biometric authentication function
   const attemptBiometricAuth = useCallback(async () => {
     try {
-      console.log("Starting biometric authentication...");
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "Unlock with Fingerprint or Face ID",
         fallbackLabel: "Use PIN",
         disableDeviceFallback: false,
       });
-      console.log("Biometric auth result:", result);
       if (result.success) {
-        console.log("Biometric auth successful");
         onUnlock();
       } else {
-        console.log("Biometric auth failed:", result.error);
         showAlert(
           "Authentication Failed",
           "Biometric authentication didn’t work. Please enter your PIN."
@@ -67,7 +63,6 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
     const initializeAuth = async () => {
       try {
-        console.log("Initializing authentication...");
         const storedPin = await SecureStore.getItemAsync("app_pin");
 
         if (!isMounted) return;
@@ -80,15 +75,6 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           const isBiometricAvailable = await isBiometricSupported();
           const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-          console.log(
-            "PIN set, biometrics enabled:",
-            biometricsEnabled,
-            "available:",
-            isBiometricAvailable,
-            "enrolled:",
-            isEnrolled
-          );
-
           if (!isMounted) return;
 
           if (
@@ -97,10 +83,8 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
             isEnrolled
           ) {
             setIsBiometricsEnabled(true);
-            console.log("Scheduling biometric auth");
             setTimeout(() => {
               if (isMounted) {
-                console.log("Attempting biometric auth now");
                 attemptBiometricAuth();
               }
             }, 1000);

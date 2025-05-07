@@ -46,7 +46,6 @@ const LoginScreen = ({ navigation, onLoginSuccess }: LoginScreenProps) => {
         }
       })
       .catch((err) => {
-        console.log("Login error:", err);
         setAlertMessage(err.toString());
         setAlertVisible(true);
       });

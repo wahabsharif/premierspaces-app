@@ -41,7 +41,6 @@ export class SyncManager {
       if (jobs.length > 0) {
         const isConnected = (await NetInfo.fetch()).isConnected;
         if (isConnected && !this.isSyncing) {
-          console.log(`[SyncManager] Found ${jobs.length} jobs to sync`);
           this.syncPendingJobs();
         }
       }
