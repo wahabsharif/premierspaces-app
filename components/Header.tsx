@@ -87,7 +87,7 @@ const Header = () => {
           activeOpacity={0.7}
         >
           <Image
-            source={require("../../assets/logo.png")}
+            source={require("../assets/logo.png")}
             style={styles.headerLogo}
             resizeMode="contain"
           />
