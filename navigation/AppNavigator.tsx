@@ -8,7 +8,7 @@ import UploadScreen from "../screens/UploadScreen";
 import SettingScreen from "../screens/Settings/SettingScreen";
 import AppLockSettingScreen from "../screens/Settings/AppLockSettingScreen";
 import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
-import PendingDataScreen from "../screens/Pendings/PendingDataScreen";
+import PendingDataScreen from "../screens/PendingDataScreen";
 import LoginScreen from "../screens/LoginScreen";
 import JobsScreen from "../screens/JobsScreen";
 import OpenNewJobScreen from "../screens/OpenNewJobScreen";
