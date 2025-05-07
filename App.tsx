@@ -24,7 +24,7 @@ import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
-import { fetchJobTypes } from "./store/createJobSlice";
+import { fetchJobTypes } from "./store/jobSlice";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 // LogBox.ignoreAllLogs();
