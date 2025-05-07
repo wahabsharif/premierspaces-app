@@ -60,6 +60,8 @@ export const fetchJobTypes = createAsyncThunk<
   { userId: string },
   { rejectValue: string; state: RootState }
 >("jobTypes/fetch", async ({ userId }, { rejectWithValue, getState }) => {
+  console.log("[Slice][fetchJobTypes] Called for user:", userId);
+
   const cacheKey = `${JOB_TYPES_CACHE_KEY}_${userId}`;
 
   // Check if we already have fresh data in Redux store
@@ -72,16 +74,18 @@ export const fetchJobTypes = createAsyncThunk<
   }
 
   try {
-    // Try network first
+    console.log("[Slice] Attempting remote fetch…");
     const resp = await axios.get(
       `${BASE_API_URL}/jobtypes.php?userid=${userId}`
     );
+    console.log("[Slice] Remote fetch success, payload:", resp.data.payload);
+
     const jobTypes = resp.data.payload as Job[];
     // Save fresh data
     saveToCache(cacheKey, jobTypes);
     return jobTypes;
   } catch (err: any) {
-    // Fallback to cache when error or offline
+    console.warn("[Slice] Remote fetch failed, falling back to cache:", err);
     const cachedData = await getFromCache(cacheKey);
     if (cachedData?.data) {
       return cachedData.data as Job[];

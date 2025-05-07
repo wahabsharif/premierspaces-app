@@ -12,6 +12,7 @@ export type RootStackParamList = {
   FilesScreen: undefined;
   MediaPreviewScreen: { jobId: string; fileCategory: string };
   JobsScreen: undefined;
+  PendingDataScreen: undefined;
   JobDetailScreen: { id: string };
 };
 
@@ -70,7 +71,7 @@ export interface Job {
   image_file_count: string;
   doc_file_count: string;
   video_file_count: string;
-  [key: string]: string;
+  [key: string]: string | undefined;
 }
 
 export interface ProgressBarProps {

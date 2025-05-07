@@ -1,14 +1,13 @@
 import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
-import { BASE_API_URL } from "../Constants/env";
-import { Job } from "../types";
-import {
-  getPendingJobs,
-  getOfflineJob,
-  markJobAsSynced,
-  deleteOfflineJob,
-} from "./offlineJobService";
 import { Toast } from "toastify-react-native";
+import { BASE_API_URL } from "../Constants/env";
+import {
+  deleteOfflineJob,
+  getOfflineJob,
+  getPendingJobs,
+  markJobAsSynced,
+} from "./offlineJobService";
 
 /**
  * Manages synchronization of offline data with the server
@@ -29,8 +28,8 @@ export class SyncManager {
    * Initialize sync manager and set up network listeners
    */
   public initialize(): void {
-    // Listen for network state changes
     NetInfo.addEventListener((state) => {
+      console.log("[SyncManager] Network status:", state);
       if (state.isConnected) {
         this.syncPendingJobs();
       }
@@ -58,16 +57,21 @@ export class SyncManager {
    * Syncs all pending jobs with the server
    */
   public async syncPendingJobs(): Promise<void> {
+    console.log("[SyncManager] syncPendingJobs() called");
+
     if (this.isSyncing) return;
 
     try {
       this.isSyncing = true;
+
       this.notifySyncListeners({
         status: "syncing",
         message: "Syncing offline jobs...",
       });
 
       const pendingJobIds = await getPendingJobs();
+      console.log("[SyncManager] Pending IDs:", pendingJobIds);
+
       if (pendingJobIds.length === 0) {
         this.notifySyncListeners({
           status: "complete",
@@ -81,8 +85,12 @@ export class SyncManager {
       let failedCount = 0;
 
       for (const jobId of pendingJobIds) {
+        console.log(`[SyncManager] Syncing job id=${jobId}`);
+
         try {
           const job = await getOfflineJob(jobId);
+          console.log("[SyncManager] Fetched offline job:", job);
+
           if (!job) continue;
 
           const { _syncData, ...jobData } = job as any;
@@ -95,6 +103,7 @@ export class SyncManager {
           };
 
           await axios.post(`${BASE_API_URL}/newjob.php`, postData);
+          console.log("[SyncManager] POST success for", jobId);
 
           // Mark as synced and delete from local storage
           await markJobAsSynced(jobId);
@@ -124,6 +133,9 @@ export class SyncManager {
         syncedCount,
         failedCount,
       });
+      console.log(
+        `[SyncManager] Completed: ${syncedCount} synced, ${failedCount} failed`
+      );
 
       Toast.success(finalMessage);
     } catch (error) {
@@ -142,6 +154,8 @@ export class SyncManager {
    * Manual trigger for sync
    */
   public async manualSync(): Promise<void> {
+    console.log("[SyncManager] manualSync triggered");
+
     const isConnected = (await NetInfo.fetch()).isConnected;
 
     if (isConnected) {

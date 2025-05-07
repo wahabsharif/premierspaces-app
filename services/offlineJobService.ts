@@ -1,8 +1,9 @@
+import "react-native-get-random-values";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SQLite from "expo-sqlite";
 import { v4 as uuidv4 } from "uuid";
 import { Job } from "../types";
-import { createJob as apiCreateJob } from "./createJobService";
+import { createJob as apiCreateJob } from "./jobService";
 
 // Constants
 const PENDING_JOBS_KEY = "PENDING_OFFLINE_JOBS";
@@ -14,9 +15,11 @@ export async function saveOfflineJob(
   userId: string,
   jobData: Job
 ): Promise<string> {
+  console.log("[Offline] Creating offline job for user:", userId);
   try {
     // Generate a temporary offline ID
     const offlineId = `offline_${uuidv4()}`;
+    console.log("[Offline] Generated offlineId:", offlineId);
 
     // Add metadata for syncing
     const offlineJob = {
@@ -30,6 +33,7 @@ export async function saveOfflineJob(
         synced: false,
       },
     };
+    console.log("[Offline] Job payload:", offlineJob);
 
     // Save to SQLite
     const { _syncData, ...jobWithoutSyncData } = offlineJob;
@@ -41,6 +45,7 @@ export async function saveOfflineJob(
       PENDING_JOBS_KEY,
       JSON.stringify([...existingJobs, offlineId])
     );
+    console.log("[Offline] Saved to SQLite and AsyncStorage");
 
     return offlineId;
   } catch (error) {
@@ -55,6 +60,8 @@ export async function saveOfflineJob(
 export async function getPendingJobs(): Promise<string[]> {
   try {
     const pendingJobs = await AsyncStorage.getItem(PENDING_JOBS_KEY);
+    console.log("[Offline] Pending job IDs:", pendingJobs);
+
     return pendingJobs ? JSON.parse(pendingJobs) : [];
   } catch (error) {
     console.error("Error getting pending jobs:", error);
@@ -66,6 +73,8 @@ export async function getPendingJobs(): Promise<string[]> {
  * Marks a job as synced
  */
 export async function markJobAsSynced(jobId: string): Promise<void> {
+  console.log("[Offline] Marking synced:", jobId);
+
   try {
     // Remove from pending jobs
     const pendingJobs = await getPendingJobs();
@@ -88,12 +97,15 @@ export async function markJobAsSynced(jobId: string): Promise<void> {
   } catch (error) {
     console.error("Error marking job as synced:", error);
   }
+  console.log("[Offline] Status updated in SQLite");
 }
 
 /**
  * Deletes a job from local storage after successful sync
  */
 export async function deleteOfflineJob(jobId: string): Promise<void> {
+  console.log("[Offline] Deleting from SQLite:", jobId);
+
   try {
     const db = await SQLite.openDatabaseAsync("premierDatabase");
     const statement = await db.prepareAsync(`DELETE FROM jobs WHERE id = ?;`);
@@ -105,6 +117,7 @@ export async function deleteOfflineJob(jobId: string): Promise<void> {
   } catch (error) {
     console.error("Error deleting offline job:", error);
   }
+  console.log("[Offline] deleteOfflineJob complete");
 }
 
 /**
