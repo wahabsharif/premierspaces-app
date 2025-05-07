@@ -1,3 +1,4 @@
+export { default as CacheService } from "./CacheService";
 export { default as AppLockToggle } from "./AppLockToggle";
 export { default as DataSyncManager } from "./DataSyncManager";
 export { default as Header } from "./Header";
