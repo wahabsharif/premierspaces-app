@@ -25,6 +25,7 @@ import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
 import { fetchJobTypes } from "./store/jobSlice";
+import DataSyncManager from "./components/DataSyncManager";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 // LogBox.ignoreAllLogs();
@@ -78,15 +79,10 @@ export default function App() {
 
         if (jobTypes && Array.isArray(jobTypes)) {
           await saveToCache(cacheKey, jobTypes);
-          console.log(
-            "Job types cached successfully during app initialization"
-          );
 
           // Also dispatch to Redux store to keep it in sync
           store.dispatch(fetchJobTypes({ userId }));
         }
-      } else {
-        console.log("Offline during initialization, will use existing cache");
       }
     } catch (error) {
       console.error("Error prefetching job types:", error);
@@ -187,43 +183,55 @@ export default function App() {
     <PaperProvider>
       <SQLiteProvider databaseName="premierDatabase.db">
         <ReduxProvider store={store}>
-          <SafeAreaView style={styles.container}>
-            <NetworkStatus />
-            <ToastManager
-              position="bottom"
-              style={{
-                flexDirection: "column-reverse",
-                justifyContent: "flex-end",
-                fontSize: fontSize.xs,
-                width: "100%",
-                padding: 10,
-              }}
-            />
+          <DataSyncManager>
+            <SafeAreaView style={styles.container}>
+              <NetworkStatus />
+              <ToastManager
+                position="bottom"
+                style={{
+                  flexDirection: "column-reverse",
+                  justifyContent: "flex-end",
+                  width: "100%",
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 6,
+                }}
+                textStyle={{
+                  fontSize: fontSize.xs,
+                  lineHeight: fontSize.xs * 1.4,
+                  flexWrap: "wrap",
+                  includeFontPadding: false,
+                }}
+              />
 
-            <ImageBackground source={backgroundImage} style={styles.background}>
-              <NavigationContainer>
-                {isUnlocked ? (
-                  isLoggedIn ? (
-                    <AppNavigator setIsPickingImage={setIsPickingImage} />
+              <ImageBackground
+                source={backgroundImage}
+                style={styles.background}
+              >
+                <NavigationContainer>
+                  {isUnlocked ? (
+                    isLoggedIn ? (
+                      <AppNavigator setIsPickingImage={setIsPickingImage} />
+                    ) : (
+                      <LoginScreen
+                        onLoginSuccess={() => {
+                          setIsLoggedIn(true);
+                          Toast.success("Login successful!");
+                        }}
+                      />
+                    )
                   ) : (
-                    <LoginScreen
-                      onLoginSuccess={() => {
-                        setIsLoggedIn(true);
-                        Toast.success("Login successful!");
+                    <LockScreen
+                      onUnlock={() => {
+                        setIsUnlocked(true);
+                        Toast.success("Unlocked!");
                       }}
                     />
-                  )
-                ) : (
-                  <LockScreen
-                    onUnlock={() => {
-                      setIsUnlocked(true);
-                      Toast.success("Unlocked!");
-                    }}
-                  />
-                )}
-              </NavigationContainer>
-            </ImageBackground>
-          </SafeAreaView>
+                  )}
+                </NavigationContainer>
+              </ImageBackground>
+            </SafeAreaView>
+          </DataSyncManager>
         </ReduxProvider>
       </SQLiteProvider>
     </PaperProvider>

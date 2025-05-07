@@ -1,21 +1,17 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
+import { DeviceEventEmitter } from "react-native";
 import { Toast } from "toastify-react-native";
+import { SYNC_EVENTS } from "../Constants/env";
 import { BASE_API_URL } from "../Constants/env";
-import {
-  deleteOfflineJob,
-  getOfflineJob,
-  getPendingJobs,
-  markJobAsSynced,
-} from "./offlineJobService";
+import { deleteJob, getAllJobs } from "./jobService";
 
-/**
- * Manages synchronization of offline data with the server
- */
 export class SyncManager {
   private static instance: SyncManager;
   private isSyncing: boolean = false;
   private syncListeners: Array<(syncState: SyncState) => void> = [];
+  private networkChangeListener: (() => void) | null = null;
 
   public static getInstance(): SyncManager {
     if (!SyncManager.instance) {
@@ -24,21 +20,36 @@ export class SyncManager {
     return SyncManager.instance;
   }
 
-  /**
-   * Initialize sync manager and set up network listeners
-   */
   public initialize(): void {
-    NetInfo.addEventListener((state) => {
-      console.log("[SyncManager] Network status:", state);
+    if (this.networkChangeListener) {
+      this.networkChangeListener();
+      this.networkChangeListener = null;
+    }
+
+    this.networkChangeListener = NetInfo.addEventListener((state) => {
       if (state.isConnected) {
-        this.syncPendingJobs();
+        this.checkAndSync();
       }
     });
+
+    this.checkAndSync();
   }
 
-  /**
-   * Add a listener for sync state changes
-   */
+  private async checkAndSync(): Promise<void> {
+    try {
+      const jobs = await getAllJobs();
+      if (jobs.length > 0) {
+        const isConnected = (await NetInfo.fetch()).isConnected;
+        if (isConnected && !this.isSyncing) {
+          console.log(`[SyncManager] Found ${jobs.length} jobs to sync`);
+          this.syncPendingJobs();
+        }
+      }
+    } catch (error) {
+      console.error("[SyncManager] Error checking jobs:", error);
+    }
+  }
+
   public addSyncListener(listener: (syncState: SyncState) => void): () => void {
     this.syncListeners.push(listener);
     return () => {
@@ -46,122 +57,117 @@ export class SyncManager {
     };
   }
 
-  /**
-   * Notify listeners of sync state changes
-   */
   private notifySyncListeners(state: SyncState): void {
     this.syncListeners.forEach((listener) => listener(state));
+
+    switch (state.status) {
+      case "syncing":
+        DeviceEventEmitter.emit(SYNC_EVENTS.SYNC_STARTED);
+        break;
+      case "complete":
+        DeviceEventEmitter.emit(SYNC_EVENTS.SYNC_COMPLETED, {
+          syncedCount: state.syncedCount,
+          failedCount: state.failedCount,
+        });
+        break;
+      case "error":
+        DeviceEventEmitter.emit(SYNC_EVENTS.SYNC_FAILED, {
+          message: state.message,
+        });
+        break;
+    }
   }
 
-  /**
-   * Syncs all pending jobs with the server
-   */
   public async syncPendingJobs(): Promise<void> {
-    console.log("[SyncManager] syncPendingJobs() called");
-
     if (this.isSyncing) return;
+    this.isSyncing = true;
+    this.notifySyncListeners({
+      status: "syncing",
+      message: "Syncing offline jobs...",
+    });
 
     try {
-      this.isSyncing = true;
-
-      this.notifySyncListeners({
-        status: "syncing",
-        message: "Syncing offline jobs...",
-      });
-
-      const pendingJobIds = await getPendingJobs();
-      console.log("[SyncManager] Pending IDs:", pendingJobIds);
-
-      if (pendingJobIds.length === 0) {
+      const userDataStr = await AsyncStorage.getItem("userData");
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const userId = userData?.userid || userData?.payload?.userid;
+      if (!userId) {
+        throw new Error("No user ID in storage; cannot sync jobs.");
+      }
+      const allJobs = await getAllJobs();
+      if (allJobs.length === 0) {
         this.notifySyncListeners({
           status: "complete",
           message: "No jobs to sync",
         });
+        this.isSyncing = false;
         return;
       }
 
-      const totalJobs = pendingJobIds.length;
       let syncedCount = 0;
       let failedCount = 0;
 
-      for (const jobId of pendingJobIds) {
-        console.log(`[SyncManager] Syncing job id=${jobId}`);
-
+      for (const job of allJobs as any[]) {
         try {
-          const job = await getOfflineJob(jobId);
-          console.log("[SyncManager] Fetched offline job:", job);
+          await axios.post(`${BASE_API_URL}/newjob.php`, {
+            userid: userId,
+            payload: job,
+          });
 
-          if (!job) continue;
-
-          const { _syncData, ...jobData } = job as any;
-          if (!_syncData?.userId) continue;
-
-          // Send to server
-          const postData = {
-            userid: _syncData.userId,
-            payload: jobData,
-          };
-
-          await axios.post(`${BASE_API_URL}/newjob.php`, postData);
-          console.log("[SyncManager] POST success for", jobId);
-
-          // Mark as synced and delete from local storage
-          await markJobAsSynced(jobId);
-          await deleteOfflineJob(jobId);
-
+          await deleteJob(job.id);
           syncedCount++;
+
           this.notifySyncListeners({
             status: "in_progress",
-            message: `Synced ${syncedCount}/${totalJobs} jobs`,
-            progress: syncedCount / totalJobs,
+            message: `Synced ${syncedCount}/${allJobs.length} jobs`,
+            progress: syncedCount / allJobs.length,
+            syncedCount,
+            failedCount,
           });
-        } catch (error) {
-          console.error(`Failed to sync job ${jobId}:`, error);
+          DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
+            count: allJobs.length - syncedCount,
+          });
+        } catch (err) {
+          console.error(`[SyncManager] Failed to sync job ${job.id}`, err);
           failedCount++;
         }
       }
 
-      // Notify completion
-      const finalMessage =
+      const finalMsg =
         failedCount > 0
           ? `Synced ${syncedCount} jobs, ${failedCount} failed`
           : `Successfully synced ${syncedCount} jobs`;
-
       this.notifySyncListeners({
         status: "complete",
-        message: finalMessage,
+        message: finalMsg,
         syncedCount,
         failedCount,
       });
-      console.log(
-        `[SyncManager] Completed: ${syncedCount} synced, ${failedCount} failed`
-      );
-
-      Toast.success(finalMessage);
-    } catch (error) {
-      console.error("Error during sync:", error);
+      if (syncedCount > 0) {
+        Toast.success(finalMsg);
+      }
+      const remainingJobs = await getAllJobs();
+      DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
+        count: remainingJobs.length,
+        jobs: remainingJobs,
+      });
+    } catch (err: any) {
+      console.error("[SyncManager] Error during sync:", err);
       this.notifySyncListeners({
         status: "error",
-        message: "Sync failed. Will retry when connection is available.",
+        message: err.message || "Sync failed; will retry when online.",
       });
-      Toast.error("Sync failed. Will retry when connection is available.");
+      Toast.error("Sync failed; will retry when online.");
     } finally {
       this.isSyncing = false;
     }
   }
 
-  /**
-   * Manual trigger for sync
-   */
   public async manualSync(): Promise<void> {
-    console.log("[SyncManager] manualSync triggered");
-
     const isConnected = (await NetInfo.fetch()).isConnected;
-
     if (isConnected) {
       await this.syncPendingJobs();
     } else {
-      Toast.info("No internet connection. Will sync when online.");
+      Toast.info("No internet connection. Try Later.");
     }
   }
 }
@@ -174,5 +180,4 @@ export interface SyncState {
   failedCount?: number;
 }
 
-// Export singleton instance
 export const syncManager = SyncManager.getInstance();
