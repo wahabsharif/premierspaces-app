@@ -1,5 +1,3 @@
-// components/GetAllCache.tsx
-
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -8,13 +6,15 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
 import { getAllCache, CacheEntry } from "../../services/cacheService";
 
 const GetAllCache: React.FC = () => {
   const [entries, setEntries] = useState<CacheEntry[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchEntries = async () => {
@@ -28,14 +28,17 @@ const GetAllCache: React.FC = () => {
         setLoading(false);
       }
     };
-
     fetchEntries();
   }, []);
+
+  const toggleExpand = (id: number) => {
+    setExpandedId(expandedId === id ? null : id);
+  };
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#0000ff" />
       </View>
     );
   }
@@ -53,14 +56,47 @@ const GetAllCache: React.FC = () => {
       <FlatList
         data={entries}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.item}>
-            <Text style={styles.keyText}>{item.table_key}</Text>
-            <Text style={styles.dataText}>{JSON.stringify(item.payload)}</Text>
-            <Text style={styles.timestampText}>Created: {item.created_at}</Text>
-            <Text style={styles.timestampText}>Updated: {item.updated_at}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          // Handle payload data extraction
+          const list = Array.isArray(item.payload.payload)
+            ? item.payload.payload
+            : Array.isArray(item.payload)
+            ? item.payload
+            : [];
+          const count = list.length;
+          const isExpanded = expandedId === item.id;
+
+          return (
+            <TouchableOpacity onPress={() => toggleExpand(item.id)}>
+              <View style={styles.item}>
+                <Text style={styles.keyText}>{item.table_key}</Text>
+                <Text style={styles.countText}>Count: {count}</Text>
+
+                <View style={styles.timestampContainer}>
+                  <Text style={styles.timestampText}>
+                    Created: {item.created_at}
+                  </Text>
+                  <Text style={styles.timestampText}>
+                    Updated: {item.updated_at}
+                  </Text>
+                </View>
+
+                {isExpanded && (
+                  <View style={styles.payloadContainer}>
+                    <Text style={styles.payloadTitle}>Payload:</Text>
+                    <Text style={styles.dataText}>
+                      {JSON.stringify(list, null, 2)}
+                    </Text>
+                  </View>
+                )}
+
+                <Text style={styles.expandText}>
+                  {isExpanded ? "▲ Collapse" : "▼ Expand"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No cache entries found.</Text>
         }
@@ -91,14 +127,43 @@ const styles = StyleSheet.create({
   },
   keyText: {
     fontWeight: "bold",
+    fontSize: 16,
     marginBottom: 4,
   },
-  dataText: {
+  countText: {
+    fontSize: 14,
+    fontWeight: "600",
     marginBottom: 4,
+  },
+  timestampContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 4,
   },
   timestampText: {
     fontSize: 12,
     color: "#666",
+  },
+  payloadContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  payloadTitle: {
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  dataText: {
+    marginBottom: 4,
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
+  expandText: {
+    textAlign: "center",
+    marginTop: 8,
+    fontSize: 12,
+    color: "#007AFF",
   },
   emptyText: {
     textAlign: "center",
