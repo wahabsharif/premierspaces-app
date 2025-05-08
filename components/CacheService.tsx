@@ -75,7 +75,6 @@ const CacheService: React.FC<CacheServiceProps> = ({
   const prefetchAll = async () => {
     try {
       if (!(await isOnline())) {
-        console.log("[CacheService] Offline — skipping prefetch");
         return;
       }
 
@@ -163,10 +162,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
       );
       const jobTypes = resp.data.payload;
       if (Array.isArray(jobTypes)) {
-        await setCache(jobTypesCacheKey, {
-          created_at: Date.now(),
-          payload: jobTypes,
-        });
+        await setCache(jobTypesCacheKey, jobTypes);
         store.dispatch(fetchJobTypes({ userId }));
       }
     } catch (error: any) {
@@ -187,10 +183,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
             new Date(b.date_created).getTime() -
             new Date(a.date_created).getTime()
         );
-        await setCache(jobsCacheKey, {
-          created_at: Date.now(),
-          payload: sortedJobs,
-        });
+        await setCache(jobsCacheKey, sortedJobs);
       }
     } catch (error: any) {
       if (!error.__CANCEL__) {
@@ -205,10 +198,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
         `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
       );
       if (catResp.data.status === 1 && Array.isArray(catResp.data.payload)) {
-        await setCache(categoriesCacheKey, {
-          created_at: Date.now(),
-          payload: catResp.data.payload,
-        });
+        await setCache(categoriesCacheKey, catResp.data.payload);
         store.dispatch(loadCategories());
 
         // Update category mappings for files
@@ -223,35 +213,21 @@ const CacheService: React.FC<CacheServiceProps> = ({
       }
     }
 
-    // Prefetch files for the selected property (if available)
+    // Fetch and cache ALL files for this user
+    const filesCacheKey = `filesCache_${userId}`;
     try {
-      const propertyJson = await AsyncStorage.getItem(STORAGE_KEYS.PROPERTY);
-      if (propertyJson) {
-        const property = JSON.parse(propertyJson);
-        const propertyId = property?.id;
+      // Fetch all files for the user
+      const filesResp = await axios.get<{
+        status: number;
+        payload: FileItem[];
+      }>(`${BASE_API_URL}/get-files.php?userid=${userId}`);
 
-        if (propertyId) {
-          const filesCacheKey = `filesCache_${userId}_${propertyId}`;
-
-          // Fetch files for the selected property
-          const filesResp = await axios.get<{
-            status: number;
-            payload: FileItem[];
-          }>(`${BASE_API_URL}/get-files.php?userid=${userId}`);
-
-          if (
-            filesResp.data.status === 1 &&
-            Array.isArray(filesResp.data.payload)
-          ) {
-            await setCache(filesCacheKey, {
-              created_at: Date.now(),
-              payload: filesResp.data.payload,
-            });
-            console.log(
-              `[CacheService] Successfully cached ${filesResp.data.payload.length} files for property ${propertyId}`
-            );
-          }
-        }
+      if (
+        filesResp.data.status === 1 &&
+        Array.isArray(filesResp.data.payload)
+      ) {
+        // Store the raw payload directly
+        await setCache(filesCacheKey, filesResp.data.payload);
       }
     } catch (error: any) {
       if (!error.__CANCEL__) {

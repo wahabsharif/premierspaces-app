@@ -186,31 +186,42 @@ export const loadFiles = createAsyncThunk<
     const user = userJson ? JSON.parse(userJson) : null;
     const userId = user?.payload?.userid;
 
-    if (!userId || !propertyId) {
-      throw new Error("User ID or Property ID missing");
+    if (!userId) {
+      throw new Error("User ID missing");
     }
 
-    // Build a per-user-property cache key
-    const cacheKey = `filesCache_${userId}_${propertyId}`;
+    // Build a cache key for all files for this user
+    const cacheKey = `filesCache_${userId}`;
 
     if (net.isConnected) {
       // Online: fetch from server
       const resp = await axios.get<{ status: number; payload: FileItem[] }>(
-        `${BASE_API_URL}/get-files.php?userid=${userId}&property_id=${propertyId}`
+        `${BASE_API_URL}/get-files.php?userid=${userId}`
       );
 
       if (resp.data.status !== 1) {
         throw new Error("Server returned error status");
       }
 
-      // Cache to SQLite
+      // Cache all files to SQLite
       await setCache(cacheKey, resp.data.payload);
-      return resp.data.payload;
+
+      // Return only files for the selected property
+      return resp.data.payload.filter(
+        (file) => file.property_id === propertyId
+      );
     } else {
       // Offline: load from cache
       const cached = await getCache(cacheKey);
-      if (cached) {
-        return cached.payload as FileItem[];
+      if (cached && cached.payload) {
+        // Filter for the requested property
+        const allFiles = Array.isArray(cached.payload)
+          ? cached.payload
+          : cached.payload.payload || [];
+
+        return allFiles.filter(
+          (file: FileItem) => file.property_id === propertyId
+        );
       } else {
         throw new Error("No internet and no cached data");
       }
@@ -222,11 +233,19 @@ export const loadFiles = createAsyncThunk<
       const user = userCache ? userCache.payload : null;
       const userId = user?.payload?.userid;
 
-      if (userId && propertyId) {
-        const cacheKey = `filesCache_${userId}_${propertyId}`;
+      if (userId) {
+        const cacheKey = `filesCache_${userId}`;
         const cached = await getCache(cacheKey);
-        if (cached) {
-          return cached.payload as FileItem[];
+
+        if (cached && cached.payload) {
+          // Filter for the requested property
+          const allFiles = Array.isArray(cached.payload)
+            ? cached.payload
+            : cached.payload.payload || [];
+
+          return allFiles.filter(
+            (file: FileItem) => file.property_id === propertyId
+          );
         }
       }
     } catch {
@@ -253,7 +272,7 @@ const filesSlice = createSlice({
     clearFilesCache: (state) => {
       state.files = [];
       state.groupedFiles = [];
-      // Remove SQLite cache entry - we don't delete here as we need property ID
+      // Remove SQLite cache entry - we don't delete here as we need user ID
       // This should be handled in the component when needed
     },
   },

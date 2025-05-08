@@ -1517,9 +1517,9 @@
     "@types/istanbul-lib-report" "*"
 
 "@types/node@*":
-  version "22.15.16"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.15.16.tgz#685cf0338ad9f5b14860f50a6ac2c3ebd58582cd"
-  integrity sha512-3pr+KjwpVujqWqOKT8mNR+rd09FqhBLwg+5L/4t0cNYBzm/yEiYGCxWttjaPBsLtAo+WFNoXzGJfolM1JuRXoA==
+  version "22.15.17"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.15.17.tgz#355ccec95f705b664e4332bb64a7f07db30b7055"
+  integrity sha512-wIX2aSZL5FE+MR0JlvF87BNVrtFWf6AE6rxSE9X7OwnVvoyCQjpzSRJ+M87se/4QCkCiebQAqrJ0y6fwIyi7nw==
   dependencies:
     undici-types "~6.21.0"
 
@@ -3239,9 +3239,9 @@ kleur@^3.0.3:
   integrity sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==
 
 lan-network@^0.1.4:
-  version "0.1.5"
-  resolved "https://registry.yarnpkg.com/lan-network/-/lan-network-0.1.5.tgz#e781889b7bd4dbedd9126fff3ceddd809a83c3ff"
-  integrity sha512-CV3k7l8jW0Z1b+G41tB7JInVyJEKQzh/YPl2v9uXpZMusp0aa+rh3OqG77xWuX7+eVBa8PsdTuMznTAssF4qwg==
+  version "0.1.6"
+  resolved "https://registry.yarnpkg.com/lan-network/-/lan-network-0.1.6.tgz#098375edbb996bb6ca0cc597eff03ce45f1a2787"
+  integrity sha512-0qPYjNoD89v+bfhkIqFBYGBAof1xhxLqjX8bkNN1kQdP81UHpZw5TDXgEjwB+X2iCFGQmzF8TRmvg4vQcykyDA==
 
 leven@^3.1.0:
   version "3.1.0"
@@ -4116,9 +4116,9 @@ react-native-modal@*:
     react-native-animatable "1.4.0"
 
 react-native-paper@^5.13.1:
-  version "5.14.0"
-  resolved "https://registry.yarnpkg.com/react-native-paper/-/react-native-paper-5.14.0.tgz#d9828d9694b8ae01c985d49081e59857ef95e120"
-  integrity sha512-lKqIerPMBHuFYVeKqQV6uyMQ3HPEQps3a1TUv3QqkuNQeCSUzoKDmOMFR7gW8E7a7ay6px166ngYO1Sgy9HsVg==
+  version "5.14.1"
+  resolved "https://registry.yarnpkg.com/react-native-paper/-/react-native-paper-5.14.1.tgz#280883a41abe0531279cff72330fee60c97b7a97"
+  integrity sha512-3TAO7PtC0tqfnLLX1rGC6hhzO4v7yk2jy7RuKptzPaJSaMIJeEe+9VxxFQRmF/le5tS8N9DUOTeUxy3YBOls/Q==
   dependencies:
     "@callstack/react-theme-provider" "^3.0.9"
     color "^3.1.2"

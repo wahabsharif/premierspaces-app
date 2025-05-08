@@ -91,16 +91,25 @@ export interface ChangeAppPinScreenProps {
 
 export interface FileItem {
   id: string;
+  user_id: string;
+  property_id: string;
   file_name: string;
+  file_size: string;
+  file_type: string;
+  file_url: string;
+  category_id: number | null;
+  sub_category_id: number | null;
   path: string;
   date_created: string;
   stream_url: string;
-  property_id: string;
   job_id: string;
   user_name: string;
   job_num: string;
   main_category: string;
   sub_category: string;
+  date_modified: string;
+  tags?: string[];
+  notes?: string;
 }
 
 export interface FileTypeCount {

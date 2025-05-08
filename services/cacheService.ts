@@ -127,8 +127,6 @@ export async function getAllCache(): Promise<CacheEntry[]> {
       updated_at: row.updated_at,
     }));
 
-    // Log full entries data for debugging
-
     return entries;
   } catch (err) {
     console.error("[cacheService][getAllCache] ERROR:", err);
