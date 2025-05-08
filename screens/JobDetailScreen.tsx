@@ -1,7 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import axios from "axios";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,12 +10,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
-import { BASE_API_URL } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { useReloadOnFocus } from "../hooks";
+import { RootState } from "../store";
+import { fetchJobs } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
+import axios from "axios";
+import { BASE_API_URL } from "../Constants/env";
 
 interface Property {
   address: string;
@@ -39,6 +42,7 @@ interface JobDetail {
   image_file_count: number;
   doc_file_count: number;
   video_file_count: number;
+  id: string;
 }
 
 interface Contractor {
@@ -50,12 +54,16 @@ type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { id: jobId } = route.params;
+  const dispatch = useDispatch();
   const [userId, setUserId] = useState<string | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Get jobs list from Redux store
+  const jobsList = useSelector((state: RootState) => state.job.jobsList);
 
   const loadLocalData = useCallback(async () => {
     try {
@@ -69,7 +77,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       }
       if (propJson) setProperty(JSON.parse(propJson));
     } catch (e) {
-      // // console.error("Error loading local data", e);
+      // console.error("Error loading local data", e);
     }
   }, []);
 
@@ -77,7 +85,32 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     loadLocalData();
   }, [loadLocalData]);
 
-  const fetchJob = useCallback(async () => {
+  // Fetch jobs using Redux action
+  useEffect(() => {
+    if (userId) {
+      dispatch(fetchJobs({ userId }) as any);
+    }
+  }, [userId, dispatch]);
+
+  // Find the job details from Redux store
+  useEffect(() => {
+    if (jobsList.items.length > 0 && jobId) {
+      const foundJob = jobsList.items.find((job) => job.id === jobId);
+      if (foundJob) {
+        setJobDetail(foundJob as unknown as JobDetail);
+        setLoading(false);
+      } else {
+        // If job not found in Redux store, fetch it directly
+        fetchJobDirectly();
+      }
+    } else if (!jobsList.loading) {
+      // If jobs list is empty but not loading, fetch directly
+      fetchJobDirectly();
+    }
+  }, [jobsList, jobId]);
+
+  // Fallback to direct API call if job not found in Redux store
+  const fetchJobDirectly = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
@@ -94,7 +127,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setError("Job details not found.");
       }
     } catch (e) {
-      // // console.error(e);
+      // console.error(e);
       setError("Error fetching job details.");
     } finally {
       setLoading(false);
@@ -114,11 +147,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setContractors(Array.isArray(cd.payload) ? cd.payload : [cd.payload]);
       }
     } catch (e) {
-      // // console.error(e);
+      // console.error(e);
     }
   }, [userId, jobId]);
 
-  useReloadOnFocus(fetchJob);
+  useReloadOnFocus(fetchJobDirectly);
   useReloadOnFocus(fetchContractors);
 
   const tasks = useMemo(
@@ -147,7 +180,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
   );
 
-  if (loading)
+  if (loading || jobsList.loading)
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#1f3759" />

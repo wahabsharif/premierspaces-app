@@ -11,6 +11,12 @@ export const store = configureStore({
     categories: categoryReducer,
     job: jobReducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      // keep immutable checks if you like, but skip serializable checks entirely
+      immutableCheck: true,
+      serializableCheck: false,
+    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

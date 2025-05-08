@@ -1,9 +1,9 @@
-// store/categorySlice.ts
-import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import NetInfo from "@react-native-community/netinfo";
+import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
+import axios from "axios";
 import { BASE_API_URL } from "../Constants/env";
+import { deleteCache, getCache, setCache } from "../services/cacheService";
 
 export interface SubCategory {
   id: number;
@@ -22,8 +22,6 @@ interface CategoryState {
   error: string | null;
 }
 
-const CACHE_KEY = "categoriesCache";
-
 const initialState: CategoryState = {
   data: [],
   loading: false,
@@ -32,8 +30,8 @@ const initialState: CategoryState = {
 
 /**
  * Thunk: Loads categories
- * - If online: fetch from API, cache to AsyncStorage
- * - If offline or fetch fails: load from cache
+ * - If online: fetch from API, cache to SQLite via cacheService
+ * - If offline or fetch fails: load from SQLite cache
  */
 export const loadCategories = createAsyncThunk<
   Category[],
@@ -42,15 +40,20 @@ export const loadCategories = createAsyncThunk<
 >("categories/load", async (_, { rejectWithValue }) => {
   try {
     const net = await NetInfo.fetch();
-    if (net.isConnected) {
-      // online: fetch from server
-      const userJson = await AsyncStorage.getItem("userData");
-      const user = userJson ? JSON.parse(userJson) : null;
-      const userId = user?.payload?.userid;
-      if (!userId) {
-        throw new Error("User ID missing");
-      }
 
+    // Determine userId from AsyncStorage or previous cache
+    const userJson = await AsyncStorage.getItem("userData");
+    const user = userJson ? JSON.parse(userJson) : null;
+    const userId = user?.payload?.userid;
+    if (!userId) {
+      throw new Error("User ID missing");
+    }
+
+    // Build a per-user cache key
+    const cacheKey = `categoryCache_${userId}`;
+
+    if (net.isConnected) {
+      // Online: fetch from server
       const resp = await axios.get<{ status: number; payload: Category[] }>(
         `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
       );
@@ -59,25 +62,34 @@ export const loadCategories = createAsyncThunk<
         throw new Error("Server returned error status");
       }
 
-      // cache to AsyncStorage
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(resp.data.payload));
+      // Cache to SQLite
+      await setCache(cacheKey, resp.data.payload);
       return resp.data.payload;
     } else {
-      // offline: load from cache
-      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      // Offline: load from cache
+      const cached = await getCache(cacheKey);
       if (cached) {
-        return JSON.parse(cached) as Category[];
+        return cached.payload as Category[];
       } else {
         throw new Error("No internet and no cached data");
       }
     }
   } catch (err: any) {
-    // attempt to load from cache on any error
-    const cached = await AsyncStorage.getItem(CACHE_KEY);
-    if (cached) {
-      return JSON.parse(cached) as Category[];
+    // Attempt to load from cache on any error
+    try {
+      const userCache = await getCache("userData");
+      const user = userCache ? userCache.payload : null;
+      const userId = user?.payload?.userid;
+      const cacheKey = userId ? `categoryCache_${userId}` : "categoryCache";
+
+      const cached = await getCache(cacheKey);
+      if (cached) {
+        return cached.payload as Category[];
+      }
+    } catch {
+      // ignore
     }
-    return rejectWithValue(err.message ?? "Failed to load categories");
+    return rejectWithValue(err.message || "Failed to load categories");
   }
 });
 
@@ -87,7 +99,17 @@ const categorySlice = createSlice({
   reducers: {
     clearCategoryCache: (state) => {
       state.data = [];
-      AsyncStorage.removeItem(CACHE_KEY);
+      // Remove SQLite cache entry
+      getCache("userData")
+        .then((userCache) => {
+          const user = userCache ? userCache.payload : null;
+          const userId = user?.payload?.userid;
+          const cacheKey = userId ? `categoryCache_${userId}` : "categoryCache";
+          return deleteCache(cacheKey);
+        })
+        .catch(() => {
+          // ignore
+        });
     },
   },
   extraReducers: (builder) => {
