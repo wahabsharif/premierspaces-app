@@ -92,7 +92,7 @@ const Header = () => {
             resizeMode="contain"
           />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleDropdownPress}>
+        <TouchableOpacity onPress={handleDropdownPress} style={{ padding: 20 }}>
           <Octicons name="three-bars" size={fontSize.large} color="black" />
         </TouchableOpacity>
       </View>
