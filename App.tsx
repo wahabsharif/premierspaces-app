@@ -96,7 +96,7 @@ export default function App() {
     <PaperProvider>
       <SQLiteProvider databaseName="premierDatabase.db">
         <ReduxProvider store={store}>
-          <CacheService>
+          <CacheService isLoggedIn={isLoggedIn}>
             <DataSyncManager>
               <StatusBar
                 barStyle="dark-content"
