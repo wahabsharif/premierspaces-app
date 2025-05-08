@@ -1,8 +1,9 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "./authSlice";
-import propertyReducer from "./propertySlice";
 import categoryReducer from "./categorySlice";
+import filesReducer from "./filesSlice";
 import jobReducer from "./jobSlice";
+import propertyReducer from "./propertySlice";
 
 export const store = configureStore({
   reducer: {
@@ -10,6 +11,7 @@ export const store = configureStore({
     property: propertyReducer,
     categories: categoryReducer,
     job: jobReducer,
+    files: filesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
