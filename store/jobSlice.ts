@@ -26,6 +26,13 @@ export interface JobTypeState {
   lastFetched: number | null;
 }
 
+export interface JobsListState {
+  items: Job[];
+  loading: boolean;
+  error: string | null;
+  lastFetched: number | null;
+}
+
 export const fetchJobTypes = createAsyncThunk<
   Job[],
   { userId: string },
@@ -67,6 +74,95 @@ export const fetchJobTypes = createAsyncThunk<
     return rejectWithValue(err.response?.data?.message || err.message);
   }
 });
+
+// New thunk for fetching jobs list
+export const fetchJobs = createAsyncThunk<
+  Job[],
+  { userId: string; propertyId?: string },
+  { rejectValue: string; state: RootState }
+>(
+  "jobs/fetch",
+  async ({ userId, propertyId }, { rejectWithValue, getState }) => {
+    const cacheKey = `getJobsCache_${userId}`;
+
+    // Check if data is fresh enough in Redux store
+    const { lastFetched, items } = getState().job.jobsList;
+    const isFresh =
+      lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
+
+    if (isFresh && items.length > 0) {
+      // If we have fresh data in store, return it directly
+      // If propertyId is provided, filter the results for that property
+      if (propertyId) {
+        return items.filter((job) => job.property_id === propertyId);
+      }
+      return items;
+    }
+
+    try {
+      const netInfo = await NetInfo.fetch();
+
+      if (netInfo.isConnected) {
+        // Fetch from API if online
+        const response = await axios.get(
+          `${BASE_API_URL}/getjobs.php?userid=${userId}`
+        );
+
+        if (response.data.status === 1) {
+          const sortedJobs = response.data.payload.sort(
+            (a: Job, b: Job) =>
+              new Date(b.date_created).getTime() -
+              new Date(a.date_created).getTime()
+          );
+
+          // Store in SQLite cache
+          await setCache(cacheKey, {
+            created_at: Date.now(),
+            payload: sortedJobs,
+          });
+
+          // If propertyId is provided, filter the results for that property
+          if (propertyId) {
+            return sortedJobs.filter(
+              (job: Job) => job.property_id === propertyId
+            );
+          }
+          return sortedJobs;
+        } else {
+          // API returned status !== 1
+          return [];
+        }
+      } else {
+        // Offline, use cache
+        const cachedEntry = await getCache(cacheKey);
+        if (cachedEntry?.payload?.payload) {
+          const allJobs = cachedEntry.payload.payload as Job[];
+          // If propertyId is provided, filter the results for that property
+          if (propertyId) {
+            return allJobs.filter((job) => job.property_id === propertyId);
+          }
+          return allJobs;
+        }
+        return [];
+      }
+    } catch (err: any) {
+      console.warn("[Slice] Jobs fetch failed, falling back to cache:", err);
+
+      // Get from SQLite cache
+      const cachedEntry = await getCache(cacheKey);
+      if (cachedEntry?.payload?.payload) {
+        const allJobs = cachedEntry.payload.payload as Job[];
+        // If propertyId is provided, filter the results for that property
+        if (propertyId) {
+          return allJobs.filter((job) => job.property_id === propertyId);
+        }
+        return allJobs;
+      }
+
+      return rejectWithValue(err.response?.data?.message || err.message);
+    }
+  }
+);
 
 export const createJob = createAsyncThunk<
   any,
@@ -146,15 +242,29 @@ const initialJobTypeState: JobTypeState = {
   lastFetched: null,
 };
 
+const initialJobsListState: JobsListState = {
+  items: [],
+  loading: false,
+  error: null,
+  lastFetched: null,
+};
+
 const slice = createSlice({
   name: "job",
-  initialState: { job: initialJobState, jobTypes: initialJobTypeState },
+  initialState: {
+    job: initialJobState,
+    jobTypes: initialJobTypeState,
+    jobsList: initialJobsListState,
+  },
   reducers: {
     resetJobState: (state) => {
       state.job = initialJobState;
     },
     resetJobTypes: (state) => {
       state.jobTypes = initialJobTypeState;
+    },
+    resetJobsList: (state) => {
+      state.jobsList = initialJobsListState;
     },
     updatePendingCount: (state, action: PayloadAction<number>) => {
       state.job.pendingCount = action.payload;
@@ -194,6 +304,26 @@ const slice = createSlice({
         state.jobTypes.loading = false;
         state.jobTypes.error = action.payload || "Failed to load job types";
       })
+      // Add cases for fetching jobs
+      .addCase(fetchJobs.pending, (state) => {
+        state.jobsList.loading = true;
+        state.jobsList.error = null;
+      })
+      .addCase(fetchJobs.fulfilled, (state, action: PayloadAction<Job[]>) => {
+        state.jobsList.loading = false;
+        state.jobsList.items = action.payload;
+        state.jobsList.lastFetched = Date.now();
+        // If empty array is returned, it means no jobs found
+        if (action.payload.length === 0) {
+          state.jobsList.error = "No jobs found with the selected property.";
+        } else {
+          state.jobsList.error = null;
+        }
+      })
+      .addCase(fetchJobs.rejected, (state, action) => {
+        state.jobsList.loading = false;
+        state.jobsList.error = action.payload || "Failed to load jobs";
+      })
       .addCase(syncPendingJobs.fulfilled, (state, action) => {
         if (action.payload.syncedCount > 0) {
           state.job.pendingCount = Math.max(
@@ -205,10 +335,16 @@ const slice = createSlice({
   },
 });
 
-export const { resetJobState, resetJobTypes, updatePendingCount } =
-  slice.actions;
+export const {
+  resetJobState,
+  resetJobTypes,
+  resetJobsList,
+  updatePendingCount,
+} = slice.actions;
+
 export const selectJobState = (state: RootState) => state.job.job;
 export const selectJobTypes = (state: RootState) => state.job.jobTypes;
+export const selectJobsList = (state: RootState) => state.job.jobsList;
 export const selectIsJobTypesStale = (state: RootState) => {
   const last = state.job.jobTypes.lastFetched;
   if (!last) return true;
