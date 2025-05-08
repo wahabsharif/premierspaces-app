@@ -9,8 +9,8 @@ import {
   AppStateStatus,
   ImageBackground,
   LogBox,
-  SafeAreaView,
   StyleSheet,
+  StatusBar,
 } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
 import { Provider as ReduxProvider } from "react-redux";
@@ -21,6 +21,10 @@ import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 
@@ -29,7 +33,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const insets = useSafeAreaInsets();
 
+  // Initialization: check login, lock, version
   useEffect(() => {
     const init = async () => {
       try {
@@ -61,6 +67,7 @@ export default function App() {
     init();
   }, []);
 
+  // Lock app on background if needed
   useEffect(() => {
     const onChange = async (nextState: AppStateStatus) => {
       const lockEnabled = await AsyncStorage.getItem("app_lock_enabled");
@@ -72,12 +79,10 @@ export default function App() {
         setIsUnlocked(false);
         Toast.info("App locked for security");
       }
-      if (nextState === "active" && isLoggedIn) {
-      }
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => sub.remove();
-  }, [isPickingImage, isLoggedIn]);
+  }, [isPickingImage]);
 
   if (isLoading) {
     return (
@@ -93,7 +98,13 @@ export default function App() {
         <ReduxProvider store={store}>
           <CacheService>
             <DataSyncManager>
-              <SafeAreaView style={styles.container}>
+              <StatusBar
+                barStyle="dark-content"
+                backgroundColor="transparent"
+                translucent
+              />
+
+              <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
                 <NetworkStatus />
                 <ToastManager
                   position="bottom"
@@ -140,7 +151,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, resizeMode: "cover" },
-  container: { flex: 1, paddingTop: 25 },
-  center: { justifyContent: "center", alignItems: "center" },
+  background: {
+    flex: 1,
+    resizeMode: "cover",
+  },
+  container: {
+    flex: 1,
+  },
+  center: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
