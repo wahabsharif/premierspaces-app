@@ -21,6 +21,7 @@ import { getAllJobs } from "../services/jobService";
 import { AppDispatch } from "../store";
 import { selectPendingJobsCount, syncPendingJobs } from "../store/jobSlice";
 import { Job } from "../types";
+import GetAllCache from "../components/TestCases/GetAllCache";
 
 const PendingDataScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -215,6 +216,7 @@ const PendingDataScreen = () => {
           />
         )}
       </View>
+      <GetAllCache />
     </View>
   );
 };

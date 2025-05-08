@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
@@ -7,37 +6,11 @@ import {
   JOB_TYPES_CACHE_EXPIRY,
   JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
+import { getCache, setCache } from "../services/cacheService";
 import { createJob as createOfflineJob } from "../services/jobService";
 import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
 import { RootState } from "./index";
-
-export const saveToCache = async (key: string, data: any) => {
-  try {
-    await AsyncStorage.setItem(
-      key,
-      JSON.stringify({
-        timestamp: Date.now(),
-        data,
-      })
-    );
-  } catch (error) {
-    console.error("Error saving to cache:", error);
-  }
-};
-
-export const getFromCache = async (key: string) => {
-  try {
-    const cachedData = await AsyncStorage.getItem(key);
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
-    return null;
-  } catch (error) {
-    console.error("Error reading from cache:", error);
-    return null;
-  }
-};
 
 export interface JobState {
   loading: boolean;
@@ -74,14 +47,23 @@ export const fetchJobTypes = createAsyncThunk<
     );
 
     const jobTypes = resp.data.payload as Job[];
-    saveToCache(cacheKey, jobTypes);
+
+    // Store in SQLite cache
+    await setCache(cacheKey, {
+      created_at: Date.now(),
+      payload: jobTypes,
+    });
+
     return jobTypes;
   } catch (err: any) {
     console.warn("[Slice] Remote fetch failed, falling back to cache:", err);
-    const cachedData = await getFromCache(cacheKey);
-    if (cachedData?.data) {
-      return cachedData.data as Job[];
+
+    // Get from SQLite cache
+    const cachedEntry = await getCache(cacheKey);
+    if (cachedEntry?.payload?.payload) {
+      return cachedEntry.payload.payload as Job[];
     }
+
     return rejectWithValue(err.response?.data?.message || err.message);
   }
 });
