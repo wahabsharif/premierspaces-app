@@ -1,11 +1,28 @@
 import { useFocusEffect } from "@react-navigation/native";
-import React from "react";
+import { useCallback } from "react";
 
-export function useReloadOnFocus(reloadFn: () => Promise<void>) {
+/**
+ * Custom hook that executes a reload function whenever the screen comes into focus
+ *
+ * @param reloadFn - Function to execute when the screen comes into focus
+ */
+export function useReloadOnFocus(reloadFn: () => Promise<any>) {
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       let active = true;
-      // reloadFn().catch(// console.error);
+
+      const loadData = async () => {
+        try {
+          if (active) {
+            await reloadFn();
+          }
+        } catch (error) {
+          console.error("Error in useReloadOnFocus:", error);
+        }
+      };
+
+      loadData();
+
       return () => {
         active = false;
       };

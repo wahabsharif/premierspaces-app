@@ -9,13 +9,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import { fetchJobs, selectJobsList } from "../store/jobSlice";
+import { fetchJobs, selectJobsList, resetJobsList } from "../store/jobSlice";
 import { Job, RootStackParamList } from "../types";
+import { useReloadOnFocus } from "../hooks";
 
 // Memoized Job item component to improve FlatList performance
 const JobItem = memo(
@@ -99,11 +101,22 @@ const JobItem = memo(
   }
 );
 
+// No Jobs Found component
+const NoJobsFound = ({ address }: { address: string }) => {
+  return (
+    <View style={innerStyles.noJobsContainer}>
+      <Text style={innerStyles.noJobsText}>No Jobs Found with {address}</Text>
+    </View>
+  );
+};
+
 const JobsScreen = ({
   navigation,
+  route,
 }: NativeStackScreenProps<RootStackParamList, "JobsScreen">) => {
   const dispatch = useDispatch();
   const { items: allJobs, loading, error } = useSelector(selectJobsList);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [propertyData, setPropertyData] = useState<{
     address: string;
@@ -139,34 +152,53 @@ const JobsScreen = ({
     fetchStoredData();
   }, []);
 
-  // Define fetchJobsData as a callback function
-  const fetchJobsData = useCallback(async () => {
-    if (!userData) return;
+  // Define fetchJobsData with force refresh option
+  const fetchJobsData = useCallback(
+    async (forceRefresh = false) => {
+      if (!userData) return;
 
-    try {
-      const userid = userData.payload?.userid ?? userData.userid;
-      // Dispatch the fetch jobs action - only using userId
-      dispatch(
-        fetchJobs({
-          userId: userid,
-        }) as any
-      );
-    } catch (err) {
-      console.error("Error dispatching fetchJobs", err);
-    }
-  }, [userData, dispatch]);
+      try {
+        const userid = userData.payload?.userid ?? userData.userid;
+
+        // If force refresh, reset the jobs list first to clear cache
+        if (forceRefresh) {
+          dispatch(resetJobsList());
+        }
+
+        // Dispatch the fetch jobs action
+        dispatch(
+          fetchJobs({
+            userId: userid,
+            propertyId: propertyData?.id, // Add propertyId to filter server-side if available
+          }) as any
+        );
+      } catch (err) {
+        console.error("Error dispatching fetchJobs", err);
+      } finally {
+        // Always end refreshing state
+        setRefreshing(false);
+      }
+    },
+    [userData, dispatch, propertyData]
+  );
 
   // Initial fetch when user data changes
   useEffect(() => {
     fetchJobsData();
   }, [fetchJobsData]);
 
-  // Re-fetch jobs whenever the screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      fetchJobsData();
-    }, [fetchJobsData])
-  );
+  // Use the custom hook to reload data when the screen comes into focus
+  const reloadJobs = useCallback(() => {
+    return fetchJobsData(true);
+  }, [fetchJobsData]);
+
+  useReloadOnFocus(reloadJobs);
+
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchJobsData(true);
+  }, [fetchJobsData]);
 
   // Handle job item press
   const handleJobPress = useCallback(
@@ -181,6 +213,11 @@ const JobsScreen = ({
     [navigation]
   );
 
+  // Navigate to new job screen
+  const handleOpenNewJob = useCallback(() => {
+    navigation.navigate("OpenNewJobScreen");
+  }, [navigation]);
+
   // Optimized renderItem function
   const renderJob = useCallback(
     ({ item }: { item: Job }) => {
@@ -188,6 +225,16 @@ const JobsScreen = ({
     },
     [handleJobPress]
   );
+
+  // Check if a job was just created or the route params indicate a refresh is needed
+  useEffect(() => {
+    if (route.params?.refresh) {
+      // Clear the param to prevent multiple refreshes
+      navigation.setParams({ refresh: undefined });
+      // Force refresh the jobs list
+      fetchJobsData(true);
+    }
+  }, [route.params, navigation, fetchJobsData]);
 
   return (
     <View style={styles.screenContainer}>
@@ -205,20 +252,33 @@ const JobsScreen = ({
         )}
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => navigation.navigate("OpenNewJobScreen")}
+          onPress={handleOpenNewJob}
         >
           <Text style={styles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
-        {loading && <ActivityIndicator color={color.primary} />}
+        {loading && !refreshing && <ActivityIndicator color={color.primary} />}
         {!loading && error && <Text style={styles.errorText}>{error}</Text>}
-        {!loading && !error && jobs.length > 0 && (
-          <FlatList
-            data={jobs}
-            keyExtractor={(item) => item.id}
-            renderItem={renderJob}
-            contentContainerStyle={{ paddingBottom: 20 }}
-            style={{ width: "100%" }}
-          />
+        {!loading && !error && (
+          <>
+            {jobs.length > 0 ? (
+              <FlatList
+                data={jobs}
+                keyExtractor={(item) => item.id}
+                renderItem={renderJob}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                style={{ width: "100%" }}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[color.primary]}
+                  />
+                }
+              />
+            ) : (
+              propertyData && <NoJobsFound address={propertyData.address} />
+            )}
+          </>
         )}
       </View>
     </View>
@@ -264,6 +324,19 @@ const innerStyles = StyleSheet.create({
   statusText: {
     color: color.white,
     fontWeight: "semibold",
+  },
+  noJobsContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 50,
+    width: "100%",
+  },
+  noJobsText: {
+    fontSize: fontSize.large,
+    color: color.gray,
+    textAlign: "center",
+    fontWeight: "500",
   },
 });
 

@@ -11,7 +11,7 @@ export type RootStackParamList = {
   OpenNewJobScreen: undefined;
   FilesScreen: undefined;
   MediaPreviewScreen: { jobId: string; fileCategory: string };
-  JobsScreen: undefined;
+  JobsScreen: { refresh?: boolean } | undefined;
   PendingDataScreen: undefined;
   JobDetailScreen: { id: string };
 };
