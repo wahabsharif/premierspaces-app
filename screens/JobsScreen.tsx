@@ -142,7 +142,10 @@ const JobsScreen = ({
   const jobTypeMap = useMemo(
     () =>
       jobTypes.reduce(
-        (map, jt) => ({ ...map, [String(jt.id)]: jt.name || jt.label || "" }),
+        (map, jt) => ({
+          ...map,
+          [String(jt.id)]: jt.job_type || jt.label || "",
+        }),
         {} as Record<string, string>
       ),
     [jobTypes]
