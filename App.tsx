@@ -1,30 +1,34 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  NavigationContainerRef,
+} from "@react-navigation/native";
 import * as Application from "expo-application";
 import { SQLiteProvider } from "expo-sqlite";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
   AppStateStatus,
   ImageBackground,
   LogBox,
-  StyleSheet,
   StatusBar,
+  StyleSheet,
 } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
 import { Provider as ReduxProvider } from "react-redux";
 import ToastManager, { Toast } from "toastify-react-native";
+
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { CacheService, DataSyncManager, NetworkStatus } from "./components";
 import { fontSize } from "./Constants/theme";
 import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 
@@ -34,6 +38,12 @@ export default function App() {
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const insets = useSafeAreaInsets();
+
+  // Track current route name
+  const navigationRef = useRef<NavigationContainerRef<any>>(null);
+  const [currentRouteName, setCurrentRouteName] = useState<string | undefined>(
+    undefined
+  );
 
   // Initialization: check login, lock, version
   useEffect(() => {
@@ -96,38 +106,49 @@ export default function App() {
     <PaperProvider>
       <SQLiteProvider databaseName="premierDatabase.db">
         <ReduxProvider store={store}>
-          <CacheService isLoggedIn={isLoggedIn}>
-            <DataSyncManager>
-              <StatusBar
-                barStyle="dark-content"
-                backgroundColor="transparent"
-                translucent
-              />
-
-              <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-                <NetworkStatus />
-                <ToastManager
-                  position="bottom"
-                  style={{
-                    flexDirection: "column-reverse",
-                    justifyContent: "flex-end",
-                    width: "100%",
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
-                    borderRadius: 6,
-                  }}
-                  textStyle={{
-                    fontSize: fontSize.xs,
-                    lineHeight: fontSize.xs * 1.4,
-                    flexWrap: "wrap",
-                    includeFontPadding: false,
-                  }}
+          <NavigationContainer
+            ref={navigationRef}
+            onStateChange={() => {
+              const route = navigationRef.current?.getCurrentRoute();
+              setCurrentRouteName(route?.name);
+            }}
+          >
+            <CacheService
+              isLoggedIn={isLoggedIn}
+              isLoginScreen={currentRouteName === "LoginScreen"}
+            >
+              <DataSyncManager>
+                <StatusBar
+                  barStyle="dark-content"
+                  backgroundColor="transparent"
+                  translucent
                 />
-                <ImageBackground
-                  source={require("./assets/background.jpg")}
-                  style={styles.background}
+                <SafeAreaView
+                  style={styles.container}
+                  edges={["top", "bottom"]}
                 >
-                  <NavigationContainer>
+                  <NetworkStatus />
+                  <ToastManager
+                    position="bottom"
+                    style={{
+                      flexDirection: "column-reverse",
+                      justifyContent: "flex-end",
+                      width: "100%",
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 6,
+                    }}
+                    textStyle={{
+                      fontSize: fontSize.xs,
+                      lineHeight: fontSize.xs * 1.4,
+                      flexWrap: "wrap",
+                      includeFontPadding: false,
+                    }}
+                  />
+                  <ImageBackground
+                    source={require("./assets/background.jpg")}
+                    style={styles.background}
+                  >
                     {isUnlocked ? (
                       isLoggedIn ? (
                         <AppNavigator setIsPickingImage={setIsPickingImage} />
@@ -139,11 +160,11 @@ export default function App() {
                     ) : (
                       <LockScreen onUnlock={() => setIsUnlocked(true)} />
                     )}
-                  </NavigationContainer>
-                </ImageBackground>
-              </SafeAreaView>
-            </DataSyncManager>
-          </CacheService>
+                  </ImageBackground>
+                </SafeAreaView>
+              </DataSyncManager>
+            </CacheService>
+          </NavigationContainer>
         </ReduxProvider>
       </SQLiteProvider>
     </PaperProvider>

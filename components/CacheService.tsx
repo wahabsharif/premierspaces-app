@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
+import { useNavigation } from "@react-navigation/native";
 import axios from "axios";
 import React, {
   ReactNode,
@@ -8,7 +9,10 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { Modal, Text, TouchableOpacity, View } from "react-native";
+
 import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "../Constants/env";
+import styles from "../Constants/styles";
 import {
   deleteCache,
   getAllCache,
@@ -26,11 +30,8 @@ import { fetchJobTypes } from "../store/jobSlice";
 interface CacheServiceProps {
   children: ReactNode;
   isLoggedIn: boolean;
+  isLoginScreen: boolean;
 }
-
-const STORAGE_KEYS = {
-  USER: "userData",
-};
 
 function debounce<F extends (...args: any[]) => any>(func: F, wait: number) {
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -47,48 +48,66 @@ function debounce<F extends (...args: any[]) => any>(func: F, wait: number) {
 const CacheService: React.FC<CacheServiceProps> = ({
   children,
   isLoggedIn,
+  isLoginScreen,
 }) => {
   const [loading, setLoading] = useState(false);
-  const [ready, setReady] = useState(false);
   const [cacheComplete, setCacheComplete] = useState(false);
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
+  const navigation = useNavigation();
+
+  // Any 401 error triggers session-expired modal
+  const handleError = (err: any) => {
+    if (axios.isAxiosError(err) && err.response?.status === 401) {
+      if (!isLoginScreen) {
+        setShowSessionExpired(true);
+      }
+    }
+    throw err;
+  };
 
   const prefetchAll = useCallback(
     async (force = false) => {
-      if (loading || !isLoggedIn || (cacheComplete && !force)) return;
+      if (loading || (cacheComplete && !force)) return;
       setLoading(true);
 
       try {
+        // Skip if offline
         if (!(await isOnline())) {
-          console.log("[CacheService] Offline, skipping prefetch");
-          setReady(true);
+          setLoading(false);
           return;
         }
 
-        const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+        // 1) ensure userData exists
+        const userData = await AsyncStorage.getItem("userData");
         if (!userData) {
-          console.warn("[CacheService] No userData in storage");
-          setReady(true);
+          setLoading(false);
+          if (!isLoginScreen) {
+            navigation.navigate("LoginScreen" as never);
+          }
           return;
         }
 
+        // 2) parse userId
         const userObj = JSON.parse(userData);
         const userId = userObj.payload?.userid ?? userObj.userid;
         if (!userId) {
-          console.warn("[CacheService] Could not determine userId");
-          setReady(true);
+          setLoading(false);
+          if (!isLoginScreen) {
+            navigation.navigate("LoginScreen" as never);
+          }
           return;
         }
 
+        // 3) clean stale cache and prefetch
         await cleanupUserCache(userId);
         await prefetchUserData(userId);
       } catch (error) {
         console.error("[CacheService] Prefetch error:", error);
       } finally {
         setLoading(false);
-        setReady(true);
       }
     },
-    [loading, isLoggedIn, cacheComplete]
+    [loading, cacheComplete, navigation, isLoginScreen]
   );
 
   const debouncedPrefetch = useMemo(
@@ -96,12 +115,25 @@ const CacheService: React.FC<CacheServiceProps> = ({
     [prefetchAll]
   );
 
+  // Hide session-expired modal when on login screen
+  useEffect(() => {
+    if (isLoginScreen && showSessionExpired) {
+      setShowSessionExpired(false);
+    }
+  }, [isLoginScreen, showSessionExpired]);
+
+  // Kick off or cancel prefetch on login/logout
   useEffect(() => {
     if (isLoggedIn) {
+      setCacheComplete(false);
       debouncedPrefetch();
+    } else {
+      setCacheComplete(false);
+      debouncedPrefetch.cancel?.();
     }
   }, [isLoggedIn, debouncedPrefetch]);
 
+  // Retry on reconnect
   useEffect(() => {
     let first = true;
     const unsubscribe = NetInfo.addEventListener((state) => {
@@ -110,7 +142,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
         return;
       }
       if (state.isConnected && isLoggedIn) {
-        debouncedPrefetch(true); // Force prefetch on reconnect
+        debouncedPrefetch(true);
       }
     });
     return () => {
@@ -119,6 +151,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     };
   }, [debouncedPrefetch, isLoggedIn]);
 
+  // Remove caches belonging to other users
   const cleanupUserCache = async (currentUserId: string) => {
     try {
       const allCacheEntries = await getAllCache();
@@ -142,112 +175,118 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
   };
 
+  // Orchestrate all four fetches in parallel
   const prefetchUserData = async (userId: string) => {
-    const results = await Promise.allSettled([
-      prefetchJobTypes(userId),
-      prefetchJobs(userId),
-      prefetchCategories(userId),
-      prefetchFiles(userId),
-    ]);
-    const allSuccessful = results.every(
-      (result) => result.status === "fulfilled"
-    );
-    if (allSuccessful) {
-      setCacheComplete(true); // Set cacheComplete only if all prefetch operations succeed
+    try {
+      const results = await Promise.allSettled([
+        prefetchJobTypes(userId).catch(handleError),
+        prefetchJobs(userId).catch(handleError),
+        prefetchCategories(userId).catch(handleError),
+        prefetchFiles(userId).catch(handleError),
+      ]);
+
+      if (results.every((r) => r.status === "fulfilled")) {
+        setCacheComplete(true);
+      } else {
+        const has401Error = results.some(
+          (r) =>
+            r.status === "rejected" &&
+            axios.isAxiosError(r.reason) &&
+            r.reason.response?.status === 401
+        );
+        if (has401Error && !isLoginScreen) {
+          setShowSessionExpired(true);
+        }
+      }
+    } catch (error) {
+      console.error("[CacheService] Error in prefetchUserData:", error);
     }
   };
 
   const prefetchJobTypes = async (userId: string) => {
     const key = `${JOB_TYPES_CACHE_KEY}_${userId}`;
-    try {
-      const { data } = await axios.get(
-        `${BASE_API_URL}/jobtypes.php?userid=${userId}`
-      );
-      if (Array.isArray(data.payload)) {
-        await setCache(key, data.payload);
-        store.dispatch(fetchJobTypes({ userId }));
-      } else {
-        throw new Error("Invalid job types data");
-      }
-    } catch (err: any) {
-      if (!err.__CANCEL__)
-        console.error("[CacheService] Job types fetch failed:", err);
-      throw err;
+    const { data } = await axios.get(
+      `${BASE_API_URL}/jobtypes.php?userid=${userId}`
+    );
+    if (!Array.isArray(data.payload)) {
+      throw new Error("Invalid job types data");
     }
+    await setCache(key, data.payload);
+    store.dispatch(fetchJobTypes({ userId }));
   };
 
   const prefetchJobs = async (userId: string) => {
     const key = `getJobsCache_${userId}`;
-    try {
-      const { data } = await axios.get(
-        `${BASE_API_URL}/getjobs.php?userid=${userId}`
-      );
-      if (data.status === 1 && Array.isArray(data.payload)) {
-        await setCache(key, data.payload);
-      } else {
-        console.warn(
-          `[CacheService] getjobs API returned status ${data.status}`
-        );
-        throw new Error("Invalid jobs data");
-      }
-    } catch (err: any) {
-      if (!err.__CANCEL__)
-        console.error("[CacheService] Jobs fetch failed:", err);
-      throw err;
+    const { data } = await axios.get(
+      `${BASE_API_URL}/getjobs.php?userid=${userId}`
+    );
+    if (data.status !== 1 || !Array.isArray(data.payload)) {
+      throw new Error("Invalid jobs data");
     }
+    await setCache(key, data.payload);
   };
 
   const prefetchCategories = async (userId: string) => {
     const key = `categoryCache_${userId}`;
-    try {
-      const { data } = await axios.get(
-        `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
-      );
-      if (data.status === 1 && Array.isArray(data.payload)) {
-        await setCache(key, data.payload);
-        store.dispatch(loadCategories());
-        const { categoryMap, subCategoryMap } = createCategoryMappings(
-          data.payload
-        );
-        store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
-      } else {
-        console.warn(
-          `[CacheService] Categories API returned status ${data.status}`
-        );
-        throw new Error("Invalid categories data");
-      }
-    } catch (err: any) {
-      if (!err.__CANCEL__)
-        console.error("[CacheService] Categories fetch failed:", err);
-      throw err;
+    const { data } = await axios.get(
+      `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
+    );
+    if (data.status !== 1 || !Array.isArray(data.payload)) {
+      throw new Error("Invalid categories data");
     }
+    await setCache(key, data.payload);
+    store.dispatch(loadCategories());
+    const { categoryMap, subCategoryMap } = createCategoryMappings(
+      data.payload
+    );
+    store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
   };
 
   const prefetchFiles = async (userId: string) => {
     const key = `filesCache_${userId}`;
-    try {
-      const { data } = await axios.get(
-        `${BASE_API_URL}/get-files.php?userid=${userId}`
-      );
-      if (data.status === 1 && Array.isArray(data.payload)) {
-        await setCache(key, data.payload);
-      } else {
-        console.warn(
-          `[CacheService] Files API returned status ${data.status} for user ${userId}`
-        );
-        throw new Error("Invalid files data");
-      }
-    } catch (err: any) {
-      if (!err.__CANCEL__)
-        console.error(
-          `[CacheService] Files fetch failed for user ${userId}:`,
-          err
-        );
-      throw err;
+    const { data } = await axios.get(
+      `${BASE_API_URL}/get-files.php?userid=${userId}`
+    );
+    if (data.status !== 1 || !Array.isArray(data.payload)) {
+      throw new Error("Invalid files data");
     }
+    await setCache(key, data.payload);
   };
 
-  return <>{children}</>;
+  const shouldShowModal = showSessionExpired && !isLoginScreen;
+
+  return (
+    <>
+      {children}
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={shouldShowModal}
+        onRequestClose={() => {
+          setShowSessionExpired(false);
+          navigation.navigate("LoginScreen" as never);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>
+              Session expired! Please log in again.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setShowSessionExpired(false);
+                navigation.navigate("LoginScreen" as never);
+              }}
+            >
+              <Text style={styles.modalButtonText}>Login</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
 };
 
 export default CacheService;
