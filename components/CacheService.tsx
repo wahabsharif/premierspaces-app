@@ -8,14 +8,20 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useRef,
 } from "react";
 import { Modal, Text, TouchableOpacity, View } from "react-native";
 
-import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "../Constants/env";
+import {
+  BASE_API_URL,
+  JOB_TYPES_CACHE_KEY,
+  CACHE_CONFIG,
+} from "../Constants/env";
 import styles from "../Constants/styles";
 import {
   deleteCache,
   getAllCache,
+  getCache,
   isOnline,
   setCache,
 } from "../services/cacheService";
@@ -51,9 +57,18 @@ const CacheService: React.FC<CacheServiceProps> = ({
   isLoginScreen,
 }) => {
   const [loading, setLoading] = useState(false);
-  const [cacheComplete, setCacheComplete] = useState(false);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
   const navigation = useNavigation();
+
+  // Track when last prefetch occurred to avoid excessive API calls
+  const lastPrefetchTime = useRef<number>(0);
+  // Track individual data type fetch timestamps
+  const lastFetchTimes = useRef<Record<string, number>>({
+    jobTypes: 0,
+    jobs: 0,
+    categories: 0,
+    files: 0,
+  });
 
   // Any 401 error triggers session-expired modal
   const handleError = (err: any) => {
@@ -65,9 +80,32 @@ const CacheService: React.FC<CacheServiceProps> = ({
     throw err;
   };
 
+  // Check if data is stale and needs refreshing
+  const isDataStale = (
+    cacheType: keyof typeof CACHE_CONFIG.FRESHNESS_DURATION,
+    lastUpdated: number
+  ): boolean => {
+    const freshnessDuration = CACHE_CONFIG.FRESHNESS_DURATION[cacheType];
+    return Date.now() - lastUpdated > freshnessDuration;
+  };
+
+  // Determine if we can prefetch (throttle check)
+  const canPrefetch = (): boolean => {
+    const now = Date.now();
+    // If first fetch or enough time has passed since last prefetch
+    return (
+      lastPrefetchTime.current === 0 ||
+      now - lastPrefetchTime.current > CACHE_CONFIG.THROTTLE_INTERVAL
+    );
+  };
+
   const prefetchAll = useCallback(
     async (force = false) => {
-      if (loading || (cacheComplete && !force)) return;
+      // Don't prefetch if already loading, or if throttled (unless force=true)
+      if (loading || (!force && !canPrefetch())) return;
+
+      // Update last prefetch time
+      lastPrefetchTime.current = Date.now();
       setLoading(true);
 
       try {
@@ -100,14 +138,14 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
         // 3) clean stale cache and prefetch
         await cleanupUserCache(userId);
-        await prefetchUserData(userId);
+        await prefetchUserData(userId, force);
       } catch (error) {
         console.error("[CacheService] Prefetch error:", error);
       } finally {
         setLoading(false);
       }
     },
-    [loading, cacheComplete, navigation, isLoginScreen]
+    [loading, navigation, isLoginScreen]
   );
 
   const debouncedPrefetch = useMemo(
@@ -122,29 +160,49 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
   }, [isLoginScreen, showSessionExpired]);
 
-  // Kick off or cancel prefetch on login/logout
+  // Initial load with delay to allow app to render first
   useEffect(() => {
+    let initialFetchTimer: NodeJS.Timeout | null = null;
+
     if (isLoggedIn) {
-      setCacheComplete(false);
-      debouncedPrefetch();
-    } else {
-      setCacheComplete(false);
-      debouncedPrefetch.cancel?.();
+      initialFetchTimer = setTimeout(() => {
+        debouncedPrefetch(false);
+      }, CACHE_CONFIG.INITIAL_PREFETCH_DELAY);
     }
+
+    return () => {
+      if (initialFetchTimer) {
+        clearTimeout(initialFetchTimer);
+      }
+    };
   }, [isLoggedIn, debouncedPrefetch]);
 
-  // Retry on reconnect
+  // Retry on reconnect, but only if we've been offline for a while
   useEffect(() => {
-    let first = true;
+    let wasOffline = false;
+    let lastConnectivityChange = 0;
+
     const unsubscribe = NetInfo.addEventListener((state) => {
-      if (first) {
-        first = false;
-        return;
+      const now = Date.now();
+
+      // If we're coming back online after being offline
+      if (state.isConnected && !wasOffline) {
+        wasOffline = false;
+
+        // Only trigger a refresh if we've been offline for a significant time
+        if (
+          now - lastConnectivityChange > CACHE_CONFIG.THROTTLE_INTERVAL &&
+          isLoggedIn
+        ) {
+          debouncedPrefetch(false);
+        }
+      } else if (!state.isConnected) {
+        wasOffline = true;
       }
-      if (state.isConnected && isLoggedIn) {
-        debouncedPrefetch(true);
-      }
+
+      lastConnectivityChange = now;
     });
+
     return () => {
       unsubscribe();
       debouncedPrefetch.cancel?.();
@@ -175,25 +233,43 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
   };
 
-  // Orchestrate all four fetches in parallel
-  const prefetchUserData = async (userId: string) => {
+  // Orchestrate all fetches, but check staleness first
+  const prefetchUserData = async (userId: string, force = false) => {
     try {
-      const results = await Promise.allSettled([
-        prefetchJobTypes(userId).catch(handleError),
-        prefetchJobs(userId).catch(handleError),
-        prefetchCategories(userId).catch(handleError),
-        prefetchFiles(userId).catch(handleError),
-      ]);
+      // Only fetch if forced or stale
+      const fetchPromises = [];
 
-      if (results.every((r) => r.status === "fulfilled")) {
-        setCacheComplete(true);
-      } else {
+      // Check each data type and only fetch if stale or forced
+      if (force || isDataStale("JOB_TYPES", lastFetchTimes.current.jobTypes)) {
+        fetchPromises.push(prefetchJobTypes(userId).catch(handleError));
+      }
+
+      if (force || isDataStale("JOBS", lastFetchTimes.current.jobs)) {
+        fetchPromises.push(prefetchJobs(userId).catch(handleError));
+      }
+
+      if (
+        force ||
+        isDataStale("CATEGORIES", lastFetchTimes.current.categories)
+      ) {
+        fetchPromises.push(prefetchCategories(userId).catch(handleError));
+      }
+
+      if (force || isDataStale("FILES", lastFetchTimes.current.files)) {
+        fetchPromises.push(prefetchFiles(userId).catch(handleError));
+      }
+
+      // Only run Promise.allSettled if we have promises to await
+      if (fetchPromises.length > 0) {
+        const results = await Promise.allSettled(fetchPromises);
+
         const has401Error = results.some(
           (r) =>
             r.status === "rejected" &&
             axios.isAxiosError(r.reason) &&
             r.reason.response?.status === 401
         );
+
         if (has401Error && !isLoginScreen) {
           setShowSessionExpired(true);
         }
@@ -205,6 +281,23 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
   const prefetchJobTypes = async (userId: string) => {
     const key = `${JOB_TYPES_CACHE_KEY}_${userId}`;
+
+    // First check if we have unexpired cache
+    const cacheEntry = await getCache(key);
+    const now = Date.now();
+
+    // If cache exists and is fresh, skip the fetch
+    if (
+      cacheEntry &&
+      cacheEntry.payload &&
+      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOB_TYPES
+    ) {
+      // Use cached data
+      store.dispatch(fetchJobTypes({ userId }));
+      return;
+    }
+
+    // Cache is stale or doesn't exist - fetch fresh data
     const { data } = await axios.get(
       `${BASE_API_URL}/jobtypes.php?userid=${userId}`
     );
@@ -213,10 +306,27 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
     await setCache(key, data.payload);
     store.dispatch(fetchJobTypes({ userId }));
+    lastFetchTimes.current.jobTypes = now;
   };
 
   const prefetchJobs = async (userId: string) => {
     const key = `getJobsCache_${userId}`;
+
+    // Check cache first
+    const cacheEntry = await getCache(key);
+    const now = Date.now();
+
+    // If cache exists and is fresh, skip the fetch
+    if (
+      cacheEntry &&
+      cacheEntry.payload &&
+      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOBS
+    ) {
+      // Cache is fresh enough
+      return;
+    }
+
+    // Cache is stale or doesn't exist - fetch fresh data
     const { data } = await axios.get(
       `${BASE_API_URL}/getjobs.php?userid=${userId}`
     );
@@ -224,10 +334,32 @@ const CacheService: React.FC<CacheServiceProps> = ({
       throw new Error("Invalid jobs data");
     }
     await setCache(key, data.payload);
+    lastFetchTimes.current.jobs = now;
   };
 
   const prefetchCategories = async (userId: string) => {
     const key = `categoryCache_${userId}`;
+
+    // Check cache first
+    const cacheEntry = await getCache(key);
+    const now = Date.now();
+
+    // If cache exists and is fresh, skip the fetch
+    if (
+      cacheEntry &&
+      cacheEntry.payload &&
+      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.CATEGORIES
+    ) {
+      // Use cached data
+      store.dispatch(loadCategories());
+      const { categoryMap, subCategoryMap } = createCategoryMappings(
+        cacheEntry.payload.payload
+      );
+      store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
+      return;
+    }
+
+    // Cache is stale or doesn't exist - fetch fresh data
     const { data } = await axios.get(
       `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
     );
@@ -240,10 +372,27 @@ const CacheService: React.FC<CacheServiceProps> = ({
       data.payload
     );
     store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
+    lastFetchTimes.current.categories = now;
   };
 
   const prefetchFiles = async (userId: string) => {
     const key = `filesCache_${userId}`;
+
+    // Check cache first
+    const cacheEntry = await getCache(key);
+    const now = Date.now();
+
+    // If cache exists and is fresh, skip the fetch
+    if (
+      cacheEntry &&
+      cacheEntry.payload &&
+      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.FILES
+    ) {
+      // Cache is fresh enough
+      return;
+    }
+
+    // Cache is stale or doesn't exist - fetch fresh data
     const { data } = await axios.get(
       `${BASE_API_URL}/get-files.php?userid=${userId}`
     );
@@ -251,6 +400,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
       throw new Error("Invalid files data");
     }
     await setCache(key, data.payload);
+    lastFetchTimes.current.files = now;
   };
 
   const shouldShowModal = showSessionExpired && !isLoginScreen;
