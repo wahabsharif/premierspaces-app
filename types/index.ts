@@ -10,7 +10,11 @@ export type RootStackParamList = {
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;
   FilesScreen: undefined;
-  MediaPreviewScreen: { jobId: string; fileCategory: string };
+  MediaPreviewScreen: {
+    jobId: string;
+    fileCategory: string;
+    files?: FileItem[];
+  };
   JobsScreen: { refresh?: boolean } | undefined;
   PendingDataScreen: undefined;
   JobDetailScreen: { id: string };
@@ -110,6 +114,7 @@ export interface FileItem {
   date_modified: string;
   tags?: string[];
   notes?: string;
+  file_category?: string;
 }
 
 export interface FileTypeCount {

@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   AVPlaybackStatus,
@@ -21,32 +20,37 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useDispatch, useSelector } from "react-redux";
 import styles from "../Constants/styles";
 import { Header, VideoThumbnail } from "../components";
-import { RootStackParamList } from "../types";
+import {
+  loadFiles,
+  selectFiles,
+  selectFilesLoading,
+  selectFilesError,
+} from "../store/filesSlice";
+import { RootStackParamList, FileItem } from "../types";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NUM_COLUMNS = 2;
 
-interface MediaFile {
-  id: string;
-  date_created: string;
-  file_category: string;
-  stream_url: string;
-  path: string;
-  file_name: string;
-}
-
 type Props = NativeStackScreenProps<RootStackParamList, "MediaPreviewScreen">;
 
-const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { jobId, fileCategory } = route.params;
-  const [allMedia, setAllMedia] = useState<MediaFile[]>([]);
-  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
-  const [loading, setLoading] = useState(true);
+const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
+  // Handle both navigation sources
+  const { jobId, fileCategory, files: routeFiles } = route.params;
+  const dispatch = useDispatch();
+
+  // Redux state
+  const allFiles = useSelector(selectFiles);
+  const isLoading = useSelector(selectFilesLoading);
+  const reduxError = useSelector(selectFilesError);
+
+  // Local state
+  const [mediaFiles, setMediaFiles] = useState<FileItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<MediaFile | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FileItem | null>(null);
   const [isModalReady, setIsModalReady] = useState(false);
   const videoRef = useRef<Video>(null);
   const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
@@ -56,6 +60,12 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [orientation, setOrientation] = useState(1); // 1 for portrait, 2 for landscape
+
+  // Use files from route.params if provided, otherwise undefined
+  const filesFromRoute = useMemo(
+    () => (routeFiles ? [...routeFiles] : undefined),
+    [routeFiles]
+  );
 
   const [activeTab, setActiveTab] = useState<string>(fileCategory || "image");
   const thumbnailCache = useMemo(() => new Map<string, string>(), []);
@@ -88,51 +98,67 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Load files using Redux
   useEffect(() => {
-    const loadMedia = async () => {
+    if (filesFromRoute) {
+      return;
+    }
+
+    async function loadJobFiles() {
       try {
-        const userDataRaw = await AsyncStorage.getItem("userData");
+        const AsyncStorage = await import(
+          "@react-native-async-storage/async-storage"
+        ).then((m) => m.default);
         const propRaw = await AsyncStorage.getItem("selectedProperty");
-        if (!userDataRaw || !propRaw) {
-          setError("Missing user or property data");
-          setLoading(false);
+        if (!propRaw) {
+          setError("Missing property data");
           return;
         }
-        const userData = JSON.parse(userDataRaw);
-        const property = JSON.parse(propRaw);
-        const userId = userData.payload?.userid || userData.userid;
-        const propertyId = property.id;
-        const url = `http://192.168.18.130:8000/api/mapp/get-files.php?userid=${userId}&property_id=${propertyId}&job_id=${jobId}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeout);
-        if (!res.ok) throw new Error(`Server status: ${res.status}`);
-        const json = await res.json();
-        if (json.status !== 1 || !Array.isArray(json.payload)) {
-          throw new Error("Invalid data received");
-        }
-        setAllMedia(json.payload);
+        const { id: propertyId } = JSON.parse(propRaw);
+        dispatch(loadFiles({ propertyId }) as any);
       } catch (e: any) {
         setError(e.message);
-      } finally {
-        setLoading(false);
       }
-    };
-    loadMedia();
-  }, [jobId]);
+    }
 
-  useEffect(() => {
-    const categoryNumber = getFileCategoryNumber(activeTab);
-    setMediaFiles(
-      allMedia.filter((item) => item.file_category === categoryNumber)
-    );
-  }, [activeTab, allMedia]);
+    loadJobFiles();
+  }, [dispatch, jobId, filesFromRoute]);
 
+  // Update error state if Redux has an error - only when reduxError changes
   useEffect(() => {
+    if (reduxError) {
+      setError(reduxError);
+    }
+  }, [reduxError]);
+
+  // Filter files for the current job and active tab
+  useEffect(() => {
+    if (filesFromRoute) {
+      // If files were passed via route params, use those
+      const categoryNumber = getFileCategoryNumber(activeTab);
+      setMediaFiles(
+        filesFromRoute.filter((item) => item.file_category === categoryNumber)
+      );
+    } else if (allFiles.length > 0 && jobId) {
+      // Filter from Redux store using jobId
+      const categoryNumber = getFileCategoryNumber(activeTab);
+      setMediaFiles(
+        allFiles
+          .filter((item) => item.job_id === jobId)
+          .filter((item) => item.file_category === categoryNumber)
+      );
+    } else {
+      // No files source
+      setMediaFiles([]);
+    }
+  }, [activeTab, allFiles, jobId, filesFromRoute]);
+
+  // Handle modal ready state
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+
     if (modalVisible) {
-      const t = setTimeout(() => setIsModalReady(true), 100);
-      return () => clearTimeout(t);
+      timeoutId = setTimeout(() => setIsModalReady(true), 100);
     } else {
       setIsModalReady(false);
       setIsFullscreen(false);
@@ -143,9 +169,13 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
         ).catch(() => {});
       }
     }
-  }, [modalVisible]);
 
-  const openModal = async (item: MediaFile) => {
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [modalVisible, orientation]);
+
+  const openModal = async (item: FileItem) => {
     setSelectedItem(item);
     setModalVisible(true);
     setStatus(null);
@@ -184,7 +214,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const renderItem = ({ item }: { item: MediaFile }) => (
+  const renderItem = ({ item }: { item: FileItem }) => (
     <TouchableOpacity
       style={innerStyles.itemContainer}
       onPress={() => openModal(item)}
@@ -295,7 +325,29 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   };
 
-  if (loading) {
+  const handleRetry = () => {
+    setError(null);
+    // Re-fetch property ID and dispatch the load files action
+    async function retryLoad() {
+      try {
+        const AsyncStorage = await import(
+          "@react-native-async-storage/async-storage"
+        ).then((m) => m.default);
+        const propRaw = await AsyncStorage.getItem("selectedProperty");
+        if (!propRaw) {
+          setError("Missing property data");
+          return;
+        }
+        const property = JSON.parse(propRaw);
+        dispatch(loadFiles({ propertyId: property.id }) as any);
+      } catch (e: any) {
+        setError(e.message);
+      }
+    }
+    retryLoad();
+  };
+
+  if (isLoading && !filesFromRoute) {
     return (
       <View style={styles.screenContainer}>
         <Header />
@@ -307,7 +359,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
-  if (error) {
+  if (error && !filesFromRoute) {
     return (
       <View style={styles.screenContainer}>
         <Header />
@@ -315,10 +367,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={innerStyles.errorText}>{error}</Text>
           <TouchableOpacity
             style={innerStyles.retryButton}
-            onPress={() => {
-              setLoading(true);
-              setError(null);
-            }}
+            onPress={handleRetry}
           >
             <Text style={innerStyles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
