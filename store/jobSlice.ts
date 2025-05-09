@@ -7,7 +7,10 @@ import {
   JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
 import { getCache, setCache } from "../services/cacheService";
-import { createJob as createOfflineJob } from "../services/jobService";
+import {
+  createJob as createOfflineJob,
+  getAllJobs,
+} from "../services/jobService";
 import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
 import { RootState } from "./index";
@@ -56,10 +59,7 @@ export const fetchJobTypes = createAsyncThunk<
     const jobTypes = resp.data.payload as Job[];
 
     // Store in SQLite cache
-    await setCache(cacheKey, {
-      created_at: Date.now(),
-      payload: jobTypes,
-    });
+    await setCache(cacheKey, jobTypes);
 
     return jobTypes;
   } catch (err: any) {
@@ -75,91 +75,117 @@ export const fetchJobTypes = createAsyncThunk<
   }
 });
 
-// New thunk for fetching jobs list
 export const fetchJobs = createAsyncThunk<
   Job[],
   { userId: string; propertyId?: string },
   { rejectValue: string; state: RootState }
 >(
   "jobs/fetch",
-  async ({ userId, propertyId }, { rejectWithValue, getState }) => {
+  async ({ userId, propertyId }, { rejectWithValue, getState, dispatch }) => {
     const cacheKey = `getJobsCache_${userId}`;
+    let offlineJobs: Job[] = [];
 
-    // Check if data is fresh enough in Redux store
+    // 1) Always pull locally created jobs first
+    try {
+      offlineJobs = await getAllJobs();
+    } catch (err) {
+      console.error("Error fetching offline jobs:", err);
+    }
+
+    // 2) If in-memory is fresh, merge and return (and update pending count)
     const { lastFetched, items } = getState().job.jobsList;
     const isFresh =
       lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
-
     if (isFresh && items.length > 0) {
-      // If we have fresh data in store, return it directly
-      // If propertyId is provided, filter the results for that property
-      if (propertyId) {
-        return items.filter((job) => job.property_id === propertyId);
-      }
-      return items;
+      dispatch(updatePendingCount(offlineJobs.length));
+      const combined = [...items];
+      offlineJobs.forEach((o) => {
+        if (!combined.some((j) => j.id === o.id)) combined.push(o);
+      });
+      const result = propertyId
+        ? combined.filter((j) => j.property_id === propertyId)
+        : combined;
+      // Also keep cache up-to-date
+      await setCache(cacheKey, combined);
+      return result;
     }
 
     try {
       const netInfo = await NetInfo.fetch();
 
       if (netInfo.isConnected) {
-        // Fetch from API if online
+        // 3a) Online path
         const response = await axios.get(
           `${BASE_API_URL}/getjobs.php?userid=${userId}`
         );
 
         if (response.data.status === 1) {
-          const sortedJobs = response.data.payload.sort(
-            (a: Job, b: Job) =>
+          const onlineJobs: Job[] = response.data.payload;
+          const combined = [...onlineJobs];
+          offlineJobs.forEach((o) => {
+            if (!combined.some((j) => j.id === o.id)) combined.push(o);
+          });
+          const sorted = combined.sort(
+            (a, b) =>
               new Date(b.date_created).getTime() -
               new Date(a.date_created).getTime()
           );
 
-          // Store in SQLite cache
-          await setCache(cacheKey, {
-            created_at: Date.now(),
-            payload: sortedJobs,
-          });
+          dispatch(updatePendingCount(offlineJobs.length));
+          await setCache(cacheKey, sorted);
 
-          // If propertyId is provided, filter the results for that property
-          if (propertyId) {
-            return sortedJobs.filter(
-              (job: Job) => job.property_id === propertyId
-            );
-          }
-          return sortedJobs;
+          return propertyId
+            ? sorted.filter((j) => j.property_id === propertyId)
+            : sorted;
         } else {
-          // API returned status !== 1
-          return [];
+          // API returned error status → return offline only
+          dispatch(updatePendingCount(offlineJobs.length));
+          await setCache(cacheKey, offlineJobs);
+          return offlineJobs;
         }
       } else {
-        // Offline, use cache
+        // 3b) Offline path → merge cache + offline
         const cachedEntry = await getCache(cacheKey);
-        if (cachedEntry?.payload?.payload) {
-          const allJobs = cachedEntry.payload.payload as Job[];
-          // If propertyId is provided, filter the results for that property
-          if (propertyId) {
-            return allJobs.filter((job) => job.property_id === propertyId);
-          }
-          return allJobs;
-        }
-        return [];
+        const cachedJobs: Job[] =
+          (cachedEntry?.payload?.payload as Job[]) || [];
+        let combined = [...offlineJobs];
+        cachedJobs.forEach((c) => {
+          if (!combined.some((j) => j.id === c.id)) combined.push(c);
+        });
+        combined = combined.sort(
+          (a, b) =>
+            new Date(b.date_created).getTime() -
+            new Date(a.date_created).getTime()
+        );
+
+        dispatch(updatePendingCount(offlineJobs.length));
+        await setCache(cacheKey, combined);
+
+        return propertyId
+          ? combined.filter((j) => j.property_id === propertyId)
+          : combined;
       }
     } catch (err: any) {
+      // 4) Error path → merge cache + offline, then return
       console.warn("[Slice] Jobs fetch failed, falling back to cache:", err);
-
-      // Get from SQLite cache
       const cachedEntry = await getCache(cacheKey);
-      if (cachedEntry?.payload?.payload) {
-        const allJobs = cachedEntry.payload.payload as Job[];
-        // If propertyId is provided, filter the results for that property
-        if (propertyId) {
-          return allJobs.filter((job) => job.property_id === propertyId);
-        }
-        return allJobs;
-      }
+      const cachedJobs: Job[] = (cachedEntry?.payload?.payload as Job[]) || [];
+      let combined = [...offlineJobs];
+      cachedJobs.forEach((c) => {
+        if (!combined.some((j) => j.id === c.id)) combined.push(c);
+      });
+      combined = combined.sort(
+        (a, b) =>
+          new Date(b.date_created).getTime() -
+          new Date(a.date_created).getTime()
+      );
 
-      return rejectWithValue(err.response?.data?.message || err.message);
+      dispatch(updatePendingCount(offlineJobs.length));
+      await setCache(cacheKey, combined);
+
+      return propertyId
+        ? combined.filter((j) => j.property_id === propertyId)
+        : combined;
     }
   }
 );
@@ -167,17 +193,25 @@ export const fetchJobs = createAsyncThunk<
 export const createJob = createAsyncThunk<
   any,
   { userId: string; jobData: Job },
-  { rejectValue: string }
->("job/create", async ({ userId, jobData }, { rejectWithValue }) => {
+  { rejectValue: string; state: RootState }
+>("job/create", async ({ userId, jobData }, { rejectWithValue, dispatch }) => {
   try {
     const netInfo = await NetInfo.fetch();
 
     if (netInfo.isConnected) {
       const postData = { userid: userId, payload: jobData };
       const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
+
+      // Force a job list refresh after creating a job
+      dispatch(resetJobsList());
+
       return response.data;
     } else {
+      // Save job locally and note that it's pending sync
       const offlineId = await createOfflineJob(jobData);
+
+      // Force a job list refresh after creating a job
+      dispatch(resetJobsList());
 
       return {
         message: "Job saved offline and will be synced when online",
@@ -304,7 +338,6 @@ const slice = createSlice({
         state.jobTypes.loading = false;
         state.jobTypes.error = action.payload || "Failed to load job types";
       })
-      // Add cases for fetching jobs
       .addCase(fetchJobs.pending, (state) => {
         state.jobsList.loading = true;
         state.jobsList.error = null;
@@ -313,12 +346,7 @@ const slice = createSlice({
         state.jobsList.loading = false;
         state.jobsList.items = action.payload;
         state.jobsList.lastFetched = Date.now();
-        // If empty array is returned, it means no jobs found
-        if (action.payload.length === 0) {
-          state.jobsList.error = "No jobs found with the selected property.";
-        } else {
-          state.jobsList.error = null;
-        }
+        state.jobsList.error = null;
       })
       .addCase(fetchJobs.rejected, (state, action) => {
         state.jobsList.loading = false;

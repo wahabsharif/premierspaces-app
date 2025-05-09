@@ -6,7 +6,7 @@ import { Job } from "../types";
 const initializeDatabase = async () => {
   const db = await SQLite.openDatabaseAsync("premierDatabase");
 
-  // Initialize table
+  // Initialize table with default status of '1'
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS jobs (
@@ -33,7 +33,7 @@ const initializeDatabase = async () => {
       contractor_other TEXT,
       smart_care_amount TEXT,
       date_job_closed TEXT,
-      status TEXT,
+      status TEXT DEFAULT '1',
       importance TEXT,
       image_file_count TEXT,
       doc_file_count TEXT,
@@ -112,12 +112,19 @@ const SQL = {
 export async function createJob(job: Job): Promise<string> {
   const db = await dbPromise;
 
+  // Assign a new UUID if missing
   if (!job.id || job.id.trim() === "") {
     job.id = uuidv4();
   }
 
+  // Set creation date if missing
   if (!job.date_created) {
     job.date_created = new Date().toISOString();
+  }
+
+  // Ensure offline job has status = '1' by default
+  if (!job.status) {
+    job.status = "1";
   }
 
   const statement = await db.prepareAsync(SQL.INSERT);
@@ -165,6 +172,7 @@ export async function getAllJobs(): Promise<Job[]> {
     throw error;
   }
 }
+
 export async function updateJob(job: Job): Promise<number> {
   const db = await dbPromise;
   const statement = await db.prepareAsync(SQL.UPDATE);

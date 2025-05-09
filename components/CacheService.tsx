@@ -1,9 +1,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
-import React, { ReactNode, useEffect, useState } from "react";
+import React, {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { BASE_API_URL, JOB_TYPES_CACHE_KEY } from "../Constants/env";
-import { deleteCache, getAllCache, setCache } from "../services/cacheService";
+import {
+  deleteCache,
+  getAllCache,
+  isOnline,
+  setCache,
+} from "../services/cacheService";
 import { store } from "../store";
 import { loadCategories } from "../store/categorySlice";
 import {
@@ -11,235 +22,230 @@ import {
   setCategoryMappings,
 } from "../store/filesSlice";
 import { fetchJobTypes } from "../store/jobSlice";
-import { FileItem } from "../types";
 
 interface CacheServiceProps {
   children: ReactNode;
   isLoggedIn: boolean;
 }
 
-interface JobType {
-  id: string;
-  name: string;
-  [key: string]: any;
-}
-
-interface PrefetchResponse<T> {
-  payload: T[];
-}
-
-interface Category {
-  id: number;
-  category: string;
-  sub_categories: { id: number; sub_category: string }[];
-  [key: string]: any;
-}
-
 const STORAGE_KEYS = {
   USER: "userData",
-  PROPERTY: "selectedProperty",
 };
 
-/**
- * Helper: returns `true` if device is online, `false` otherwise.
- */
-const isOnline = async (): Promise<boolean> => {
-  const state = await NetInfo.fetch();
-  return !!state.isConnected;
-};
-
-// Install Axios interceptor once, at module load time:
-axios.interceptors.request.use(
-  async (config) => {
-    const online = await isOnline();
-    if (!online) {
-      // Cancel the request entirely if offline
-      return Promise.reject({ message: "Offline", __CANCEL__: true });
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+function debounce<F extends (...args: any[]) => any>(func: F, wait: number) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const debounced = (...args: Parameters<F>) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+  debounced.cancel = () => {
+    if (timeout) clearTimeout(timeout);
+  };
+  return debounced;
+}
 
 const CacheService: React.FC<CacheServiceProps> = ({
   children,
   isLoggedIn,
 }) => {
+  const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [cacheComplete, setCacheComplete] = useState(false);
 
-  /**
-   * 1) Always bail out early if offline.
-   * 2) Clean up stale caches for other users.
-   * 3) Fetch & cache fresh job types, jobs, categories, and files when online.
-   */
-  const prefetchAll = async () => {
-    try {
-      if (!(await isOnline())) {
-        return;
+  const prefetchAll = useCallback(
+    async (force = false) => {
+      if (loading || !isLoggedIn || (cacheComplete && !force)) return;
+      setLoading(true);
+
+      try {
+        if (!(await isOnline())) {
+          console.log("[CacheService] Offline, skipping prefetch");
+          setReady(true);
+          return;
+        }
+
+        const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+        if (!userData) {
+          console.warn("[CacheService] No userData in storage");
+          setReady(true);
+          return;
+        }
+
+        const userObj = JSON.parse(userData);
+        const userId = userObj.payload?.userid ?? userObj.userid;
+        if (!userId) {
+          console.warn("[CacheService] Could not determine userId");
+          setReady(true);
+          return;
+        }
+
+        await cleanupUserCache(userId);
+        await prefetchUserData(userId);
+      } catch (error) {
+        console.error("[CacheService] Prefetch error:", error);
+      } finally {
+        setLoading(false);
+        setReady(true);
       }
+    },
+    [loading, isLoggedIn, cacheComplete]
+  );
 
-      const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER);
-      if (!userData) {
-        console.warn("[CacheService] No userData in storage");
-        return;
-      }
+  const debouncedPrefetch = useMemo(
+    () => debounce(prefetchAll, 300),
+    [prefetchAll]
+  );
 
-      const userObj = JSON.parse(userData);
-      const userId = userObj.payload?.userid ?? userObj.userid;
-      if (!userId) {
-        console.warn("[CacheService] Could not determine userId");
-        return;
-      }
-
-      // Clean up stale caches for other users
-      await cleanupUserCache(userId);
-
-      // Fetch & cache fresh data
-      await prefetchUserData(userId);
-    } catch (error) {
-      console.error("[CacheService] prefetchAll error:", error);
-    } finally {
-      setReady(true);
-    }
-  };
-
-  // Run once on mount
-  useEffect(() => {
-    prefetchAll();
-  }, []);
-
-  // Re-run on connectivity regained
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      if (state.isConnected) {
-        prefetchAll();
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Re-run on login
   useEffect(() => {
     if (isLoggedIn) {
-      prefetchAll();
+      debouncedPrefetch();
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, debouncedPrefetch]);
 
-  /**
-   * Remove any cached entries for other users
-   */
+  useEffect(() => {
+    let first = true;
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (first) {
+        first = false;
+        return;
+      }
+      if (state.isConnected && isLoggedIn) {
+        debouncedPrefetch(true); // Force prefetch on reconnect
+      }
+    });
+    return () => {
+      unsubscribe();
+      debouncedPrefetch.cancel?.();
+    };
+  }, [debouncedPrefetch, isLoggedIn]);
+
   const cleanupUserCache = async (currentUserId: string) => {
     try {
       const allCacheEntries = await getAllCache();
+      const staleKeys = allCacheEntries
+        .filter(
+          (entry) =>
+            (entry.table_key.startsWith(JOB_TYPES_CACHE_KEY) ||
+              entry.table_key.startsWith("getJobsCache_") ||
+              entry.table_key.startsWith("categoryCache_") ||
+              entry.table_key.startsWith("filesCache_")) &&
+            !entry.table_key.includes(`_${currentUserId}`)
+        )
+        .map((e) => e.table_key);
 
-      const stale = allCacheEntries.filter(
-        (entry) =>
-          (entry.table_key.startsWith(JOB_TYPES_CACHE_KEY) ||
-            entry.table_key.startsWith("getJobsCache_") ||
-            entry.table_key.startsWith(`categoryCache_`) ||
-            entry.table_key.startsWith(`filesCache_`)) &&
-          !entry.table_key.endsWith(`_${currentUserId}`) &&
-          !entry.table_key.includes(`_${currentUserId}_`) // For files cache which includes property ID
-      );
-
-      for (const entry of stale) {
-        await deleteCache(entry.table_key);
+      for (let i = 0; i < staleKeys.length; i += 20) {
+        const batch = staleKeys.slice(i, i + 20);
+        await Promise.all(batch.map((key) => deleteCache(key)));
       }
-    } catch (error) {
-      console.error("[CacheService] Error cleaning up user cache:", error);
+    } catch (err) {
+      console.error("[CacheService] Error cleaning up user cache:", err);
     }
   };
 
-  /**
-   * Fetch fresh job types, jobs, categories, and files, then cache them.
-   */
   const prefetchUserData = async (userId: string) => {
-    // Job types
-    const jobTypesCacheKey = `${JOB_TYPES_CACHE_KEY}_${userId}`;
+    const results = await Promise.allSettled([
+      prefetchJobTypes(userId),
+      prefetchJobs(userId),
+      prefetchCategories(userId),
+      prefetchFiles(userId),
+    ]);
+    const allSuccessful = results.every(
+      (result) => result.status === "fulfilled"
+    );
+    if (allSuccessful) {
+      setCacheComplete(true); // Set cacheComplete only if all prefetch operations succeed
+    }
+  };
+
+  const prefetchJobTypes = async (userId: string) => {
+    const key = `${JOB_TYPES_CACHE_KEY}_${userId}`;
     try {
-      const resp = await axios.get<PrefetchResponse<JobType>>(
+      const { data } = await axios.get(
         `${BASE_API_URL}/jobtypes.php?userid=${userId}`
       );
-      const jobTypes = resp.data.payload;
-      if (Array.isArray(jobTypes)) {
-        await setCache(jobTypesCacheKey, jobTypes);
+      if (Array.isArray(data.payload)) {
+        await setCache(key, data.payload);
         store.dispatch(fetchJobTypes({ userId }));
+      } else {
+        throw new Error("Invalid job types data");
       }
-    } catch (error: any) {
-      if (!error.__CANCEL__) {
-        console.error("[CacheService] Failed to fetch job types:", error);
-      }
-    }
-
-    // Jobs
-    const jobsCacheKey = `getJobsCache_${userId}`;
-    try {
-      const jobsResp = await axios.get(
-        `${BASE_API_URL}/getjobs.php?userid=${userId}`
-      );
-      if (jobsResp.data?.status === 1 && Array.isArray(jobsResp.data.payload)) {
-        const sortedJobs = jobsResp.data.payload.sort(
-          (a: any, b: any) =>
-            new Date(b.date_created).getTime() -
-            new Date(a.date_created).getTime()
-        );
-        await setCache(jobsCacheKey, sortedJobs);
-      }
-    } catch (error: any) {
-      if (!error.__CANCEL__) {
-        console.error("[CacheService] Failed to fetch jobs:", error);
-      }
-    }
-
-    // Categories
-    const categoriesCacheKey = `categoryCache_${userId}`;
-    try {
-      const catResp = await axios.get<{ status: number; payload: Category[] }>(
-        `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
-      );
-      if (catResp.data.status === 1 && Array.isArray(catResp.data.payload)) {
-        await setCache(categoriesCacheKey, catResp.data.payload);
-        store.dispatch(loadCategories());
-
-        // Update category mappings for files
-        const { categoryMap, subCategoryMap } = createCategoryMappings(
-          catResp.data.payload
-        );
-        store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
-      }
-    } catch (error: any) {
-      if (!error.__CANCEL__) {
-        console.error("[CacheService] Failed to fetch categories:", error);
-      }
-    }
-
-    // Fetch and cache ALL files for this user
-    const filesCacheKey = `filesCache_${userId}`;
-    try {
-      // Fetch all files for the user
-      const filesResp = await axios.get<{
-        status: number;
-        payload: FileItem[];
-      }>(`${BASE_API_URL}/get-files.php?userid=${userId}`);
-
-      if (
-        filesResp.data.status === 1 &&
-        Array.isArray(filesResp.data.payload)
-      ) {
-        // Store the raw payload directly
-        await setCache(filesCacheKey, filesResp.data.payload);
-      }
-    } catch (error: any) {
-      if (!error.__CANCEL__) {
-        console.error("[CacheService] Failed to prefetch files:", error);
-      }
+    } catch (err: any) {
+      if (!err.__CANCEL__)
+        console.error("[CacheService] Job types fetch failed:", err);
+      throw err;
     }
   };
 
-  if (!ready) {
-    // Optionally render a loading indicator
-    return null;
-  }
+  const prefetchJobs = async (userId: string) => {
+    const key = `getJobsCache_${userId}`;
+    try {
+      const { data } = await axios.get(
+        `${BASE_API_URL}/getjobs.php?userid=${userId}`
+      );
+      if (data.status === 1 && Array.isArray(data.payload)) {
+        await setCache(key, data.payload);
+      } else {
+        console.warn(
+          `[CacheService] getjobs API returned status ${data.status}`
+        );
+        throw new Error("Invalid jobs data");
+      }
+    } catch (err: any) {
+      if (!err.__CANCEL__)
+        console.error("[CacheService] Jobs fetch failed:", err);
+      throw err;
+    }
+  };
+
+  const prefetchCategories = async (userId: string) => {
+    const key = `categoryCache_${userId}`;
+    try {
+      const { data } = await axios.get(
+        `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
+      );
+      if (data.status === 1 && Array.isArray(data.payload)) {
+        await setCache(key, data.payload);
+        store.dispatch(loadCategories());
+        const { categoryMap, subCategoryMap } = createCategoryMappings(
+          data.payload
+        );
+        store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
+      } else {
+        console.warn(
+          `[CacheService] Categories API returned status ${data.status}`
+        );
+        throw new Error("Invalid categories data");
+      }
+    } catch (err: any) {
+      if (!err.__CANCEL__)
+        console.error("[CacheService] Categories fetch failed:", err);
+      throw err;
+    }
+  };
+
+  const prefetchFiles = async (userId: string) => {
+    const key = `filesCache_${userId}`;
+    try {
+      const { data } = await axios.get(
+        `${BASE_API_URL}/get-files.php?userid=${userId}`
+      );
+      if (data.status === 1 && Array.isArray(data.payload)) {
+        await setCache(key, data.payload);
+      } else {
+        console.warn(
+          `[CacheService] Files API returned status ${data.status} for user ${userId}`
+        );
+        throw new Error("Invalid files data");
+      }
+    } catch (err: any) {
+      if (!err.__CANCEL__)
+        console.error(
+          `[CacheService] Files fetch failed for user ${userId}:`,
+          err
+        );
+      throw err;
+    }
+  };
 
   return <>{children}</>;
 };

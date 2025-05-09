@@ -1,27 +1,49 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  RefreshControl,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import { fetchJobs, selectJobsList, resetJobsList } from "../store/jobSlice";
-import { Job, RootStackParamList } from "../types";
+import { formatDate } from "../helper";
 import { useReloadOnFocus } from "../hooks";
+import { getAllJobs } from "../services/jobService";
+import {
+  fetchJobs,
+  fetchJobTypes,
+  resetJobsList,
+  selectJobsList,
+  selectJobTypes,
+} from "../store/jobSlice";
+import { Job, RootStackParamList } from "../types";
 
-// Memoized Job item component to improve FlatList performance
+// Memoized JobItem now looks up human-readable type from Redux
 const JobItem = memo(
-  ({ item, onPress }: { item: Job; onPress: (item: Job) => void }) => {
+  ({
+    item,
+    typeName,
+    onPress,
+  }: {
+    item: Job;
+    typeName: string;
+    onPress: (item: Job) => void;
+  }) => {
     const tasks = useMemo(
       () =>
         [
@@ -35,7 +57,7 @@ const JobItem = memo(
           item.task8,
           item.task9,
           item.task10,
-        ].filter((task) => task && task.trim().length > 0),
+        ].filter((t) => t && t.trim().length > 0),
       [item]
     );
 
@@ -65,19 +87,13 @@ const JobItem = memo(
         : "Closed";
     }, [item.status]);
 
-    const handleJobPress = useCallback(() => {
-      onPress(item);
-    }, [item, onPress]);
+    const handlePress = useCallback(() => onPress(item), [item, onPress]);
 
     return (
-      <TouchableOpacity
-        style={innerStyles.jobContainer}
-        onPress={handleJobPress}
-      >
+      <TouchableOpacity style={innerStyles.jobContainer} onPress={handlePress}>
         <View style={innerStyles.jobDetails}>
           <Text style={innerStyles.jobNum}>{item.job_num}</Text>
-          <Text>{item.date_created}</Text>
-
+          <Text>{formatDate(item.date_created)}</Text>
           <View
             style={[
               innerStyles.statusContainer,
@@ -86,12 +102,11 @@ const JobItem = memo(
           >
             <Text style={innerStyles.statusText}>{statusText}</Text>
           </View>
-
-          <Text>{item.job_type}</Text>
+          <Text>{typeName}</Text>
         </View>
         <View style={innerStyles.taskListContainer}>
-          {tasks.map((task, index) => (
-            <Text key={index} style={innerStyles.taskItem}>
+          {tasks.map((task, i) => (
+            <Text key={i} style={innerStyles.taskItem}>
               {"\u2022"} {task}
             </Text>
           ))}
@@ -101,14 +116,11 @@ const JobItem = memo(
   }
 );
 
-// No Jobs Found component
-const NoJobsFound = ({ address }: { address: string }) => {
-  return (
-    <View style={innerStyles.noJobsContainer}>
-      <Text style={innerStyles.noJobsText}>No Jobs Found with {address}</Text>
-    </View>
-  );
-};
+const NoJobsFound = ({ address }: { address: string }) => (
+  <View style={innerStyles.noJobsContainer}>
+    <Text style={innerStyles.noJobsText}>No Jobs Found for {address}</Text>
+  </View>
+);
 
 const JobsScreen = ({
   navigation,
@@ -116,122 +128,131 @@ const JobsScreen = ({
 }: NativeStackScreenProps<RootStackParamList, "JobsScreen">) => {
   const dispatch = useDispatch();
   const { items: allJobs, loading, error } = useSelector(selectJobsList);
+  const { items: jobTypes } = useSelector(selectJobTypes);
   const [refreshing, setRefreshing] = useState(false);
-
+  const [offlineJobs, setOfflineJobs] = useState<Job[]>([]);
   const [propertyData, setPropertyData] = useState<{
     address: string;
     company: string;
     id: string;
   } | null>(null);
   const [userData, setUserData] = useState<any>(null);
+  const isFetchingRef = useRef(false);
 
-  // Filter jobs for the current property
-  const jobs = useMemo(() => {
-    if (!propertyData) return [];
-    return allJobs.filter((job) => job.property_id === propertyData.id);
-  }, [allJobs, propertyData]);
-
-  // Retrieve stored property and user data from AsyncStorage
-  useEffect(() => {
-    const fetchStoredData = async () => {
-      try {
-        const storedProperty = await AsyncStorage.getItem("selectedProperty");
-        const storedUser = await AsyncStorage.getItem("userData");
-        if (storedProperty) {
-          const parsedProperty = JSON.parse(storedProperty);
-          setPropertyData(parsedProperty);
-        }
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          setUserData(parsedUser);
-        }
-      } catch (err) {
-        console.error("Error retrieving stored data", err);
-      }
-    };
-    fetchStoredData();
-  }, []);
-
-  // Define fetchJobsData with force refresh option
-  const fetchJobsData = useCallback(
-    async (forceRefresh = false) => {
-      if (!userData) return;
-
-      try {
-        const userid = userData.payload?.userid ?? userData.userid;
-
-        // If force refresh, reset the jobs list first to clear cache
-        if (forceRefresh) {
-          dispatch(resetJobsList());
-        }
-
-        // Dispatch the fetch jobs action
-        dispatch(
-          fetchJobs({
-            userId: userid,
-            propertyId: propertyData?.id, // Add propertyId to filter server-side if available
-          }) as any
-        );
-      } catch (err) {
-        console.error("Error dispatching fetchJobs", err);
-      } finally {
-        // Always end refreshing state
-        setRefreshing(false);
-      }
-    },
-    [userData, dispatch, propertyData]
+  // Build a lookup map from ID -> display name
+  const jobTypeMap = useMemo(
+    () =>
+      jobTypes.reduce(
+        (map, jt) => ({ ...map, [String(jt.id)]: jt.name || jt.label || "" }),
+        {} as Record<string, string>
+      ),
+    [jobTypes]
   );
 
-  // Initial fetch when user data changes
+  // Merge online + offline
+  const jobs = useMemo(() => {
+    if (!propertyData) return [];
+    const combined = [...allJobs];
+    offlineJobs.forEach((oj) => {
+      if (
+        oj.property_id === propertyData.id &&
+        !combined.some((j) => j.id === oj.id)
+      ) {
+        combined.push(oj);
+      }
+    });
+    // Filter & sort
+    return combined
+      .filter((j) => j.property_id === propertyData.id)
+      .sort(
+        (a, b) =>
+          new Date(b.date_created).getTime() -
+          new Date(a.date_created).getTime()
+      );
+  }, [allJobs, offlineJobs, propertyData]);
+
+  // Load AsyncStorage
+  useEffect(() => {
+    (async () => {
+      try {
+        const p = await AsyncStorage.getItem("selectedProperty");
+        const u = await AsyncStorage.getItem("userData");
+        if (p) setPropertyData(JSON.parse(p));
+        if (u) setUserData(JSON.parse(u));
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  // Load offline jobs from SQLite
+  const loadOfflineJobs = useCallback(async () => {
+    try {
+      const local = await getAllJobs();
+      setOfflineJobs(local);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  // Fetch job types once we have userData
+  useEffect(() => {
+    if (userData) {
+      const uid = userData.payload?.userid ?? userData.userid;
+      dispatch(fetchJobTypes({ userId: uid }) as any);
+    }
+  }, [userData, dispatch]);
+
+  // Unified fetch (jobs + offline + optional reset)
+  const fetchJobsData = useCallback(
+    async (force = false) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      try {
+        if (!userData) return;
+        const uid = userData.payload?.userid ?? userData.userid;
+        if (force) dispatch(resetJobsList());
+        setRefreshing(true);
+        await loadOfflineJobs();
+        dispatch(
+          fetchJobs({ userId: uid, propertyId: propertyData?.id }) as any
+        );
+      } finally {
+        setRefreshing(false);
+        isFetchingRef.current = false;
+      }
+    },
+    [userData, dispatch, propertyData, loadOfflineJobs]
+  );
+
+  // Initial + on focus + on pull
   useEffect(() => {
     fetchJobsData();
   }, [fetchJobsData]);
+  useReloadOnFocus(() => fetchJobsData(true));
 
-  // Use the custom hook to reload data when the screen comes into focus
-  const reloadJobs = useCallback(() => {
-    return fetchJobsData(true);
-  }, [fetchJobsData]);
+  const onRefresh = useCallback(() => fetchJobsData(true), [fetchJobsData]);
 
-  useReloadOnFocus(reloadJobs);
-
-  // Handle pull-to-refresh
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchJobsData(true);
-  }, [fetchJobsData]);
-
-  // Handle job item press
-  const handleJobPress = useCallback(
-    async (item: Job) => {
-      try {
-        await AsyncStorage.setItem("jobData", JSON.stringify(item));
-        navigation.navigate("JobDetailScreen", { id: item.id });
-      } catch (err) {
-        console.error("Error storing job data", err);
-      }
+  const handlePress = useCallback(
+    async (job: Job) => {
+      await AsyncStorage.setItem("jobData", JSON.stringify(job));
+      navigation.navigate("JobDetailScreen", { id: job.id });
     },
     [navigation]
   );
 
-  // Navigate to new job screen
-  const handleOpenNewJob = useCallback(() => {
-    navigation.navigate("OpenNewJobScreen");
-  }, [navigation]);
-
-  // Optimized renderItem function
   const renderJob = useCallback(
     ({ item }: { item: Job }) => {
-      return <JobItem item={item} onPress={handleJobPress} />;
+      const typeName = jobTypeMap[item.job_type] ?? item.job_type;
+      return <JobItem item={item} typeName={typeName} onPress={handlePress} />;
     },
-    [handleJobPress]
+    [jobTypeMap, handlePress]
   );
 
-  // Check if a job was just created or the route params indicate a refresh is needed
+  // Handle external refresh param
   useEffect(() => {
     if (route.params?.refresh) {
-      // Clear the param to prevent multiple refreshes
       navigation.setParams({ refresh: undefined });
-      // Force refresh the jobs list
       fetchJobsData(true);
     }
   }, [route.params, navigation, fetchJobsData]);
@@ -252,34 +273,34 @@ const JobsScreen = ({
         )}
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={handleOpenNewJob}
+          onPress={() => navigation.navigate("OpenNewJobScreen")}
         >
           <Text style={styles.buttonText}>Open New Job</Text>
         </TouchableOpacity>
+
         {loading && !refreshing && <ActivityIndicator color={color.primary} />}
         {!loading && error && <Text style={styles.errorText}>{error}</Text>}
-        {!loading && !error && (
-          <>
-            {jobs.length > 0 ? (
-              <FlatList
-                data={jobs}
-                keyExtractor={(item) => item.id}
-                renderItem={renderJob}
-                contentContainerStyle={{ paddingBottom: 20 }}
-                style={{ width: "100%" }}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={[color.primary]}
-                  />
-                }
-              />
-            ) : (
-              propertyData && <NoJobsFound address={propertyData.address} />
-            )}
-          </>
-        )}
+
+        {!loading &&
+          !error &&
+          (jobs.length > 0 ? (
+            <FlatList
+              data={jobs}
+              keyExtractor={(j) => j.id}
+              renderItem={renderJob}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              style={{ width: "100%" }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[color.primary]}
+                />
+              }
+            />
+          ) : (
+            propertyData && <NoJobsFound address={propertyData.address} />
+          ))}
       </View>
     </View>
   );
@@ -323,7 +344,7 @@ const innerStyles = StyleSheet.create({
   },
   statusText: {
     color: color.white,
-    fontWeight: "semibold",
+    fontWeight: "600",
   },
   noJobsContainer: {
     flex: 1,

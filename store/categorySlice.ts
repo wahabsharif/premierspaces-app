@@ -68,8 +68,9 @@ export const loadCategories = createAsyncThunk<
     } else {
       // Offline: load from cache
       const cached = await getCache(cacheKey);
-      if (cached) {
-        return cached.payload as Category[];
+      if (cached && cached.payload) {
+        // FIXED: correctly handle the cache structure
+        return cached.payload.payload as Category[];
       } else {
         throw new Error("No internet and no cached data");
       }
@@ -77,17 +78,23 @@ export const loadCategories = createAsyncThunk<
   } catch (err: any) {
     // Attempt to load from cache on any error
     try {
-      const userCache = await getCache("userData");
-      const user = userCache ? userCache.payload : null;
+      const userJson = await AsyncStorage.getItem("userData");
+      const user = userJson ? JSON.parse(userJson) : null;
       const userId = user?.payload?.userid;
-      const cacheKey = userId ? `categoryCache_${userId}` : "categoryCache";
 
-      const cached = await getCache(cacheKey);
-      if (cached) {
-        return cached.payload as Category[];
+      if (!userId) {
+        return rejectWithValue("User ID missing from storage");
       }
-    } catch {
-      // ignore
+
+      const cacheKey = `categoryCache_${userId}`;
+      const cached = await getCache(cacheKey);
+
+      if (cached && cached.payload) {
+        // FIXED: correctly handle the cache structure
+        return cached.payload.payload as Category[];
+      }
+    } catch (cacheErr: any) {
+      console.error("Cache retrieval error:", cacheErr);
     }
     return rejectWithValue(err.message || "Failed to load categories");
   }
@@ -100,12 +107,17 @@ const categorySlice = createSlice({
     clearCategoryCache: (state) => {
       state.data = [];
       // Remove SQLite cache entry
-      getCache("userData")
-        .then((userCache) => {
-          const user = userCache ? userCache.payload : null;
-          const userId = user?.payload?.userid;
-          const cacheKey = userId ? `categoryCache_${userId}` : "categoryCache";
-          return deleteCache(cacheKey);
+      AsyncStorage.getItem("userData")
+        .then((userJson) => {
+          if (userJson) {
+            const user = JSON.parse(userJson);
+            const userId = user?.payload?.userid;
+            if (userId) {
+              const cacheKey = `categoryCache_${userId}`;
+              return deleteCache(cacheKey);
+            }
+          }
+          return null;
         })
         .catch(() => {
           // ignore
