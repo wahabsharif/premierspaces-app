@@ -15,11 +15,13 @@ import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { useReloadOnFocus } from "../hooks";
-import { RootState } from "../store";
-import { fetchJobs } from "../store/jobSlice";
+import {
+  fetchContractors,
+  selectContractorsForJob,
+  selectContractorsLoading,
+} from "../store/contractorSlice";
+import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
-import axios from "axios";
-import { BASE_API_URL } from "../Constants/env";
 
 interface Property {
   address: string;
@@ -45,11 +47,6 @@ interface JobDetail {
   id: string;
 }
 
-interface Contractor {
-  name: string;
-  amount: string;
-}
-
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
@@ -57,13 +54,28 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const dispatch = useDispatch();
   const [userId, setUserId] = useState<string | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
-  const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
-  const [contractors, setContractors] = useState<Contractor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Get jobs list from Redux store
-  const jobsList = useSelector((state: RootState) => state.job.jobsList);
+  // Get jobs and job loading state from Redux store
+  const {
+    items: jobItems,
+    loading: jobsLoading,
+    error: jobsError,
+  } = useSelector(selectJobsList);
+
+  // Get the specific job from the jobs list
+  const jobDetail = useMemo(
+    () =>
+      jobItems.find((job) => job.id === jobId) as unknown as
+        | JobDetail
+        | undefined,
+    [jobItems, jobId]
+  );
+
+  // Get contractors from Redux store using memoized selector
+  const contractors = useSelector((state) =>
+    selectContractorsForJob(state, jobId)
+  );
+  const contractorsLoading = useSelector(selectContractorsLoading);
 
   const loadLocalData = useCallback(async () => {
     try {
@@ -75,7 +87,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         const user = JSON.parse(userJson);
         setUserId(user.payload?.userid ?? user.userid ?? null);
       }
-      if (propJson) setProperty(JSON.parse(propJson));
+      if (propJson) {
+        const property = JSON.parse(propJson);
+        console.log("Property saved to AsyncStorage:", property);
+        setProperty(property);
+      }
     } catch (e) {
       // console.error("Error loading local data", e);
     }
@@ -92,67 +108,24 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [userId, dispatch]);
 
-  // Find the job details from Redux store
+  // Fetch contractors using Redux action
   useEffect(() => {
-    if (jobsList.items.length > 0 && jobId) {
-      const foundJob = jobsList.items.find((job) => job.id === jobId);
-      if (foundJob) {
-        setJobDetail(foundJob as unknown as JobDetail);
-        setLoading(false);
-      } else {
-        // If job not found in Redux store, fetch it directly
-        fetchJobDirectly();
-      }
-    } else if (!jobsList.loading) {
-      // If jobs list is empty but not loading, fetch directly
-      fetchJobDirectly();
+    if (userId && jobId) {
+      dispatch(fetchContractors({ userId, jobId }) as any);
     }
-  }, [jobsList, jobId]);
+  }, [userId, jobId, dispatch]);
 
-  // Fallback to direct API call if job not found in Redux store
-  const fetchJobDirectly = useCallback(async () => {
-    if (!userId) return;
-    setLoading(true);
-    try {
-      const { data: jd } = await axios.get<{
-        status: number;
-        payload: JobDetail | JobDetail[];
-      }>(`${BASE_API_URL}/getjobs.php`, {
-        params: { userid: userId, id: jobId },
-      });
-      if (jd.status === 1) {
-        const detail = Array.isArray(jd.payload) ? jd.payload[0] : jd.payload;
-        setJobDetail(detail);
-      } else {
-        setError("Job details not found.");
+  // Reload data when screen comes into focus
+  const reloadData = useCallback(async () => {
+    if (userId) {
+      await dispatch(fetchJobs({ userId }) as any);
+      if (jobId) {
+        await dispatch(fetchContractors({ userId, jobId }) as any);
       }
-    } catch (e) {
-      // console.error(e);
-      setError("Error fetching job details.");
-    } finally {
-      setLoading(false);
     }
-  }, [userId, jobId]);
+  }, [userId, jobId, dispatch]);
 
-  const fetchContractors = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const { data: cd } = await axios.get<{
-        status: number;
-        payload: Contractor | Contractor[];
-      }>(`${BASE_API_URL}/get-contractor-data.php`, {
-        params: { userid: userId, job_id: jobId },
-      });
-      if (cd.status === 1) {
-        setContractors(Array.isArray(cd.payload) ? cd.payload : [cd.payload]);
-      }
-    } catch (e) {
-      // console.error(e);
-    }
-  }, [userId, jobId]);
-
-  useReloadOnFocus(fetchJobDirectly);
-  useReloadOnFocus(fetchContractors);
+  useReloadOnFocus(reloadData);
 
   const tasks = useMemo(
     () =>
@@ -180,21 +153,23 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
   );
 
-  if (loading || jobsList.loading)
+  if (jobsLoading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#1f3759" />
       </View>
     );
+  }
 
-  if (error || !jobDetail)
+  if (jobsError || !jobDetail) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text style={styles.errorText}>
-          {error ?? "No job details available."}
+          {jobsError ?? "No job details available."}
         </Text>
       </View>
     );
+  }
 
   return (
     <View style={styles.screenContainer}>
@@ -208,14 +183,14 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.bannerLabel}>Selected Property:</Text>
             <Text style={styles.bannerText}>{property.address}</Text>
             <Text style={styles.extraSmallText}>{property.company}</Text>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => navigation.navigate("UploadScreen", { jobId })}
-            >
-              <Text style={styles.buttonText}>Upload Files</Text>
-            </TouchableOpacity>
           </View>
         )}
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => navigation.navigate("UploadScreen", { jobId })}
+        >
+          <Text style={styles.buttonText}>Upload Files</Text>
+        </TouchableOpacity>
         <View style={{ width: "100%", marginVertical: 10 }}>
           <Text style={styles.label}>Job Type</Text>
           <Text style={styles.smallText}>{jobDetail.job_type}</Text>
@@ -234,7 +209,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         <View style={{ width: "100%" }}>
           <Text style={styles.label}>Costs</Text>
-          {contractors.length > 0 ? (
+          {contractorsLoading ? (
+            <ActivityIndicator size="small" color="#1f3759" />
+          ) : contractors.length > 0 ? (
             <>
               {contractors.map((c, idx) => (
                 <View key={idx} style={innerStyles.costItem}>
