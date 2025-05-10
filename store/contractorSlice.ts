@@ -1,7 +1,11 @@
-import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { createSelector } from "@reduxjs/toolkit";
+import {
+  createAsyncThunk,
+  createSelector,
+  createSlice,
+} from "@reduxjs/toolkit";
 import axios from "axios";
-import { BASE_API_URL } from "../Constants/env";
+import { BASE_API_URL, CONTRACTOR_CACHE_KEY } from "../Constants/env";
+import { getCache, isOnline, setCache } from "../services/cacheService";
 import { RootState } from "./index";
 
 export interface Contractor {
@@ -46,6 +50,25 @@ export const fetchContractors = createAsyncThunk<
       return { jobId, contractors: items[jobId] || [] };
     }
 
+    // Try to get from cache first
+    const cacheKey = `${CONTRACTOR_CACHE_KEY}_${userId}_${jobId}`;
+    try {
+      const cacheEntry = await getCache(cacheKey);
+      if (cacheEntry && cacheEntry.payload) {
+        // When using cache, make sure to store in Redux too
+        return { jobId, contractors: cacheEntry.payload };
+      }
+    } catch (cacheError) {
+      console.error("[contractorSlice] Cache error:", cacheError);
+      // Continue to API fetch on cache error
+    }
+
+    // Check if we're online before trying API
+    const online = await isOnline();
+    if (!online) {
+      return rejectWithValue("Device is offline. Cannot fetch contractors.");
+    }
+
     try {
       const { data } = await axios.get(`${BASE_API_URL}/contractor.php`, {
         params: { userid: userId, job_id: jobId },
@@ -58,8 +81,13 @@ export const fetchContractors = createAsyncThunk<
           ? [data.payload]
           : [];
 
+        // Store in cache with explicit timestamp for better tracking
+        await setCache(cacheKey, contractors);
+
         return { jobId, contractors };
       } else {
+        // Store empty array in cache
+        await setCache(cacheKey, []);
         return { jobId, contractors: [] };
       }
     } catch (err: any) {

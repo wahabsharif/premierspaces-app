@@ -6,6 +6,8 @@ export const JOB_TYPES_CACHE_KEY = "jobTypesCache";
 
 export const JOB_TYPES_CACHE_EXPIRY = 3600000; // 1 hour in milliseconds
 
+export const CONTRACTOR_CACHE_KEY = "contractorCache";
+
 export const SYNC_EVENTS = {
   SYNC_STARTED: "sync_started",
   SYNC_COMPLETED: "sync_completed",
@@ -21,9 +23,10 @@ export const CACHE_CONFIG = {
     JOBS: 5 * 60 * 1000, // 5 minutes
     CATEGORIES: 30 * 60 * 1000, // 30 minutes
     FILES: 10 * 60 * 1000, // 10 minutes
+    CONTRACTORS: 10 * 60 * 1000, // 10 minutes
   },
   // Initial delay before prefetching data
-  INITIAL_PREFETCH_DELAY: 1000, // 1 second
+  INITIAL_PREFETCH_DELAY: 500, // 500ms
   // Minimum time between prefetch attempts
-  THROTTLE_INTERVAL: 10000, // 10 seconds
+  THROTTLE_INTERVAL: 60 * 1000, // 1 minute
 };

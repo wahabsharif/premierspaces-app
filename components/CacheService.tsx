@@ -7,19 +7,21 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useState,
   useRef,
+  useState,
 } from "react";
 import { Modal, Text, TouchableOpacity, View } from "react-native";
 
 import {
   BASE_API_URL,
-  JOB_TYPES_CACHE_KEY,
   CACHE_CONFIG,
+  CONTRACTOR_CACHE_KEY,
+  JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
 import styles from "../Constants/styles";
 import {
   deleteCache,
+  deleteCacheByPrefix,
   getAllCache,
   getCache,
   isOnline,
@@ -68,6 +70,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     jobs: 0,
     categories: 0,
     files: 0,
+    contractors: 0,
   });
 
   // Any 401 error triggers session-expired modal
@@ -186,7 +189,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
       const now = Date.now();
 
       // If we're coming back online after being offline
-      if (state.isConnected && !wasOffline) {
+      if (state.isConnected && wasOffline) {
         wasOffline = false;
 
         // Only trigger a refresh if we've been offline for a significant time
@@ -219,7 +222,8 @@ const CacheService: React.FC<CacheServiceProps> = ({
             (entry.table_key.startsWith(JOB_TYPES_CACHE_KEY) ||
               entry.table_key.startsWith("getJobsCache_") ||
               entry.table_key.startsWith("categoryCache_") ||
-              entry.table_key.startsWith("filesCache_")) &&
+              entry.table_key.startsWith("filesCache_") ||
+              entry.table_key.startsWith(CONTRACTOR_CACHE_KEY)) &&
             !entry.table_key.includes(`_${currentUserId}`)
         )
         .map((e) => e.table_key);
@@ -257,6 +261,15 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
       if (force || isDataStale("FILES", lastFetchTimes.current.files)) {
         fetchPromises.push(prefetchFiles(userId).catch(handleError));
+      }
+
+      if (
+        force ||
+        isDataStale("CONTRACTORS", lastFetchTimes.current.contractors)
+      ) {
+        fetchPromises.push(
+          prefetchActiveJobContractors(userId).catch(handleError)
+        );
       }
 
       // Only run Promise.allSettled if we have promises to await
@@ -401,6 +414,47 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
     await setCache(key, data.payload);
     lastFetchTimes.current.files = now;
+  };
+
+  const prefetchActiveJobContractors = async (userId: string) => {
+    const key = `${CONTRACTOR_CACHE_KEY}_${userId}`;
+    const now = Date.now();
+
+    // 1) Try reading the existing cache
+    const cacheEntry = await getCache(key);
+    if (
+      cacheEntry &&
+      cacheEntry.payload &&
+      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.CONTRACTORS
+    ) {
+      // Cache still fresh → nothing to do
+      return;
+    }
+
+    // 2) Not cached or stale → fetch the full list
+    const { data } = await axios.get(
+      `${BASE_API_URL}/contractor.php?userid=${userId}`
+    );
+
+    // 3) Normalize to an array
+    let contractors: any[] = [];
+    if (data.status === 1) {
+      if (Array.isArray(data.payload)) {
+        contractors = data.payload;
+      } else if (data.payload) {
+        contractors = [data.payload];
+      }
+    } else {
+      // (optional) You could set an empty array on non-200 or status!==1
+      contractors = [];
+    }
+
+    // 4) Save back into cache, update timestamp
+    await setCache(key, contractors);
+    lastFetchTimes.current.contractors = now;
+
+    // 5) (optional) dispatch into your store if you need it in Redux
+    // store.dispatch(setContractors(contractors));
   };
 
   const shouldShowModal = showSessionExpired && !isLoginScreen;
