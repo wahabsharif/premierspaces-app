@@ -39,9 +39,6 @@ async function initializeDatabase() {
 // Singleton database connection promise
 const dbPromise = initializeDatabase();
 
-// Track transaction status to prevent nested transactions
-let isInTransaction = false;
-
 // Connection management - wait for DB to be ready
 let dbReady = false;
 dbPromise.then(() => {
@@ -53,10 +50,14 @@ dbPromise.then(() => {
 
 // Prepared SQL statements for better performance and security
 const SQL = {
-  INSERT: `INSERT INTO cache_entries (table_key, payload, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?);`,
+  UPSERT: `INSERT INTO cache_entries (table_key, payload, created_at, updated_at, expires_at) 
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(table_key) DO UPDATE SET 
+           payload = excluded.payload, 
+           updated_at = excluded.updated_at, 
+           expires_at = excluded.expires_at;`,
   SELECT_BY_KEY: `SELECT * FROM cache_entries WHERE table_key = ? AND (expires_at > ? OR expires_at = 0);`,
   SELECT_ALL: `SELECT * FROM cache_entries WHERE expires_at > ? OR expires_at = 0;`,
-  UPDATE: `UPDATE cache_entries SET payload = ?, updated_at = ?, expires_at = ? WHERE table_key = ?;`,
   DELETE_BY_KEY: `DELETE FROM cache_entries WHERE table_key = ?;`,
   CLEAR: `DELETE FROM cache_entries;`,
   DELETE_EXPIRED: `DELETE FROM cache_entries WHERE expires_at > 0 AND expires_at < ?;`,
@@ -95,13 +96,7 @@ async function withTransaction<T>(
   db: SQLite.SQLiteDatabase,
   callback: () => Promise<T>
 ): Promise<T> {
-  // If already in a transaction, just execute the callback
-  if (isInTransaction) {
-    return await callback();
-  }
-
   try {
-    isInTransaction = true;
     await db.execAsync("BEGIN TRANSACTION;");
     const result = await callback();
     await db.execAsync("COMMIT;");
@@ -109,13 +104,11 @@ async function withTransaction<T>(
   } catch (err) {
     await db.execAsync("ROLLBACK;");
     throw err;
-  } finally {
-    isInTransaction = false;
   }
 }
 
 /**
- * Store or update a cache entry by key.
+ * Store or update a cache entry by key using upsert pattern.
  *
  * @param key - The unique key for the cache entry
  * @param value - The data to store
@@ -134,48 +127,13 @@ export async function setCache(
   const json = JSON.stringify({ payload: value }); // Ensure consistent structure
 
   try {
-    return await withTransaction(db, async () => {
-      // Check if entry already exists
-      const selectStmt = await db.prepareAsync(SQL.SELECT_BY_KEY);
-      const result = await selectStmt.executeAsync([key, now]);
-      const row = await result.getFirstAsync();
-      await selectStmt.finalizeAsync();
-
-      let changes = 0;
-
-      if (row) {
-        // Update existing entry
-        const updateStmt = await db.prepareAsync(SQL.UPDATE);
-        try {
-          const res = await updateStmt.executeAsync([
-            json,
-            now,
-            expiresAt,
-            key,
-          ]);
-          changes = res.changes;
-        } finally {
-          await updateStmt.finalizeAsync();
-        }
-      } else {
-        // Insert new entry
-        const insertStmt = await db.prepareAsync(SQL.INSERT);
-        try {
-          const res = await insertStmt.executeAsync([
-            key,
-            json,
-            now,
-            now,
-            expiresAt,
-          ]);
-          changes = res.lastInsertRowId;
-        } finally {
-          await insertStmt.finalizeAsync();
-        }
-      }
-
-      return changes;
-    });
+    const stmt = await db.prepareAsync(SQL.UPSERT);
+    try {
+      const res = await stmt.executeAsync([key, json, now, now, expiresAt]);
+      return res.changes || res.lastInsertRowId;
+    } finally {
+      await stmt.finalizeAsync();
+    }
   } catch (err) {
     console.error("[cacheService][setCache] ERROR:", err);
     throw err;
@@ -210,42 +168,18 @@ export async function setBatchCache(
 
         for (const { key, value } of batch) {
           const json = JSON.stringify({ payload: value });
-
-          // Check if entry exists
-          const selectStmt = await db.prepareAsync(SQL.SELECT_BY_KEY);
-          const result = await selectStmt.executeAsync([key, now]);
-          const row = await result.getFirstAsync();
-          await selectStmt.finalizeAsync();
-
-          if (row) {
-            // Update
-            const updateStmt = await db.prepareAsync(SQL.UPDATE);
-            try {
-              const res = await updateStmt.executeAsync([
-                json,
-                now,
-                expiresAt,
-                key,
-              ]);
-              totalChanges += res.changes;
-            } finally {
-              await updateStmt.finalizeAsync();
-            }
-          } else {
-            // Insert
-            const insertStmt = await db.prepareAsync(SQL.INSERT);
-            try {
-              const res = await insertStmt.executeAsync([
-                key,
-                json,
-                now,
-                now,
-                expiresAt,
-              ]);
-              totalChanges += res.lastInsertRowId > 0 ? 1 : 0;
-            } finally {
-              await insertStmt.finalizeAsync();
-            }
+          const stmt = await db.prepareAsync(SQL.UPSERT);
+          try {
+            const res = await stmt.executeAsync([
+              key,
+              json,
+              now,
+              now,
+              expiresAt,
+            ]);
+            totalChanges += res.changes || (res.lastInsertRowId > 0 ? 1 : 0);
+          } finally {
+            await stmt.finalizeAsync();
           }
         }
       }
@@ -402,9 +336,12 @@ export async function deleteBatchCache(keys: string[]): Promise<number> {
 
         for (const key of batch) {
           const stmt = await db.prepareAsync(SQL.DELETE_BY_KEY);
-          const res = await stmt.executeAsync([key]);
-          await stmt.finalizeAsync();
-          totalDeleted += res.changes;
+          try {
+            const res = await stmt.executeAsync([key]);
+            totalDeleted += res.changes;
+          } finally {
+            await stmt.finalizeAsync();
+          }
         }
       }
 
