@@ -21,14 +21,13 @@ import {
 import styles from "../Constants/styles";
 import {
   deleteCache,
-  deleteCacheByPrefix,
   getAllCache,
   getCache,
   isOnline,
   setCache,
 } from "../services/cacheService";
 import { store } from "../store";
-import { loadCategories } from "../store/categorySlice";
+import { loadCategories, setCategories } from "../store/categorySlice";
 import {
   createCategoryMappings,
   setCategoryMappings,
@@ -61,10 +60,15 @@ const CacheService: React.FC<CacheServiceProps> = ({
   const [loading, setLoading] = useState(false);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
   const navigation = useNavigation();
+  const fetchInProgress = useRef<Record<string, boolean>>({
+    jobTypes: false,
+    jobs: false,
+    categories: false,
+    files: false,
+    contractors: false,
+  });
 
-  // Track when last prefetch occurred to avoid excessive API calls
   const lastPrefetchTime = useRef<number>(0);
-  // Track individual data type fetch timestamps
   const lastFetchTimes = useRef<Record<string, number>>({
     jobTypes: 0,
     jobs: 0,
@@ -73,8 +77,18 @@ const CacheService: React.FC<CacheServiceProps> = ({
     contractors: 0,
   });
 
-  // Any 401 error triggers session-expired modal
-  const handleError = (err: any) => {
+  const networkState = useRef<{
+    wasOffline: boolean;
+    pendingRefresh: boolean;
+    lastConnectivityChange: number;
+  }>({
+    wasOffline: false,
+    pendingRefresh: false,
+    lastConnectivityChange: 0,
+  });
+
+  const handleError = (err: any, dataType: string) => {
+    console.error(`[CacheService] Error fetching ${dataType}:`, err);
     if (axios.isAxiosError(err) && err.response?.status === 401) {
       if (!isLoginScreen) {
         setShowSessionExpired(true);
@@ -83,7 +97,6 @@ const CacheService: React.FC<CacheServiceProps> = ({
     throw err;
   };
 
-  // Check if data is stale and needs refreshing
   const isDataStale = (
     cacheType: keyof typeof CACHE_CONFIG.FRESHNESS_DURATION,
     lastUpdated: number
@@ -92,10 +105,8 @@ const CacheService: React.FC<CacheServiceProps> = ({
     return Date.now() - lastUpdated > freshnessDuration;
   };
 
-  // Determine if we can prefetch (throttle check)
   const canPrefetch = (): boolean => {
     const now = Date.now();
-    // If first fetch or enough time has passed since last prefetch
     return (
       lastPrefetchTime.current === 0 ||
       now - lastPrefetchTime.current > CACHE_CONFIG.THROTTLE_INTERVAL
@@ -104,42 +115,28 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
   const prefetchAll = useCallback(
     async (force = false) => {
-      // Don't prefetch if already loading, or if throttled (unless force=true)
       if (loading || (!force && !canPrefetch())) return;
-
-      // Update last prefetch time
       lastPrefetchTime.current = Date.now();
       setLoading(true);
-
       try {
-        // Skip if offline
         if (!(await isOnline())) {
-          setLoading(false);
+          networkState.current.wasOffline = true;
+          networkState.current.pendingRefresh = true;
           return;
         }
-
-        // 1) ensure userData exists
         const userData = await AsyncStorage.getItem("userData");
         if (!userData) {
           setLoading(false);
-          if (!isLoginScreen) {
-            navigation.navigate("LoginScreen" as never);
-          }
+          if (!isLoginScreen) navigation.navigate("LoginScreen" as never);
           return;
         }
-
-        // 2) parse userId
         const userObj = JSON.parse(userData);
         const userId = userObj.payload?.userid ?? userObj.userid;
         if (!userId) {
           setLoading(false);
-          if (!isLoginScreen) {
-            navigation.navigate("LoginScreen" as never);
-          }
+          if (!isLoginScreen) navigation.navigate("LoginScreen" as never);
           return;
         }
-
-        // 3) clean stale cache and prefetch
         await cleanupUserCache(userId);
         await prefetchUserData(userId, force);
       } catch (error) {
@@ -156,67 +153,53 @@ const CacheService: React.FC<CacheServiceProps> = ({
     [prefetchAll]
   );
 
-  // Hide session-expired modal when on login screen
   useEffect(() => {
     if (isLoginScreen && showSessionExpired) {
       setShowSessionExpired(false);
     }
   }, [isLoginScreen, showSessionExpired]);
 
-  // Initial load with delay to allow app to render first
   useEffect(() => {
-    let initialFetchTimer: NodeJS.Timeout | null = null;
-
+    let timer: NodeJS.Timeout | null = null;
     if (isLoggedIn) {
-      initialFetchTimer = setTimeout(() => {
-        debouncedPrefetch(false);
-      }, CACHE_CONFIG.INITIAL_PREFETCH_DELAY);
+      timer = setTimeout(
+        () => prefetchAll(true),
+        CACHE_CONFIG.INITIAL_PREFETCH_DELAY
+      );
     }
-
     return () => {
-      if (initialFetchTimer) {
-        clearTimeout(initialFetchTimer);
-      }
-    };
-  }, [isLoggedIn, debouncedPrefetch]);
-
-  // Retry on reconnect, but only if we've been offline for a while
-  useEffect(() => {
-    let wasOffline = false;
-    let lastConnectivityChange = 0;
-
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const now = Date.now();
-
-      // If we're coming back online after being offline
-      if (state.isConnected && wasOffline) {
-        wasOffline = false;
-
-        // Only trigger a refresh if we've been offline for a significant time
-        if (
-          now - lastConnectivityChange > CACHE_CONFIG.THROTTLE_INTERVAL &&
-          isLoggedIn
-        ) {
-          debouncedPrefetch(false);
-        }
-      } else if (!state.isConnected) {
-        wasOffline = true;
-      }
-
-      lastConnectivityChange = now;
-    });
-
-    return () => {
-      unsubscribe();
+      if (timer) clearTimeout(timer);
       debouncedPrefetch.cancel?.();
     };
-  }, [debouncedPrefetch, isLoggedIn]);
+  }, [isLoggedIn, prefetchAll, debouncedPrefetch]);
 
-  // Remove caches belonging to other users
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const now = Date.now();
+      const { wasOffline, pendingRefresh, lastConnectivityChange } =
+        networkState.current;
+
+      if (state.isConnected && wasOffline) {
+        networkState.current.wasOffline = false;
+        if (
+          (pendingRefresh ||
+            now - lastConnectivityChange > CACHE_CONFIG.THROTTLE_INTERVAL) &&
+          isLoggedIn
+        ) {
+          prefetchAll(true);
+        }
+      } else if (!state.isConnected && !wasOffline) {
+        networkState.current.wasOffline = true;
+        networkState.current.lastConnectivityChange = now;
+      }
+    });
+    return () => unsubscribe();
+  }, [debouncedPrefetch, isLoggedIn, prefetchAll]);
+
   const cleanupUserCache = async (currentUserId: string) => {
     try {
-      const allCacheEntries = await getAllCache();
-      const staleKeys = allCacheEntries
+      const allCache = await getAllCache();
+      const staleKeys = allCache
         .filter(
           (entry) =>
             (entry.table_key.startsWith(JOB_TYPES_CACHE_KEY) ||
@@ -227,234 +210,315 @@ const CacheService: React.FC<CacheServiceProps> = ({
             !entry.table_key.includes(`_${currentUserId}`)
         )
         .map((e) => e.table_key);
-
       for (let i = 0; i < staleKeys.length; i += 20) {
-        const batch = staleKeys.slice(i, i + 20);
-        await Promise.all(batch.map((key) => deleteCache(key)));
+        await Promise.all(staleKeys.slice(i, i + 20).map(deleteCache));
       }
     } catch (err) {
       console.error("[CacheService] Error cleaning up user cache:", err);
     }
   };
 
-  // Orchestrate all fetches, but check staleness first
-  const prefetchUserData = async (userId: string, force = false) => {
-    try {
-      // Only fetch if forced or stale
-      const fetchPromises = [];
+  const prefetchUserData = async (
+    userId: string,
+    force = false
+  ): Promise<void> => {
+    const tasks: Array<Promise<void>> = [];
+    const map = {
+      CATEGORIES: {
+        shouldFetch: () =>
+          force || isDataStale("CATEGORIES", lastFetchTimes.current.categories),
+        fn: () => prefetchCategories(userId),
+        inProgressKey: "categories",
+        errorHandler: (err: any) => handleError(err, "categories"),
+      },
+      JOB_TYPES: {
+        shouldFetch: () =>
+          force || isDataStale("JOB_TYPES", lastFetchTimes.current.jobTypes),
+        fn: () => prefetchJobTypes(userId),
+        inProgressKey: "jobTypes",
+        errorHandler: (err: any) => handleError(err, "job types"),
+      },
+      JOBS: {
+        shouldFetch: () =>
+          force || isDataStale("JOBS", lastFetchTimes.current.jobs),
+        fn: () => prefetchJobs(userId),
+        inProgressKey: "jobs",
+        errorHandler: (err: any) => handleError(err, "jobs"),
+      },
+      FILES: {
+        shouldFetch: () =>
+          force || isDataStale("FILES", lastFetchTimes.current.files),
+        fn: () => prefetchFiles(userId),
+        inProgressKey: "files",
+        errorHandler: (err: any) => handleError(err, "files"),
+      },
+      CONTRACTORS: {
+        shouldFetch: () =>
+          force ||
+          isDataStale("CONTRACTORS", lastFetchTimes.current.contractors),
+        fn: () => prefetchActiveJobContractors(userId),
+        inProgressKey: "contractors",
+        errorHandler: (err: any) => handleError(err, "contractors"),
+      },
+    };
 
-      // Check each data type and only fetch if stale or forced
-      if (force || isDataStale("JOB_TYPES", lastFetchTimes.current.jobTypes)) {
-        fetchPromises.push(prefetchJobTypes(userId).catch(handleError));
+    for (const key of Object.keys(map) as Array<keyof typeof map>) {
+      const { shouldFetch, fn, inProgressKey, errorHandler } = map[key];
+      if (!fetchInProgress.current[inProgressKey] && shouldFetch()) {
+        tasks.push(fn().catch(errorHandler));
       }
-
-      if (force || isDataStale("JOBS", lastFetchTimes.current.jobs)) {
-        fetchPromises.push(prefetchJobs(userId).catch(handleError));
-      }
-
-      if (
-        force ||
-        isDataStale("CATEGORIES", lastFetchTimes.current.categories)
-      ) {
-        fetchPromises.push(prefetchCategories(userId).catch(handleError));
-      }
-
-      if (force || isDataStale("FILES", lastFetchTimes.current.files)) {
-        fetchPromises.push(prefetchFiles(userId).catch(handleError));
-      }
-
-      if (
-        force ||
-        isDataStale("CONTRACTORS", lastFetchTimes.current.contractors)
-      ) {
-        fetchPromises.push(
-          prefetchActiveJobContractors(userId).catch(handleError)
-        );
-      }
-
-      // Only run Promise.allSettled if we have promises to await
-      if (fetchPromises.length > 0) {
-        const results = await Promise.allSettled(fetchPromises);
-
-        const has401Error = results.some(
-          (r) =>
-            r.status === "rejected" &&
-            axios.isAxiosError(r.reason) &&
-            r.reason.response?.status === 401
-        );
-
-        if (has401Error && !isLoginScreen) {
-          setShowSessionExpired(true);
-        }
-      }
-    } catch (error) {
-      console.error("[CacheService] Error in prefetchUserData:", error);
     }
+
+    await Promise.all(tasks);
   };
 
+  // --------------------------
+  // prefetchCategories now uses setCategories
   const prefetchJobTypes = async (userId: string) => {
     const key = `${JOB_TYPES_CACHE_KEY}_${userId}`;
 
-    // First check if we have unexpired cache
-    const cacheEntry = await getCache(key);
-    const now = Date.now();
+    // Prevent duplicate fetches
+    if (fetchInProgress.current.jobTypes) return;
+    fetchInProgress.current.jobTypes = true;
 
-    // If cache exists and is fresh, skip the fetch
-    if (
-      cacheEntry &&
-      cacheEntry.payload &&
-      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOB_TYPES
-    ) {
-      // Use cached data
+    try {
+      // First check if we have unexpired cache
+      const cacheEntry = await getCache(key);
+      const now = Date.now();
+
+      // If cache exists and is fresh, use cached data
+      if (
+        cacheEntry &&
+        cacheEntry.payload &&
+        now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOB_TYPES
+      ) {
+        store.dispatch(fetchJobTypes({ userId }));
+        lastFetchTimes.current.jobTypes = cacheEntry.updated_at;
+        return;
+      }
+
+      const { data } = await axios.get(
+        `${BASE_API_URL}/jobtypes.php?userid=${userId}`
+      );
+
+      if (!data) {
+        throw new Error("No data received for job types");
+      }
+
+      if (data.status !== 1) {
+        console.warn(
+          `[CacheService] Job types API returned status: ${data.status}`
+        );
+      }
+
+      if (!Array.isArray(data.payload)) {
+        throw new Error("Invalid job types data structure");
+      }
+
+      await setCache(key, data.payload);
       store.dispatch(fetchJobTypes({ userId }));
-      return;
+      lastFetchTimes.current.jobTypes = now;
+    } catch (error) {
+      console.error("[CacheService] Error fetching job types:", error);
+      throw error; // Re-throw for the parent handler
+    } finally {
+      fetchInProgress.current.jobTypes = false;
     }
-
-    // Cache is stale or doesn't exist - fetch fresh data
-    const { data } = await axios.get(
-      `${BASE_API_URL}/jobtypes.php?userid=${userId}`
-    );
-    if (!Array.isArray(data.payload)) {
-      throw new Error("Invalid job types data");
-    }
-    await setCache(key, data.payload);
-    store.dispatch(fetchJobTypes({ userId }));
-    lastFetchTimes.current.jobTypes = now;
   };
 
   const prefetchJobs = async (userId: string) => {
     const key = `getJobsCache_${userId}`;
 
-    // Check cache first
-    const cacheEntry = await getCache(key);
-    const now = Date.now();
+    // Prevent duplicate fetches
+    if (fetchInProgress.current.jobs) return;
+    fetchInProgress.current.jobs = true;
 
-    // If cache exists and is fresh, skip the fetch
-    if (
-      cacheEntry &&
-      cacheEntry.payload &&
-      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOBS
-    ) {
-      // Cache is fresh enough
-      return;
-    }
+    try {
+      // Check cache first
+      const cacheEntry = await getCache(key);
+      const now = Date.now();
 
-    // Cache is stale or doesn't exist - fetch fresh data
-    const { data } = await axios.get(
-      `${BASE_API_URL}/getjobs.php?userid=${userId}`
-    );
-    if (data.status !== 1 || !Array.isArray(data.payload)) {
-      throw new Error("Invalid jobs data");
+      // If cache exists and is fresh, skip the fetch
+      if (
+        cacheEntry &&
+        cacheEntry.payload &&
+        now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOBS
+      ) {
+        lastFetchTimes.current.jobs = cacheEntry.updated_at;
+        return;
+      }
+      const { data } = await axios.get(
+        `${BASE_API_URL}/getjobs.php?userid=${userId}`
+      );
+
+      if (!data) {
+        throw new Error("No data received for jobs");
+      }
+
+      if (data.status !== 1) {
+        console.warn(`[CacheService] Jobs API returned status: ${data.status}`);
+      }
+
+      if (!Array.isArray(data.payload)) {
+        throw new Error("Invalid jobs data structure");
+      }
+
+      await setCache(key, data.payload);
+      lastFetchTimes.current.jobs = now;
+    } catch (error) {
+      console.error("[CacheService] Error fetching jobs:", error);
+      throw error; // Re-throw for the parent handler
+    } finally {
+      fetchInProgress.current.jobs = false;
     }
-    await setCache(key, data.payload);
-    lastFetchTimes.current.jobs = now;
   };
 
   const prefetchCategories = async (userId: string) => {
     const key = `categoryCache_${userId}`;
-
-    // Check cache first
-    const cacheEntry = await getCache(key);
-    const now = Date.now();
-
-    // If cache exists and is fresh, skip the fetch
-    if (
-      cacheEntry &&
-      cacheEntry.payload &&
-      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.CATEGORIES
-    ) {
-      // Use cached data
-      store.dispatch(loadCategories());
-      const { categoryMap, subCategoryMap } = createCategoryMappings(
-        cacheEntry.payload.payload
-      );
-      store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
-      return;
+    if (fetchInProgress.current.categories) return;
+    fetchInProgress.current.categories = true;
+    try {
+      const cacheEntry = await getCache(key);
+      const now = Date.now();
+      if (
+        cacheEntry?.payload &&
+        now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.CATEGORIES
+      ) {
+        const list: any[] = Array.isArray(cacheEntry.payload)
+          ? cacheEntry.payload
+          : cacheEntry.payload.payload;
+        store.dispatch(setCategories(list));
+        const { categoryMap, subCategoryMap } = createCategoryMappings(list);
+        store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
+        lastFetchTimes.current.categories = cacheEntry.updated_at;
+      } else {
+        const { data } = await axios.get<{
+          status: number;
+          payload: any[];
+        }>(`${BASE_API_URL}/fileuploadcats.php?userid=${userId}`);
+        if (data.status !== 1) {
+          console.warn(
+            `[CacheService] Categories API returned status ${data.status}`
+          );
+        }
+        await setCache(key, data.payload);
+        store.dispatch(loadCategories()); // now only when truly fetching fresh
+        const { categoryMap, subCategoryMap } = createCategoryMappings(
+          data.payload
+        );
+        store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
+        lastFetchTimes.current.categories = now;
+      }
+    } finally {
+      fetchInProgress.current.categories = false;
     }
-
-    // Cache is stale or doesn't exist - fetch fresh data
-    const { data } = await axios.get(
-      `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
-    );
-    if (data.status !== 1 || !Array.isArray(data.payload)) {
-      throw new Error("Invalid categories data");
-    }
-    await setCache(key, data.payload);
-    store.dispatch(loadCategories());
-    const { categoryMap, subCategoryMap } = createCategoryMappings(
-      data.payload
-    );
-    store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
-    lastFetchTimes.current.categories = now;
   };
 
   const prefetchFiles = async (userId: string) => {
     const key = `filesCache_${userId}`;
 
-    // Check cache first
-    const cacheEntry = await getCache(key);
-    const now = Date.now();
+    // Prevent duplicate fetches
+    if (fetchInProgress.current.files) return;
+    fetchInProgress.current.files = true;
 
-    // If cache exists and is fresh, skip the fetch
-    if (
-      cacheEntry &&
-      cacheEntry.payload &&
-      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.FILES
-    ) {
-      // Cache is fresh enough
-      return;
-    }
+    try {
+      // Check cache first
+      const cacheEntry = await getCache(key);
+      const now = Date.now();
 
-    // Cache is stale or doesn't exist - fetch fresh data
-    const { data } = await axios.get(
-      `${BASE_API_URL}/get-files.php?userid=${userId}`
-    );
-    if (data.status !== 1 || !Array.isArray(data.payload)) {
-      throw new Error("Invalid files data");
+      // If cache exists and is fresh, skip the fetch
+      if (
+        cacheEntry &&
+        cacheEntry.payload &&
+        now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.FILES
+      ) {
+        lastFetchTimes.current.files = cacheEntry.updated_at;
+        return;
+      }
+      const { data } = await axios.get(
+        `${BASE_API_URL}/get-files.php?userid=${userId}`
+      );
+
+      if (!data) {
+        throw new Error("No data received for files");
+      }
+
+      if (data.status !== 1) {
+        console.warn(
+          `[CacheService] Files API returned status: ${data.status}`
+        );
+      }
+
+      if (!Array.isArray(data.payload)) {
+        throw new Error("Invalid files data structure");
+      }
+
+      await setCache(key, data.payload);
+      lastFetchTimes.current.files = now;
+    } catch (error) {
+      console.error("[CacheService] Error fetching files:", error);
+      throw error; // Re-throw for the parent handler
+    } finally {
+      fetchInProgress.current.files = false;
     }
-    await setCache(key, data.payload);
-    lastFetchTimes.current.files = now;
   };
 
   const prefetchActiveJobContractors = async (userId: string) => {
     const key = `${CONTRACTOR_CACHE_KEY}_${userId}`;
-    const now = Date.now();
 
-    // 1) Try reading the existing cache
-    const cacheEntry = await getCache(key);
-    if (
-      cacheEntry &&
-      cacheEntry.payload &&
-      now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.CONTRACTORS
-    ) {
-      // Cache still fresh → nothing to do
-      return;
-    }
+    // Prevent duplicate fetches
+    if (fetchInProgress.current.contractors) return;
+    fetchInProgress.current.contractors = true;
 
-    // 2) Not cached or stale → fetch the full list
-    const { data } = await axios.get(
-      `${BASE_API_URL}/contractor.php?userid=${userId}`
-    );
+    try {
+      // 1) Try reading the existing cache
+      const cacheEntry = await getCache(key);
+      const now = Date.now();
 
-    // 3) Normalize to an array
-    let contractors: any[] = [];
-    if (data.status === 1) {
-      if (Array.isArray(data.payload)) {
-        contractors = data.payload;
-      } else if (data.payload) {
-        contractors = [data.payload];
+      if (
+        cacheEntry &&
+        cacheEntry.payload &&
+        now - cacheEntry.updated_at <
+          CACHE_CONFIG.FRESHNESS_DURATION.CONTRACTORS
+      ) {
+        lastFetchTimes.current.contractors = cacheEntry.updated_at;
+        return;
       }
-    } else {
-      // (optional) You could set an empty array on non-200 or status!==1
-      contractors = [];
+      const { data } = await axios.get(
+        `${BASE_API_URL}/contractor.php?userid=${userId}`
+      );
+
+      if (!data) {
+        throw new Error("No data received for contractors");
+      }
+
+      // 3) Normalize to an array
+      let contractors: any[] = [];
+      if (data.status === 1) {
+        if (Array.isArray(data.payload)) {
+          contractors = data.payload;
+        } else if (data.payload) {
+          contractors = [data.payload];
+        }
+      } else {
+        console.warn(
+          `[CacheService] Contractors API returned status: ${data.status}`
+        );
+        contractors = [];
+      }
+
+      // 4) Save back into cache, update timestamp
+      await setCache(key, contractors);
+      lastFetchTimes.current.contractors = now;
+
+      // 5) (optional) dispatch into your store if you need it in Redux
+      // store.dispatch(setContractors(contractors));
+    } catch (error) {
+      console.error("[CacheService] Error fetching contractors:", error);
+      throw error; // Re-throw for the parent handler
+    } finally {
+      fetchInProgress.current.contractors = false;
     }
-
-    // 4) Save back into cache, update timestamp
-    await setCache(key, contractors);
-    lastFetchTimes.current.contractors = now;
-
-    // 5) (optional) dispatch into your store if you need it in Redux
-    // store.dispatch(setContractors(contractors));
   };
 
   const shouldShowModal = showSessionExpired && !isLoginScreen;
@@ -462,10 +526,9 @@ const CacheService: React.FC<CacheServiceProps> = ({
   return (
     <>
       {children}
-
       <Modal
         animationType="fade"
-        transparent={true}
+        transparent
         visible={shouldShowModal}
         onRequestClose={() => {
           setShowSessionExpired(false);

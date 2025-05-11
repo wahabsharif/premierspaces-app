@@ -30,26 +30,30 @@ const initialState: CategoryState = {
 
 /**
  * Thunk: Loads categories
+ * - Short-circuit if already loaded
  * - If online: fetch from API, cache to SQLite via cacheService
  * - If offline or fetch fails: load from SQLite cache
  */
 export const loadCategories = createAsyncThunk<
   Category[],
   void,
-  { rejectValue: string }
->("categories/load", async (_, { rejectWithValue }) => {
+  { rejectValue: string; state: { categories: CategoryState } }
+>("categories/load", async (_, { getState, rejectWithValue }) => {
+  const { data, loading } = getState().categories;
+  if (!loading && data.length > 0) {
+    // Already have data — skip network call
+    return data;
+  }
+
   try {
     const net = await NetInfo.fetch();
 
-    // Determine userId from AsyncStorage or previous cache
     const userJson = await AsyncStorage.getItem("userData");
     const user = userJson ? JSON.parse(userJson) : null;
-    const userId = user?.payload?.userid;
+    const userId = user?.payload?.userid || user?.userid;
     if (!userId) {
-      throw new Error("User ID missing");
+      return rejectWithValue("User ID missing");
     }
-
-    // Build a per-user cache key
     const cacheKey = `categoryCache_${userId}`;
 
     if (net.isConnected) {
@@ -57,46 +61,52 @@ export const loadCategories = createAsyncThunk<
       const resp = await axios.get<{ status: number; payload: Category[] }>(
         `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
       );
-
       if (resp.data.status !== 1) {
         throw new Error("Server returned error status");
       }
-
-      // Cache to SQLite
       await setCache(cacheKey, resp.data.payload);
       return resp.data.payload;
     } else {
       // Offline: load from cache
       const cached = await getCache(cacheKey);
-      if (cached && cached.payload) {
-        // FIXED: correctly handle the cache structure
-        return cached.payload.payload as Category[];
-      } else {
-        throw new Error("No internet and no cached data");
+      if (cached?.payload) {
+        if (Array.isArray(cached.payload)) {
+          return cached.payload;
+        } else if (
+          cached.payload.payload &&
+          Array.isArray(cached.payload.payload)
+        ) {
+          return cached.payload.payload;
+        }
       }
+      throw new Error("No internet and no cached data");
     }
   } catch (err: any) {
-    // Attempt to load from cache on any error
+    // Fallback to cache on any error
     try {
       const userJson = await AsyncStorage.getItem("userData");
       const user = userJson ? JSON.parse(userJson) : null;
-      const userId = user?.payload?.userid;
-
+      const userId = user?.payload?.userid || user?.userid;
       if (!userId) {
         return rejectWithValue("User ID missing from storage");
       }
-
       const cacheKey = `categoryCache_${userId}`;
       const cached = await getCache(cacheKey);
-
-      if (cached && cached.payload) {
-        // FIXED: correctly handle the cache structure
-        return cached.payload.payload as Category[];
+      if (cached?.payload) {
+        if (Array.isArray(cached.payload)) {
+          return cached.payload;
+        } else if (
+          cached.payload.payload &&
+          Array.isArray(cached.payload.payload)
+        ) {
+          return cached.payload.payload;
+        }
       }
+      return rejectWithValue("No valid cached category data found");
     } catch (cacheErr: any) {
       console.error("Cache retrieval error:", cacheErr);
+      return rejectWithValue(err.message || "Failed to load categories");
     }
-    return rejectWithValue(err.message || "Failed to load categories");
   }
 });
 
@@ -104,9 +114,13 @@ const categorySlice = createSlice({
   name: "categories",
   initialState,
   reducers: {
+    setCategories: (state, action: PayloadAction<Category[]>) => {
+      state.data = action.payload;
+      state.loading = false;
+      state.error = null;
+    },
     clearCategoryCache: (state) => {
       state.data = [];
-      // Remove SQLite cache entry
       AsyncStorage.getItem("userData")
         .then((userJson) => {
           if (userJson) {
@@ -144,7 +158,7 @@ const categorySlice = createSlice({
   },
 });
 
-export const { clearCategoryCache } = categorySlice.actions;
+export const { setCategories, clearCategoryCache } = categorySlice.actions;
 
 export const selectCategories = (state: { categories: CategoryState }) =>
   state.categories.data;

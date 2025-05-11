@@ -96,6 +96,14 @@ const getIconForFileType = (fileType: string): string => {
 
 // Group files by their paths and count file types
 const groupFilesByPath = (fileList: FileItem[]): GroupedFiles[] => {
+  if (!Array.isArray(fileList)) {
+    console.warn(
+      "[FilesSlice] Invalid fileList provided to groupFilesByPath",
+      fileList
+    );
+    return [];
+  }
+
   // Create a map to group files by path
   const pathMap: Record<
     string,
@@ -107,8 +115,13 @@ const groupFilesByPath = (fileList: FileItem[]): GroupedFiles[] => {
   > = {};
 
   fileList.forEach((file) => {
+    if (!file || typeof file !== "object") {
+      console.warn("[FilesSlice] Invalid file object in fileList");
+      return;
+    }
+
     const path = file.path || ""; // Use empty string for undefined paths
-    const fileType = getFileType(file.file_name);
+    const fileType = getFileType(file.file_name || "unknown");
 
     if (!pathMap[path]) {
       pathMap[path] = {
@@ -158,17 +171,81 @@ const groupFilesByPath = (fileList: FileItem[]): GroupedFiles[] => {
   return grouped;
 };
 
-// Create category mappings from categories data
-export const createCategoryMappings = (categories: Category[]) => {
+/**
+ * Creates mappings from categories data to lookup objects
+ * Handles various formats of category data that might come from different sources
+ * @param {any} categoriesData - The categories data which could be in various formats
+ * @returns {{ categoryMap: Record<number, string>, subCategoryMap: Record<number, string> }}
+ */
+export const createCategoryMappings = (categoriesData: any) => {
   const catMap: Record<number, string> = {};
   const subMap: Record<number, string> = {};
 
-  categories.forEach((cat) => {
-    catMap[cat.id] = cat.category;
-    cat.sub_categories.forEach((sub) => {
-      subMap[sub.id] = sub.sub_category;
+  try {
+    // Handle different possible structures of the categories data
+    let categories: Category[] = [];
+
+    if (!categoriesData) {
+      console.warn("[FilesSlice] No categories data provided");
+      return { categoryMap: catMap, subCategoryMap: subMap };
+    }
+
+    // Determine the correct structure
+    if (Array.isArray(categoriesData)) {
+      categories = categoriesData;
+    } else if (
+      categoriesData.payload &&
+      Array.isArray(categoriesData.payload)
+    ) {
+      categories = categoriesData.payload;
+    } else if (
+      typeof categoriesData === "object" &&
+      "payload" in categoriesData &&
+      categoriesData.payload &&
+      "payload" in categoriesData.payload &&
+      Array.isArray(categoriesData.payload.payload)
+    ) {
+      // Handle nested payload.payload structure
+      categories = categoriesData.payload.payload;
+    } else {
+      console.warn(
+        "[FilesSlice] Unrecognized categories data format:",
+        typeof categoriesData,
+        Array.isArray(categoriesData) ? "array" : "not array"
+      );
+      return { categoryMap: catMap, subCategoryMap: subMap };
+    }
+
+    // Process each category
+    categories.forEach((cat) => {
+      if (!cat || typeof cat !== "object") {
+        console.warn(
+          "[FilesSlice] Invalid category object in categories array"
+        );
+        return;
+      }
+
+      if ("id" in cat && "category" in cat) {
+        catMap[cat.id] = cat.category;
+
+        // Process subcategories if they exist
+        if (cat.sub_categories && Array.isArray(cat.sub_categories)) {
+          cat.sub_categories.forEach((sub) => {
+            if (
+              sub &&
+              typeof sub === "object" &&
+              "id" in sub &&
+              "sub_category" in sub
+            ) {
+              subMap[sub.id] = sub.sub_category;
+            }
+          });
+        }
+      }
     });
-  });
+  } catch (error) {
+    console.error("[FilesSlice] Error creating category mappings:", error);
+  }
 
   return { categoryMap: catMap, subCategoryMap: subMap };
 };
@@ -184,7 +261,7 @@ export const loadFiles = createAsyncThunk<
     // Determine userId from AsyncStorage
     const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
     const user = userJson ? JSON.parse(userJson) : null;
-    const userId = user?.payload?.userid;
+    const userId = user?.payload?.userid || user?.userid;
 
     if (!userId) {
       throw new Error("User ID missing");
@@ -229,29 +306,32 @@ export const loadFiles = createAsyncThunk<
   } catch (err: any) {
     // Attempt to load from cache on any error
     try {
-      const userCache = await getCache("userData");
-      const user = userCache ? userCache.payload : null;
-      const userId = user?.payload?.userid;
+      const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+      const user = userJson ? JSON.parse(userJson) : null;
+      const userId = user?.payload?.userid || user?.userid;
 
-      if (userId) {
-        const cacheKey = `filesCache_${userId}`;
-        const cached = await getCache(cacheKey);
-
-        if (cached && cached.payload) {
-          // Filter for the requested property
-          const allFiles = Array.isArray(cached.payload)
-            ? cached.payload
-            : cached.payload.payload || [];
-
-          return allFiles.filter(
-            (file: FileItem) => file.property_id === propertyId
-          );
-        }
+      if (!userId) {
+        return rejectWithValue("User ID missing from storage");
       }
-    } catch {
-      // ignore cache errors
+
+      const cacheKey = `filesCache_${userId}`;
+      const cached = await getCache(cacheKey);
+
+      if (cached && cached.payload) {
+        // Filter for the requested property
+        const allFiles = Array.isArray(cached.payload)
+          ? cached.payload
+          : cached.payload.payload || [];
+
+        return allFiles.filter(
+          (file: FileItem) => file.property_id === propertyId
+        );
+      }
+      return rejectWithValue("No valid cached files found");
+    } catch (cacheErr: any) {
+      console.error("[FilesSlice] Cache retrieval error:", cacheErr);
+      return rejectWithValue(err.message || "Failed to load files");
     }
-    return rejectWithValue(err.message || "Failed to load files");
   }
 });
 

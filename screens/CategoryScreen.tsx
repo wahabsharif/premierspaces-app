@@ -25,6 +25,7 @@ import {
   selectCategoryLoading,
   SubCategory,
 } from "../store/categorySlice";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 const STORAGE_KEYS = {
   PROPERTY: "selectedProperty",
@@ -198,6 +199,12 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalView}>
+            <TouchableOpacity
+              style={styles.modalButtonClose}
+              onPress={() => setModalVisible(false)}
+            >
+              <FontAwesome name="times" size={24} color={color.white} />
+            </TouchableOpacity>
             <Text style={styles.modalTitle}>Reporting A Problem</Text>
             <Text style={styles.modalText}>
               To report a problem, please open a new job or find an existing job
@@ -205,19 +212,13 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             </Text>
             <View style={styles.modalButtonsContainer}>
               <TouchableOpacity
-                style={[styles.modalButton, { marginRight: 10 }]}
+                style={styles.modalButton}
                 onPress={() => {
                   setModalVisible(false);
                   navigation.navigate("JobsScreen");
                 }}
               >
                 <Text style={styles.modalButtonText}>Go To Jobs</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalButtonClose}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>

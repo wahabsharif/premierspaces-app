@@ -243,6 +243,7 @@ export default StyleSheet.create({
   modalButtonsContainer: {
     flexDirection: "row",
     marginTop: 10,
+    justifyContent: "space-between",
   },
   modalButton: {
     borderRadius: 5,
