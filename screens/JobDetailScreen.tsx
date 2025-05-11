@@ -17,11 +17,10 @@ import { color, fontSize } from "../Constants/theme";
 import { useReloadOnFocus } from "../hooks";
 import { RootState } from "../store";
 import {
-  Contractor,
-  fetchContractors,
-  selectContractorsForJob,
-  selectContractorsLoading,
-} from "../store/contractorSlice";
+  fetchCosts,
+  selectCostsForJob,
+  selectCostsLoading,
+} from "../store/costsSlice";
 import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
 
@@ -49,6 +48,11 @@ interface JobDetail {
   id: string;
 }
 
+interface Cost {
+  name: string;
+  amount: string;
+}
+
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
@@ -73,11 +77,10 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     [jobItems, jobId]
   );
 
-  // Get contractors from Redux store using memoized selector
-  const contractors = useSelector((state: RootState) =>
-    selectContractorsForJob(state, jobId)
+  const costs = useSelector((state: RootState) =>
+    selectCostsForJob(state, jobId)
   );
-  const contractorsLoading = useSelector(selectContractorsLoading);
+  const costsLoading = useSelector(selectCostsLoading);
 
   const loadLocalData = useCallback(async () => {
     try {
@@ -110,10 +113,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [userId, dispatch]);
 
-  // Fetch contractors using Redux action
   useEffect(() => {
     if (userId && jobId) {
-      dispatch(fetchContractors({ userId, jobId }) as any);
+      dispatch(fetchCosts({ userId, jobId }) as any);
     }
   }, [userId, jobId, dispatch]);
 
@@ -122,7 +124,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     if (userId) {
       await dispatch(fetchJobs({ userId }) as any);
       if (jobId) {
-        await dispatch(fetchContractors({ userId, jobId }) as any);
+        await dispatch(fetchCosts({ userId, jobId }) as any);
       }
     }
   }, [userId, jobId, dispatch]);
@@ -146,18 +148,17 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     [jobDetail]
   );
 
-  // Calculate total amount from contractors array
   const totalAmount = useMemo(() => {
-    if (!Array.isArray(contractors)) {
+    if (!Array.isArray(costs)) {
       return 0;
     }
 
-    return contractors.reduce((sum, c) => {
+    return costs.reduce((sum, c) => {
       // Parse amount safely, defaulting to 0 if invalid
       const amount = c.amount ? parseFloat(c.amount) : 0;
       return sum + (isNaN(amount) ? 0 : amount);
     }, 0);
-  }, [contractors]);
+  }, [costs]);
 
   const renderTask = ({ item }: { item: string }) => (
     <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
@@ -225,14 +226,14 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           >
             <Text style={styles.buttonText}>Add Cost</Text>
           </TouchableOpacity>
-          {contractorsLoading ? (
+          {costsLoading ? (
             <ActivityIndicator size="small" color="#1f3759" />
-          ) : Array.isArray(contractors) && contractors.length > 0 ? (
+          ) : Array.isArray(costs) && costs.length > 0 ? (
             <>
-              {contractors.map((c: Contractor, idx: number) => (
+              {costs.map((c: Cost, idx: number) => (
                 <View key={idx} style={innerStyles.costItem}>
                   <Text style={styles.smallText}>{c.name || "Unknown"}</Text>
-                  <Text style={innerStyles.contractorAmount}>
+                  <Text style={innerStyles.costAmount}>
                     {`£ ${parseFloat(c.amount || "0").toFixed(2)}`}
                   </Text>
                 </View>
@@ -337,7 +338,7 @@ const innerStyles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 5,
   },
-  contractorAmount: {
+  costAmount: {
     fontSize: fontSize.medium,
     fontWeight: "600",
     flex: 1,

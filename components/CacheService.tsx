@@ -15,7 +15,7 @@ import { Modal, Text, TouchableOpacity, View } from "react-native";
 import {
   BASE_API_URL,
   CACHE_CONFIG,
-  CONTRACTOR_CACHE_KEY,
+  COST_CACHE_KEY,
   JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
 import styles from "../Constants/styles";
@@ -65,7 +65,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     jobs: false,
     categories: false,
     files: false,
-    contractors: false,
+    costs: false,
   });
 
   const lastPrefetchTime = useRef<number>(0);
@@ -74,7 +74,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     jobs: 0,
     categories: 0,
     files: 0,
-    contractors: 0,
+    costs: 0,
   });
 
   const networkState = useRef<{
@@ -206,7 +206,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
               entry.table_key.startsWith("getJobsCache_") ||
               entry.table_key.startsWith("categoryCache_") ||
               entry.table_key.startsWith("filesCache_") ||
-              entry.table_key.startsWith(CONTRACTOR_CACHE_KEY)) &&
+              entry.table_key.startsWith(COST_CACHE_KEY)) &&
             !entry.table_key.includes(`_${currentUserId}`)
         )
         .map((e) => e.table_key);
@@ -252,13 +252,12 @@ const CacheService: React.FC<CacheServiceProps> = ({
         inProgressKey: "files",
         errorHandler: (err: any) => handleError(err, "files"),
       },
-      CONTRACTORS: {
+      COSTS: {
         shouldFetch: () =>
-          force ||
-          isDataStale("CONTRACTORS", lastFetchTimes.current.contractors),
-        fn: () => prefetchActiveJobContractors(userId),
-        inProgressKey: "contractors",
-        errorHandler: (err: any) => handleError(err, "contractors"),
+          force || isDataStale("COSTS", lastFetchTimes.current.costs),
+        fn: () => prefetchActiveJobCosts(userId),
+        inProgressKey: "costs",
+        errorHandler: (err: any) => handleError(err, "costs"),
       },
     };
 
@@ -463,12 +462,12 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
   };
 
-  const prefetchActiveJobContractors = async (userId: string) => {
-    const key = `${CONTRACTOR_CACHE_KEY}_${userId}`;
+  const prefetchActiveJobCosts = async (userId: string) => {
+    const key = `${COST_CACHE_KEY}_${userId}`;
 
     // Prevent duplicate fetches
-    if (fetchInProgress.current.contractors) return;
-    fetchInProgress.current.contractors = true;
+    if (fetchInProgress.current.costs) return;
+    fetchInProgress.current.costs = true;
 
     try {
       // 1) Try reading the existing cache
@@ -478,46 +477,44 @@ const CacheService: React.FC<CacheServiceProps> = ({
       if (
         cacheEntry &&
         cacheEntry.payload &&
-        now - cacheEntry.updated_at <
-          CACHE_CONFIG.FRESHNESS_DURATION.CONTRACTORS
+        now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.COSTS
       ) {
-        lastFetchTimes.current.contractors = cacheEntry.updated_at;
+        lastFetchTimes.current.costs = cacheEntry.updated_at;
         return;
       }
       const { data } = await axios.get(
-        `${BASE_API_URL}/contractor.php?userid=${userId}`
+        `${BASE_API_URL}/costs.php?userid=${userId}`
       );
 
       if (!data) {
-        throw new Error("No data received for contractors");
+        throw new Error("No data received for costs");
       }
 
       // 3) Normalize to an array
-      let contractors: any[] = [];
+      let costs: any[] = [];
       if (data.status === 1) {
         if (Array.isArray(data.payload)) {
-          contractors = data.payload;
+          costs = data.payload;
         } else if (data.payload) {
-          contractors = [data.payload];
+          costs = [data.payload];
         }
       } else {
         console.warn(
-          `[CacheService] Contractors API returned status: ${data.status}`
+          `[CacheService] costs API returned status: ${data.status}`
         );
-        contractors = [];
+        costs = [];
       }
 
       // 4) Save back into cache, update timestamp
-      await setCache(key, contractors);
-      lastFetchTimes.current.contractors = now;
+      await setCache(key, costs);
+      lastFetchTimes.current.costs = now;
 
       // 5) (optional) dispatch into your store if you need it in Redux
-      // store.dispatch(setContractors(contractors));
     } catch (error) {
-      console.error("[CacheService] Error fetching contractors:", error);
+      console.error("[CacheService] Error fetching costs:", error);
       throw error; // Re-throw for the parent handler
     } finally {
-      fetchInProgress.current.contractors = false;
+      fetchInProgress.current.costs = false;
     }
   };
 
