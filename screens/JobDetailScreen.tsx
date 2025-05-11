@@ -15,7 +15,9 @@ import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { useReloadOnFocus } from "../hooks";
+import { RootState } from "../store";
 import {
+  Contractor,
   fetchContractors,
   selectContractorsForJob,
   selectContractorsLoading,
@@ -72,7 +74,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 
   // Get contractors from Redux store using memoized selector
-  const contractors = useSelector((state) =>
+  const contractors = useSelector((state: RootState) =>
     selectContractorsForJob(state, jobId)
   );
   const contractorsLoading = useSelector(selectContractorsLoading);
@@ -93,7 +95,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setProperty(property);
       }
     } catch (e) {
-      // console.error("Error loading local data", e);
+      console.error("Error loading local data", e);
     }
   }, []);
 
@@ -144,10 +146,18 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     [jobDetail]
   );
 
-  const totalAmount = useMemo(
-    () => contractors.reduce((sum, c) => sum + parseFloat(c.amount || "0"), 0),
-    [contractors]
-  );
+  // Calculate total amount from contractors array
+  const totalAmount = useMemo(() => {
+    if (!Array.isArray(contractors)) {
+      return 0;
+    }
+
+    return contractors.reduce((sum, c) => {
+      // Parse amount safely, defaulting to 0 if invalid
+      const amount = c.amount ? parseFloat(c.amount) : 0;
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0);
+  }, [contractors]);
 
   const renderTask = ({ item }: { item: string }) => (
     <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
@@ -211,21 +221,21 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.label}>Costs</Text>
           {contractorsLoading ? (
             <ActivityIndicator size="small" color="#1f3759" />
-          ) : contractors.length > 0 ? (
+          ) : Array.isArray(contractors) && contractors.length > 0 ? (
             <>
-              {contractors.map((c, idx) => (
+              {contractors.map((c: Contractor, idx: number) => (
                 <View key={idx} style={innerStyles.costItem}>
-                  <Text style={styles.smallText}>{c.name}</Text>
-                  <Text
-                    style={innerStyles.contractorAmount}
-                  >{`£ ${c.amount}`}</Text>
+                  <Text style={styles.smallText}>{c.name || "Unknown"}</Text>
+                  <Text style={innerStyles.contractorAmount}>
+                    {`£ ${parseFloat(c.amount || "0").toFixed(2)}`}
+                  </Text>
                 </View>
               ))}
               <View style={innerStyles.totalContainer}>
                 <Text style={innerStyles.totalLabel}>Total Cost</Text>
-                <Text style={innerStyles.totalAmount}>{`£ ${totalAmount.toFixed(
-                  2
-                )}`}</Text>
+                <Text style={innerStyles.totalAmount}>
+                  {`£ ${totalAmount.toFixed(2)}`}
+                </Text>
               </View>
             </>
           ) : (
