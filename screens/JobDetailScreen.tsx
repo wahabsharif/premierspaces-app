@@ -218,7 +218,13 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
 
         <View style={{ width: "100%" }}>
-          <Text style={styles.label}>Costs</Text>
+          <Text style={{ ...styles.label, alignItems: "center" }}>Costs</Text>
+          <TouchableOpacity
+            style={{ ...styles.primaryButton, width: 120 }}
+            // onPress={() => navigation.navigate("AddCostScreen", { jobId })}
+          >
+            <Text style={styles.buttonText}>Add Cost</Text>
+          </TouchableOpacity>
           {contractorsLoading ? (
             <ActivityIndicator size="small" color="#1f3759" />
           ) : Array.isArray(contractors) && contractors.length > 0 ? (
