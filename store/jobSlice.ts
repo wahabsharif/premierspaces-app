@@ -3,8 +3,8 @@ import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import {
   BASE_API_URL,
+  CACHE_CONFIG,
   JOB_TYPES_CACHE_EXPIRY,
-  JOB_TYPES_CACHE_KEY,
 } from "../Constants/env";
 import { getCache, setCache } from "../services/cacheService";
 import {
@@ -41,7 +41,7 @@ export const fetchJobTypes = createAsyncThunk<
   { userId: string },
   { rejectValue: string; state: RootState }
 >("jobTypes/fetch", async ({ userId }, { rejectWithValue, getState }) => {
-  const cacheKey = `${JOB_TYPES_CACHE_KEY}_${userId}`;
+  const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
 
   const { lastFetched, items } = getState().job.jobTypes;
   const isFresh =

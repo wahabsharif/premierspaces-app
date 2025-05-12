@@ -12,12 +12,7 @@ import React, {
 } from "react";
 import { Modal, Text, TouchableOpacity, View } from "react-native";
 
-import {
-  BASE_API_URL,
-  CACHE_CONFIG,
-  COST_CACHE_KEY,
-  JOB_TYPES_CACHE_KEY,
-} from "../Constants/env";
+import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 import styles from "../Constants/styles";
 import {
   deleteCache,
@@ -66,6 +61,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     categories: false,
     files: false,
     costs: false,
+    contractors: false,
   });
 
   const lastPrefetchTime = useRef<number>(0);
@@ -75,6 +71,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     categories: 0,
     files: 0,
     costs: 0,
+    contractors: 0,
   });
 
   const networkState = useRef<{
@@ -202,11 +199,12 @@ const CacheService: React.FC<CacheServiceProps> = ({
       const staleKeys = allCache
         .filter(
           (entry) =>
-            (entry.table_key.startsWith(JOB_TYPES_CACHE_KEY) ||
+            (entry.table_key.startsWith(CACHE_CONFIG.CACHE_KEYS.JOB_TYPES) ||
               entry.table_key.startsWith("getJobsCache_") ||
               entry.table_key.startsWith("categoryCache_") ||
               entry.table_key.startsWith("filesCache_") ||
-              entry.table_key.startsWith(COST_CACHE_KEY)) &&
+              entry.table_key.startsWith(CACHE_CONFIG.CACHE_KEYS.COST) ||
+              entry.table_key.startsWith(CACHE_CONFIG.CACHE_KEYS.COST)) &&
             !entry.table_key.includes(`_${currentUserId}`)
         )
         .map((e) => e.table_key);
@@ -215,6 +213,45 @@ const CacheService: React.FC<CacheServiceProps> = ({
       }
     } catch (err) {
       console.error("[CacheService] Error cleaning up user cache:", err);
+    }
+  };
+
+  const prefetchContractors = async (userId: string) => {
+    const key = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
+
+    if (fetchInProgress.current.contractors) return;
+    fetchInProgress.current.contractors = true;
+
+    try {
+      const cacheEntry = await getCache(key);
+      const now = Date.now();
+
+      if (
+        cacheEntry?.payload &&
+        now - cacheEntry.updated_at <
+          CACHE_CONFIG.FRESHNESS_DURATION.CONTRACTORS
+      ) {
+        lastFetchTimes.current.contractors = cacheEntry.updated_at;
+        return;
+      }
+
+      const { data } = await axios.get(
+        `${BASE_API_URL}/contractors.php?userid=${userId}`
+      );
+
+      if (!data) throw new Error("No data received for contractors");
+      if (data.status !== 1)
+        console.warn("[CacheService] Contractors API status:", data.status);
+      if (!Array.isArray(data.payload))
+        throw new Error("Invalid contractors data");
+
+      await setCache(key, data.payload);
+      lastFetchTimes.current.contractors = now;
+    } catch (error) {
+      console.error("[CacheService] Error fetching contractors:", error);
+      throw error;
+    } finally {
+      fetchInProgress.current.contractors = false;
     }
   };
 
@@ -259,6 +296,14 @@ const CacheService: React.FC<CacheServiceProps> = ({
         inProgressKey: "costs",
         errorHandler: (err: any) => handleError(err, "costs"),
       },
+      CONTRACTORS: {
+        shouldFetch: () =>
+          force ||
+          isDataStale("CONTRACTORS", lastFetchTimes.current.contractors),
+        fn: () => prefetchContractors(userId),
+        inProgressKey: "contractors",
+        errorHandler: (err: any) => handleError(err, "contractors"),
+      },
     };
 
     for (const key of Object.keys(map) as Array<keyof typeof map>) {
@@ -274,7 +319,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
   // --------------------------
   // prefetchCategories now uses setCategories
   const prefetchJobTypes = async (userId: string) => {
-    const key = `${JOB_TYPES_CACHE_KEY}_${userId}`;
+    const key = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
 
     // Prevent duplicate fetches
     if (fetchInProgress.current.jobTypes) return;
@@ -458,7 +503,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
   };
 
   const prefetchActiveJobCosts = async (userId: string) => {
-    const key = `${COST_CACHE_KEY}_${userId}`;
+    const key = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
 
     if (fetchInProgress.current.costs) return;
     fetchInProgress.current.costs = true;

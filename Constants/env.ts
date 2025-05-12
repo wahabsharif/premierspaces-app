@@ -2,11 +2,7 @@
 
 export const BASE_API_URL = "http://192.168.18.133:8000/api/mapp";
 
-export const JOB_TYPES_CACHE_KEY = "jobTypesCache";
-
 export const JOB_TYPES_CACHE_EXPIRY = 3600000; // 1 hour in milliseconds
-
-export const COST_CACHE_KEY = "costsCache";
 
 export const SYNC_EVENTS = {
   SYNC_STARTED: "sync_started",
@@ -17,6 +13,11 @@ export const SYNC_EVENTS = {
 
 // Cache control constants
 export const CACHE_CONFIG = {
+  CACHE_KEYS: {
+    JOB_TYPES: "jobTypesCache",
+    COST: "costsCache",
+    CONTRACTORS: "contractorsCache",
+  },
   // How long each cache type is considered fresh (in milliseconds)
   FRESHNESS_DURATION: {
     JOB_TYPES: 15 * 60 * 1000, // 15 minutes
@@ -24,6 +25,7 @@ export const CACHE_CONFIG = {
     CATEGORIES: 30 * 60 * 1000, // 30 minutes
     FILES: 10 * 60 * 1000, // 10 minutes
     COSTS: 10 * 60 * 1000, // 10 minutes
+    CONTRACTORS: 24 * 60 * 60 * 1000, // 24 hours
   },
   // Initial delay before prefetching data
   INITIAL_PREFETCH_DELAY: 500, // 500ms
