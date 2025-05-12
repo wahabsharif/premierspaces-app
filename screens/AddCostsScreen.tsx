@@ -1,23 +1,29 @@
-import React, { useEffect, useState, useMemo } from "react";
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
+  View,
 } from "react-native";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { Picker } from "@react-native-picker/picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useDispatch, useSelector } from "react-redux";
+import { Toast } from "toastify-react-native";
 import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color } from "../Constants/theme";
 import { AppDispatch, RootState } from "../store";
 import { fetchContractors } from "../store/contractorSlice";
-import { fetchCosts, createCost, selectCostsForJob } from "../store/costsSlice";
+import {
+  createCost,
+  fetchCosts,
+  resetCostsForJob,
+  selectCostsForJob,
+} from "../store/costsSlice";
+import { selectJobsList } from "../store/jobSlice";
 
 interface CostRow {
   contractorId: string;
@@ -33,32 +39,56 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { jobId } = route.params;
   const dispatch = useDispatch<AppDispatch>();
 
-  // Local state for authentication
+  // Local auth state
   const [userId, setUserId] = useState<string | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ----- FIX: grab the jobs array, not the whole slice object -----
+  const jobsSlice = useSelector((s: RootState) => selectJobsList(s));
+  const jobItems = jobsSlice.items; // now this is Job[]
+  const jobDetail = useMemo(
+    () => jobItems.find((j) => j.id === jobId),
+    [jobItems, jobId]
+  );
+
+  // Form state
+  const [materialCost, setMaterialCost] = useState<string>("");
+  const [initialMaterialCost, setInitialMaterialCost] = useState<string>("");
+  const [costRows, setCostRows] = useState<CostRow[]>([
+    { contractorId: "", amount: "" },
+  ]);
+
+  // Load user & init material cost
   useEffect(() => {
-    AsyncStorage.getItem("userData")
-      .then((json) => {
+    const load = async () => {
+      try {
+        const json = await AsyncStorage.getItem("userData");
         const data = json ? JSON.parse(json) : null;
         const id = data?.payload?.userid ?? data?.userid ?? null;
         setUserId(id);
-      })
-      .catch((err) => console.error("Failed to load user data:", err))
-      .finally(() => setLoadingUser(false));
-  }, []);
 
-  // Fetch contractors
+        if (jobDetail && jobDetail.material_cost !== undefined) {
+          const mc = String(jobDetail.material_cost);
+          setMaterialCost(mc);
+          setInitialMaterialCost(mc);
+        }
+      } catch (err) {
+        console.error("Failed to load user data:", err);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+    load();
+  }, [jobDetail]);
+
+  // Fetch contractors & costs
   const contractors = useSelector((s: RootState) => s.contractors.data);
   const loadingContractors = useSelector(
     (s: RootState) => s.contractors.isLoading
   );
   const contractorError = useSelector((s: RootState) => s.contractors.error);
-
-  // Fetch existing costs
-  const costs = useSelector((state: RootState) =>
-    selectCostsForJob(state, jobId)
-  );
+  const costs = useSelector((s: RootState) => selectCostsForJob(s, jobId));
 
   useEffect(() => {
     if (userId) {
@@ -67,14 +97,19 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [dispatch, userId, jobId]);
 
-  // Local form state
-  const [materialCost, setMaterialCost] = useState("");
-  const [costRows, setCostRows] = useState<CostRow[]>([
-    { contractorId: "", amount: "" },
-  ]);
-
-  const addRow = () =>
+  // Row handlers
+  const addRow = () => {
+    const idx = costRows.findIndex(
+      (r) =>
+        (r.contractorId || r.amount) &&
+        (!r.contractorId.trim() || !r.amount.trim())
+    );
+    if (idx !== -1) {
+      Toast.error(`Please fill both contractor and amount for row ${idx + 1}`);
+      return;
+    }
     setCostRows((rows) => [...rows, { contractorId: "", amount: "" }]);
+  };
   const removeRow = (i: number) =>
     setCostRows((rows) => rows.filter((_, idx) => idx !== i));
   const updateRow = (i: number, field: keyof CostRow, val: string) =>
@@ -82,15 +117,22 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       rows.map((r, idx) => (idx === i ? { ...r, [field]: val } : r))
     );
 
-  // Handle loading states
-  if (loadingUser || loadingContractors)
+  const hasEmptyRow = costRows.some(
+    (r) =>
+      (r.contractorId.trim() !== "" || r.amount.trim() !== "") &&
+      (!r.contractorId.trim() || !r.amount.trim())
+  );
+  const materialChanged = materialCost.trim() !== initialMaterialCost.trim();
+
+  // Loading & auth guards
+  if (loadingUser || loadingContractors) {
     return (
       <View style={inner.loader}>
         <ActivityIndicator size="large" />
       </View>
     );
-
-  if (!userId)
+  }
+  if (!userId) {
     return (
       <View style={styles.screenContainer}>
         <Header />
@@ -99,43 +141,79 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         </Text>
       </View>
     );
-
-  if (contractorError)
+  }
+  if (contractorError) {
     return (
       <View style={styles.screenContainer}>
         <Header />
         <Text style={inner.error}>{contractorError}</Text>
       </View>
     );
+  }
+  if (!jobDetail) {
+    return (
+      <View style={styles.screenContainer}>
+        <Header />
+        <Text style={inner.error}>Job not found.</Text>
+      </View>
+    );
+  }
 
+  // Submit handler
   const handleSubmit = async () => {
-    try {
-      for (const [i, row] of costRows.entries()) {
-        if (!row.contractorId || !row.amount) {
-          Alert.alert(
-            "Error",
-            `Row ${i + 1}: contractor and amount are required.`
-          );
-          return;
-        }
+    if (hasEmptyRow) {
+      Toast.error(
+        "Please complete or remove all incomplete rows before saving."
+      );
+      return;
+    }
 
+    try {
+      setIsSubmitting(true);
+      dispatch(resetCostsForJob(jobId));
+
+      // New cost entries
+      for (const row of costRows) {
+        if (row.contractorId && row.amount) {
+          await dispatch(
+            createCost({
+              userId: userId!,
+              jobId,
+              name: "Cost Entry",
+              amount: row.amount,
+              materialCost: materialChanged ? materialCost : undefined,
+              contractorId: row.contractorId,
+            })
+          ).unwrap();
+        }
+      }
+
+      // Only material‐cost update
+      if (
+        costRows.every((r) => !r.contractorId && !r.amount) &&
+        materialChanged
+      ) {
         await dispatch(
           createCost({
             userId: userId!,
             jobId,
-            name: "Cost Entry",
-            amount: row.amount,
-            materialCost: materialCost || undefined,
-            contractorId: row.contractorId,
+            name: "Material Cost Update",
+            amount: "0",
+            materialCost,
           })
         ).unwrap();
       }
 
-      Alert.alert("Success", "Costs added successfully", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      Toast.success("Costs and material cost updated successfully!");
+      navigation.navigate("JobDetailScreen", {
+        id: jobId,
+        refresh: Date.now(),
+      });
     } catch (e: any) {
-      Alert.alert("Error", e.toString());
+      console.error("Error submitting costs:", e);
+      Toast.error(`Error: ${e.message || e}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -143,6 +221,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
     <View style={styles.screenContainer}>
       <Header />
       <View style={styles.container}>
+        {/* Material Cost */}
         <View style={inner.row}>
           <Text style={[styles.label, { width: 200 }]}>Material Cost</Text>
           <TextInput
@@ -154,6 +233,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
           />
         </View>
 
+        {/* Contractor Cost Rows */}
         {costRows.map((row, idx) => (
           <View key={idx} style={inner.row}>
             <Picker
@@ -184,11 +264,21 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         ))}
 
+        {/* Controls */}
         <TouchableOpacity style={inner.addMore} onPress={addRow}>
           <Text style={inner.addMoreText}>+ Add More</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>Save</Text>
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            (hasEmptyRow || isSubmitting) && { opacity: 0.5 },
+          ]}
+          onPress={handleSubmit}
+          disabled={hasEmptyRow || isSubmitting}
+        >
+          <Text style={styles.buttonText}>
+            {isSubmitting ? "Saving..." : "Save"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>

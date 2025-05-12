@@ -18,7 +18,7 @@ export type RootStackParamList = {
   };
   JobsScreen: { refresh?: boolean } | undefined;
   PendingDataScreen: undefined;
-  JobDetailScreen: { id: string };
+  JobDetailScreen: { id: string; refresh?: boolean };
 };
 
 export interface PropertyData {

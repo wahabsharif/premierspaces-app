@@ -30,6 +30,7 @@ export interface JobTypeState {
 }
 
 export interface JobsListState {
+  [x: string]: any;
   items: Job[];
   loading: boolean;
   error: string | null;

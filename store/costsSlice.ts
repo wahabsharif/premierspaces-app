@@ -1,4 +1,9 @@
-import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+// store/costsSlice.ts
+import {
+  createAsyncThunk,
+  createSlice,
+  createSelector,
+} from "@reduxjs/toolkit";
 import axios from "axios";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 import { getCache, isOnline, setCache } from "../services/cacheService";
@@ -13,6 +18,7 @@ export interface Costs {
   payment_status?: string;
   payment_date?: string;
   material_cost?: string;
+  smart_care_amount?: string;
 }
 
 export interface CostState {
@@ -110,20 +116,24 @@ export const createCost = createAsyncThunk<
     amount: string;
     materialCost?: string;
     contractorId?: string;
+    smartCareAmount?: string;
   },
-  {
-    state: RootState;
-    dispatch: AppDispatch;
-    rejectValue: string;
-  }
+  { state: RootState; dispatch: AppDispatch; rejectValue: string }
 >(
   "costs/create",
   async (
-    { userId, jobId, name, amount, materialCost, contractorId },
+    {
+      userId,
+      jobId,
+      name,
+      amount,
+      materialCost,
+      contractorId,
+      smartCareAmount,
+    },
     { dispatch, rejectWithValue }
   ) => {
     const payload: any = {
-      user_id: userId,
       job_id: jobId,
       name: name.substring(0, 50),
       amount: parseFloat(amount).toFixed(2),
@@ -133,9 +143,13 @@ export const createCost = createAsyncThunk<
     if (materialCost) {
       payload.material_cost = parseFloat(materialCost).toFixed(2);
     }
+    if (smartCareAmount) {
+      payload.smart_care_amount = parseFloat(smartCareAmount).toFixed(2);
+    }
 
+    const url = `${BASE_API_URL}/costs.php?userid=${userId}`;
     try {
-      const response = await axios.post(`${BASE_API_URL}/costs.php`, payload, {
+      const response = await axios.post(url, payload, {
         headers: { "Content-Type": "application/json" },
       });
       const { status, payload: resp } = response.data;
@@ -147,6 +161,7 @@ export const createCost = createAsyncThunk<
       // Re-fetch to update list
       await dispatch(fetchCosts({ userId, jobId }));
     } catch (err: any) {
+      console.error("createCost::error", err);
       return rejectWithValue(err.message || "Network error");
     }
   }
@@ -204,9 +219,13 @@ const costSlice = createSlice({
 export const { resetCosts, resetCostsForJob, setOfflineMode } =
   costSlice.actions;
 
-// Selectors
-export const selectCostState = (state: RootState) => state.cost;
-export const selectCostsForJob = (state: RootState, jobId: string): Costs[] =>
-  state.cost.items[jobId] ?? [];
+// Input selector
+const selectCostItems = (state: RootState) => state.cost.items;
+
+// Memoized selector for costs by job
+export const selectCostsForJob = createSelector(
+  [selectCostItems, (_: RootState, jobId: string) => jobId],
+  (items, jobId) => items[jobId] ?? []
+);
 
 export default costSlice.reducer;
