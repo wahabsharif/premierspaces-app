@@ -3,7 +3,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -16,11 +15,7 @@ import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { useReloadOnFocus } from "../hooks";
 import { RootState } from "../store";
-import {
-  fetchCosts,
-  selectCostsForJob,
-  selectCostsLoading,
-} from "../store/costsSlice";
+import { fetchCosts, selectCostsForJob } from "../store/costsSlice";
 import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
 
@@ -61,26 +56,17 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [userId, setUserId] = useState<string | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
 
-  // Get jobs and job loading state from Redux store
-  const {
-    items: jobItems,
-    loading: jobsLoading,
-    error: jobsError,
-  } = useSelector(selectJobsList);
-
-  // Get the specific job from the jobs list
+  // Get jobs list
+  const { items: jobItems } = useSelector(selectJobsList);
   const jobDetail = useMemo(
-    () =>
-      jobItems.find((job) => job.id === jobId) as unknown as
-        | JobDetail
-        | undefined,
+    () => jobItems.find((job) => job.id === jobId) as JobDetail | undefined,
     [jobItems, jobId]
   );
 
+  // Get costs
   const costs = useSelector((state: RootState) =>
     selectCostsForJob(state, jobId)
   );
-  const costsLoading = useSelector(selectCostsLoading);
 
   const loadLocalData = useCallback(async () => {
     try {
@@ -94,7 +80,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       }
       if (propJson) {
         const property = JSON.parse(propJson);
-        console.log("Property saved to AsyncStorage:", property);
         setProperty(property);
       }
     } catch (e) {
@@ -106,26 +91,18 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     loadLocalData();
   }, [loadLocalData]);
 
-  // Fetch jobs using Redux action
   useEffect(() => {
-    if (userId) {
-      dispatch(fetchJobs({ userId }) as any);
-    }
+    if (userId) dispatch(fetchJobs({ userId }) as any);
   }, [userId, dispatch]);
 
   useEffect(() => {
-    if (userId && jobId) {
-      dispatch(fetchCosts({ userId, jobId }) as any);
-    }
+    if (userId && jobId) dispatch(fetchCosts({ userId, jobId }) as any);
   }, [userId, jobId, dispatch]);
 
-  // Reload data when screen comes into focus
   const reloadData = useCallback(async () => {
     if (userId) {
       await dispatch(fetchJobs({ userId }) as any);
-      if (jobId) {
-        await dispatch(fetchCosts({ userId, jobId }) as any);
-      }
+      if (jobId) await dispatch(fetchCosts({ userId, jobId }) as any);
     }
   }, [userId, jobId, dispatch]);
 
@@ -149,35 +126,19 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const totalAmount = useMemo(() => {
-    if (!Array.isArray(costs)) {
-      return 0;
-    }
-
-    return costs.reduce((sum, c) => {
-      // Parse amount safely, defaulting to 0 if invalid
-      const amount = c.amount ? parseFloat(c.amount) : 0;
-      return sum + (isNaN(amount) ? 0 : amount);
-    }, 0);
+    if (!Array.isArray(costs)) return 0;
+    return costs.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
   }, [costs]);
 
   const renderTask = ({ item }: { item: string }) => (
     <Text style={styles.smallText}>{`\u2022 ${item}`}</Text>
   );
 
-  if (jobsLoading) {
+  // If no job details
+  if (!jobDetail) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#1f3759" />
-      </View>
-    );
-  }
-
-  if (jobsError || !jobDetail) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text style={styles.errorText}>
-          {jobsError ?? "No job details available."}
-        </Text>
+        <Text style={styles.errorText}>No job details available.</Text>
       </View>
     );
   }
@@ -189,6 +150,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Job Detail</Text>
         </View>
+
         {property && (
           <View style={styles.screenBanner}>
             <Text style={styles.bannerLabel}>Selected Property:</Text>
@@ -196,12 +158,14 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.extraSmallText}>{property.company}</Text>
           </View>
         )}
+
         <TouchableOpacity
           style={styles.primaryButton}
           onPress={() => navigation.navigate("UploadScreen", { jobId })}
         >
           <Text style={styles.buttonText}>Upload Files</Text>
         </TouchableOpacity>
+
         <View style={{ width: "100%", marginVertical: 10 }}>
           <Text style={styles.label}>Job Type</Text>
           <Text style={styles.smallText}>{jobDetail.job_type}</Text>
@@ -220,15 +184,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         <View style={{ width: "100%" }}>
           <Text style={{ ...styles.label, alignItems: "center" }}>Costs</Text>
-          <TouchableOpacity
-            style={{ ...styles.primaryButton, width: 120 }}
-            // onPress={() => navigation.navigate("AddCostScreen", { jobId })}
-          >
+          <TouchableOpacity style={{ ...styles.primaryButton, width: 120 }}>
             <Text style={styles.buttonText}>Add Cost</Text>
           </TouchableOpacity>
-          {costsLoading ? (
-            <ActivityIndicator size="small" color="#1f3759" />
-          ) : Array.isArray(costs) && costs.length > 0 ? (
+
+          {Array.isArray(costs) && costs.length > 0 ? (
             <>
               {costs.map((c: Cost, idx: number) => (
                 <View key={idx} style={innerStyles.costItem}>
@@ -238,6 +198,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   </Text>
                 </View>
               ))}
+
               <View style={innerStyles.totalContainer}>
                 <Text style={innerStyles.totalLabel}>Total Cost</Text>
                 <Text style={innerStyles.totalAmount}>
@@ -319,14 +280,8 @@ const innerStyles = StyleSheet.create({
     marginTop: 20,
     width: "100%",
   },
-  countBlock: {
-    flex: 1,
-    alignItems: "center",
-  },
-  countItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  countBlock: { flex: 1, alignItems: "center" },
+  countItemRow: { flexDirection: "row", alignItems: "center" },
   countItem: {
     fontSize: fontSize.xl,
     marginLeft: 5,
