@@ -77,102 +77,97 @@ export const fetchJobTypes = createAsyncThunk<
 
 export const fetchJobs = createAsyncThunk<
   Job[],
-  { userId: string; propertyId?: string },
+  { userId: string; propertyId?: string; force?: boolean },
   { rejectValue: string; state: RootState }
->(
-  "jobs/fetch",
-  async ({ userId, propertyId }, { rejectWithValue, getState, dispatch }) => {
-    const cacheKey = `getJobsCache_${userId}`;
-    const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}`;
+>("jobs/fetch", async ({ userId, propertyId }, { getState, dispatch }) => {
+  const cacheKey = `getJobsCache_${userId}`;
+  const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}`;
 
-    // 1) Grab any local (offline) jobs first
-    let offlineJobs: Job[] = [];
-    try {
-      offlineJobs = await getAllJobs();
-    } catch (err) {
-      console.error("Error fetching offline jobs:", err);
-    }
-
-    // 2) Fast‐path: return in‐memory if fresh, but do NOT write it to cache
-    const { lastFetched, items } = getState().job.jobsList;
-    const isFresh =
-      lastFetched != null && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
-
-    if (isFresh && items.length > 0) {
-      dispatch(updatePendingCount(offlineJobs.length));
-
-      // merge offline + in‐memory
-      const mergedFast = [...items];
-      offlineJobs.forEach((o) => {
-        if (!mergedFast.some((j) => j.id === o.id)) mergedFast.push(o);
-      });
-
-      // return (and filter) without ever touching SQLite
-      return propertyId
-        ? mergedFast.filter((j) => j.property_id === propertyId)
-        : mergedFast;
-    }
-
-    try {
-      // 3) Always fetch the FULL list from network or SQLite
-      let serverJobs: Job[];
-      const net = await NetInfo.fetch();
-      if (net.isConnected) {
-        const resp = await axios.get(ENDPOINT);
-        serverJobs = resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
-      } else {
-        const entry = await getCache(cacheKey);
-        serverJobs = (entry?.payload?.payload as Job[]) || [];
-      }
-
-      // merge offline + server
-      const merged = [...serverJobs];
-      offlineJobs.forEach((o) => {
-        if (!merged.some((j) => j.id === o.id)) merged.push(o);
-      });
-
-      // sort by date_created desc
-      merged.sort(
-        (a, b) =>
-          new Date(b.date_created).getTime() -
-          new Date(a.date_created).getTime()
-      );
-
-      dispatch(updatePendingCount(offlineJobs.length));
-
-      // **only here** do we write the true full list into SQLite
-      await setCache(cacheKey, merged);
-
-      // apply propertyId filter for return
-      return propertyId
-        ? merged.filter((j) => j.property_id === propertyId)
-        : merged;
-    } catch (err: any) {
-      console.warn("[Slice] Jobs fetch failed, falling back to cache:", err);
-
-      // 4) Error fallback: merge cached + offline, then overwrite cache
-      const entry = await getCache(cacheKey);
-      const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
-      const fallback = [...cached];
-      offlineJobs.forEach((o) => {
-        if (!fallback.some((j) => j.id === o.id)) fallback.push(o);
-      });
-      fallback.sort(
-        (a, b) =>
-          new Date(b.date_created).getTime() -
-          new Date(a.date_created).getTime()
-      );
-
-      dispatch(updatePendingCount(offlineJobs.length));
-
-      await setCache(cacheKey, fallback);
-
-      return propertyId
-        ? fallback.filter((j) => j.property_id === propertyId)
-        : fallback;
-    }
+  // 1) Grab any local (offline) jobs first
+  let offlineJobs: Job[] = [];
+  try {
+    offlineJobs = await getAllJobs();
+  } catch (err) {
+    console.error("Error fetching offline jobs:", err);
   }
-);
+
+  // 2) Fast‐path: return in‐memory if fresh, but do NOT write it to cache
+  const { lastFetched, items } = getState().job.jobsList;
+  const isFresh =
+    lastFetched != null && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
+
+  if (isFresh && items.length > 0) {
+    dispatch(updatePendingCount(offlineJobs.length));
+
+    // merge offline + in‐memory
+    const mergedFast = [...items];
+    offlineJobs.forEach((o) => {
+      if (!mergedFast.some((j) => j.id === o.id)) mergedFast.push(o);
+    });
+
+    // return (and filter) without ever touching SQLite
+    return propertyId
+      ? mergedFast.filter((j) => j.property_id === propertyId)
+      : mergedFast;
+  }
+
+  try {
+    // 3) Always fetch the FULL list from network or SQLite
+    let serverJobs: Job[];
+    const net = await NetInfo.fetch();
+    if (net.isConnected) {
+      const resp = await axios.get(ENDPOINT);
+      serverJobs = resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
+    } else {
+      const entry = await getCache(cacheKey);
+      serverJobs = (entry?.payload?.payload as Job[]) || [];
+    }
+
+    // merge offline + server
+    const merged = [...serverJobs];
+    offlineJobs.forEach((o) => {
+      if (!merged.some((j) => j.id === o.id)) merged.push(o);
+    });
+
+    // sort by date_created desc
+    merged.sort(
+      (a, b) =>
+        new Date(b.date_created).getTime() - new Date(a.date_created).getTime()
+    );
+
+    dispatch(updatePendingCount(offlineJobs.length));
+
+    // **only here** do we write the true full list into SQLite
+    await setCache(cacheKey, merged);
+
+    // apply propertyId filter for return
+    return propertyId
+      ? merged.filter((j) => j.property_id === propertyId)
+      : merged;
+  } catch (err: any) {
+    console.warn("[Slice] Jobs fetch failed, falling back to cache:", err);
+
+    // 4) Error fallback: merge cached + offline, then overwrite cache
+    const entry = await getCache(cacheKey);
+    const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
+    const fallback = [...cached];
+    offlineJobs.forEach((o) => {
+      if (!fallback.some((j) => j.id === o.id)) fallback.push(o);
+    });
+    fallback.sort(
+      (a, b) =>
+        new Date(b.date_created).getTime() - new Date(a.date_created).getTime()
+    );
+
+    dispatch(updatePendingCount(offlineJobs.length));
+
+    await setCache(cacheKey, fallback);
+
+    return propertyId
+      ? fallback.filter((j) => j.property_id === propertyId)
+      : fallback;
+  }
+});
 
 export const createJob = createAsyncThunk<
   any,

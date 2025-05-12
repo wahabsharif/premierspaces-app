@@ -104,7 +104,12 @@ const JobsScreen = ({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, "JobsScreen">) => {
   const dispatch: AppDispatch = useDispatch();
-  const { items: allJobs, error } = useSelector(selectJobsList); // removed loading
+  const {
+    items: allJobs,
+    loading,
+    error,
+    lastFetched,
+  } = useSelector(selectJobsList);
   const { items: jobTypes } = useSelector(selectJobTypes);
 
   const [propertyData, setPropertyData] = useState<{
@@ -164,31 +169,26 @@ const JobsScreen = ({
   useFocusEffect(
     useCallback(() => {
       if (!userData || !propertyData) return;
+
+      const CACHE_TIME = 5 * 60 * 1000; // 5 minutes cache validity
+      if (lastFetched && Date.now() - lastFetched < CACHE_TIME) return;
+
       setRefreshing(true);
       const uid = userData.payload?.userid ?? userData.userid;
-      dispatch(
-        fetchJobs({ userId: uid, propertyId: propertyData.id }) as any
-      ).then(() => {
+      dispatch(fetchJobs({ userId: uid }) as any).finally(() => {
         setRefreshing(false);
       });
-    }, [userData, propertyData, dispatch])
+    }, [userData, propertyData, lastFetched, dispatch])
   );
 
   const onRefresh = useCallback(() => {
     if (!userData || !propertyData) return;
     setRefreshing(true);
     const uid = userData.payload?.userid ?? userData.userid;
-    dispatch(
-      fetchJobs({
-        userId: uid,
-        propertyId: propertyData.id,
-        force: true,
-      } as any)
-    ).then(() => {
+    dispatch(fetchJobs({ userId: uid, force: true }) as any).finally(() => {
       setRefreshing(false);
     });
   }, [userData, propertyData, dispatch]);
-
   const handleJobPress = useCallback(
     async (item: Job) => {
       await AsyncStorage.setItem("jobData", JSON.stringify(item));
