@@ -184,10 +184,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         <View style={{ width: "100%" }}>
           <Text style={{ ...styles.label, alignItems: "center" }}>Costs</Text>
-          <TouchableOpacity style={{ ...styles.primaryButton, width: 120 }}>
+          <TouchableOpacity
+            style={{ ...styles.primaryButton, width: 120 }}
+            onPress={() => {
+              console.log("Navigating to AddCostsScreen with jobId:", jobId);
+              navigation.navigate("AddCostsScreen", { jobId });
+            }}
+          >
             <Text style={styles.buttonText}>Add Cost</Text>
           </TouchableOpacity>
-
           {Array.isArray(costs) && costs.length > 0 ? (
             <>
               {costs.map((c: Cost, idx: number) => (

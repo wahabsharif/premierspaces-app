@@ -6,6 +6,7 @@ export type RootStackParamList = {
   CategoryScreen: { paramKey: string; fromOfflineMode?: boolean };
   SearchPropertyScreen: undefined;
   UploadScreen: { jobId: string };
+  AddCostsScreen: { jobId: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;

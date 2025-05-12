@@ -15,11 +15,10 @@ export const store = configureStore({
     job: jobReducer,
     files: filesReducer,
     cost: costReducer,
-    contractor: contractorReducer,
+    contractors: contractorReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      // keep immutable checks if you like, but skip serializable checks entirely
       immutableCheck: true,
       serializableCheck: false,
     }),
