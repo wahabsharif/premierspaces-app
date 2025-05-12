@@ -32,7 +32,7 @@ import {
   createCategoryMappings,
   setCategoryMappings,
 } from "../store/filesSlice";
-import { fetchJobTypes } from "../store/jobSlice";
+import { fetchJobs as fetchJobsThunk, fetchJobTypes } from "../store/jobSlice";
 
 interface CacheServiceProps {
   children: ReactNode;
@@ -327,46 +327,41 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
   const prefetchJobs = async (userId: string) => {
     const key = `getJobsCache_${userId}`;
-
-    // Prevent duplicate fetches
     if (fetchInProgress.current.jobs) return;
     fetchInProgress.current.jobs = true;
 
     try {
-      // Check cache first
+      // 1. Check cache first
       const cacheEntry = await getCache(key);
       const now = Date.now();
-
-      // If cache exists and is fresh, skip the fetch
       if (
-        cacheEntry &&
-        cacheEntry.payload &&
+        cacheEntry?.payload &&
         now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOBS
       ) {
         lastFetchTimes.current.jobs = cacheEntry.updated_at;
+        // Populate Redux from cache/SQLite + offline automatically
+        await store.dispatch(fetchJobsThunk({ userId }));
         return;
       }
+
+      // 2. Fetch fresh from server
       const { data } = await axios.get(
         `${BASE_API_URL}/getjobs.php?userid=${userId}`
       );
-
-      if (!data) {
-        throw new Error("No data received for jobs");
+      if (!data || data.status !== 1 || !Array.isArray(data.payload)) {
+        throw new Error("Invalid jobs response");
       }
 
-      if (data.status !== 1) {
-        console.warn(`[CacheService] Jobs API returned status: ${data.status}`);
-      }
-
-      if (!Array.isArray(data.payload)) {
-        throw new Error("Invalid jobs data structure");
-      }
-
+      // 3. Cache it locally
       await setCache(key, data.payload);
+
+      // 4. Dispatch the thunk to merge with offline and update Redux
+      await store.dispatch(fetchJobsThunk({ userId }));
+
       lastFetchTimes.current.jobs = now;
     } catch (error) {
       console.error("[CacheService] Error fetching jobs:", error);
-      throw error; // Re-throw for the parent handler
+      throw error;
     } finally {
       fetchInProgress.current.jobs = false;
     }
