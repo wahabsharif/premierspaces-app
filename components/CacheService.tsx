@@ -465,12 +465,10 @@ const CacheService: React.FC<CacheServiceProps> = ({
   const prefetchActiveJobCosts = async (userId: string) => {
     const key = `${COST_CACHE_KEY}_${userId}`;
 
-    // Prevent duplicate fetches
     if (fetchInProgress.current.costs) return;
     fetchInProgress.current.costs = true;
 
     try {
-      // 1) Try reading the existing cache
       const cacheEntry = await getCache(key);
       const now = Date.now();
 
@@ -482,37 +480,21 @@ const CacheService: React.FC<CacheServiceProps> = ({
         lastFetchTimes.current.costs = cacheEntry.updated_at;
         return;
       }
+
       const { data } = await axios.get(
         `${BASE_API_URL}/costs.php?userid=${userId}`
       );
 
-      if (!data) {
-        throw new Error("No data received for costs");
-      }
-
-      // 3) Normalize to an array
       let costs: any[] = [];
       if (data.status === 1) {
-        if (Array.isArray(data.payload)) {
-          costs = data.payload;
-        } else if (data.payload) {
-          costs = [data.payload];
-        }
-      } else {
-        console.warn(
-          `[CacheService] costs API returned status: ${data.status}`
-        );
-        costs = [];
+        costs = Array.isArray(data.payload) ? data.payload : [data.payload];
       }
 
-      // 4) Save back into cache, update timestamp
       await setCache(key, costs);
       lastFetchTimes.current.costs = now;
-
-      // 5) (optional) dispatch into your store if you need it in Redux
     } catch (error) {
       console.error("[CacheService] Error fetching costs:", error);
-      throw error; // Re-throw for the parent handler
+      throw error;
     } finally {
       fetchInProgress.current.costs = false;
     }

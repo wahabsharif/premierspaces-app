@@ -48,28 +48,25 @@ export const fetchCosts = createAsyncThunk<
 >("costs/fetch", async ({ userId, jobId }, { rejectWithValue, getState }) => {
   const { lastFetched, items } = getState().cost;
 
-  // Check if we have fresh data in the store
+  // Check if we have fresh data in the store for this job
   const isFresh =
     lastFetched[jobId] && Date.now() - lastFetched[jobId] < COSTS_CACHE_EXPIRY;
 
   if (isFresh && items[jobId]?.length >= 0) {
-    // Return existing data with online status
     const online = await isOnline();
     return { jobId, costs: items[jobId] || [], isOffline: !online };
   }
 
-  // Create cache key for this jobId
-  const cacheKey = `${COST_CACHE_KEY}_${userId}_${jobId}`;
+  // Cache key based on user ID only
+  const cacheKey = `${COST_CACHE_KEY}_${userId}`;
 
-  // Check network status first
   const online = await isOnline();
 
-  // If online, try API first then fallback to cache
   if (online) {
     try {
       const { data } = await axios.get(`${BASE_API_URL}/costs.php`, {
-        params: { userid: userId, job_id: jobId },
-        timeout: 10000, // 10 second timeout
+        params: { userid: userId },
+        timeout: 10000,
       });
 
       if (data.status === 1) {
@@ -88,54 +85,56 @@ export const fetchCosts = createAsyncThunk<
           }
         }
 
-        // Make sure all contractors have the required fields
         const validatedCosts = costData.map((c) => ({
           ...c,
-          amount: c.amount ? String(c.amount) : "0", // Ensure amount exists and is a string
-          name: c.name || "Unknown", // Ensure name exists
+          amount: c.amount ? String(c.amount) : "0",
+          name: c.name || "Unknown",
         }));
 
-        // Store in cache with explicit timestamp for better tracking
+        // Store all costs in cache
         await setCache(cacheKey, validatedCosts);
 
-        return { jobId, costs: validatedCosts, isOffline: false };
+        // Filter costs for the requested job ID
+        const filteredCosts = validatedCosts.filter(
+          (cost) => cost.job_id === jobId
+        );
+
+        return { jobId, costs: filteredCosts, isOffline: false };
       } else {
-        // Store empty array in cache
         await setCache(cacheKey, []);
         return { jobId, costs: [], isOffline: false };
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching costs:", err);
-      // If API fails, fall back to cache (don't immediately reject)
-      console.log("API error, falling back to cache");
+      // Proceed to check cache
     }
   }
 
-  // At this point, we're either offline or the API call failed
-  // Try to get from cache
+  // Attempt to retrieve from cache
   try {
     const cacheEntry = await getCache(cacheKey);
-    if (cacheEntry && cacheEntry.payload) {
-      // When using cache, make sure to store in Redux too
+    if (cacheEntry?.payload) {
       const cachedCosts = Array.isArray(cacheEntry.payload)
         ? cacheEntry.payload
         : cacheEntry.payload.payload || [];
 
-      return { jobId, costs: cachedCosts, isOffline: !online };
+      // Filter cached costs for the requested job ID
+      const filteredCosts = cachedCosts.filter(
+        (cost: Costs) => cost.job_id === jobId
+      );
+
+      return { jobId, costs: filteredCosts, isOffline: !online };
     }
   } catch (cacheError) {
     console.error("[costsSlice] Cache error:", cacheError);
   }
 
-  // If we get here, we're offline and there's no cached data
   if (!online) {
     return { jobId, costs: [], isOffline: true };
   }
 
-  // Last resort: we're online but both API and cache failed
-  return rejectWithValue("Unable to load costs data. Please try again later.");
+  return rejectWithValue("Unable to load costs data.");
 });
-
 const costSlice = createSlice({
   name: "cost",
   initialState,
