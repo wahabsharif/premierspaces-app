@@ -217,7 +217,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
   };
 
   const prefetchContractors = async (userId: string) => {
-    const key = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
+    const key = `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`;
 
     if (fetchInProgress.current.contractors) return;
     fetchInProgress.current.contractors = true;
