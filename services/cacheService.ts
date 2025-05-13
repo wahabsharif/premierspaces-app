@@ -3,7 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 
 // Cache configuration
 const CONFIG = {
-  DATABASE_NAME: "appCache.db",
+  DATABASE_NAME: "cacheDB",
   DEFAULT_EXPIRY: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
   MAX_BATCH_SIZE: 50, // Maximum number of operations in a batch
   CLEANUP_INTERVAL: 30 * 60 * 1000, // 30 minutes in milliseconds

@@ -1,8 +1,6 @@
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BASE_API_URL } from "../Constants/env";
-import { isOnline, getCache, setCache } from "../services/cacheService";
-import { CACHE_CONFIG } from "../Constants/env";
+import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
+import { getCache, isOnline, setCache } from "../services/cacheService";
 
 interface Contractor {
   id: string;
@@ -23,40 +21,50 @@ const initialState: ContractorState = {
   error: "",
 };
 
-// Fetch contractors, extracting only the payload array
+// Fetch contractors: requires userId argument
 export const fetchContractors = createAsyncThunk<
   Contractor[],
-  void,
+  string,
   { rejectValue: string }
->("contractors/fetchContractors", async (_, { rejectWithValue }) => {
-  try {
-    const userJson = await AsyncStorage.getItem("userData");
-    if (!userJson) return rejectWithValue("User not authenticated");
-    const userData = JSON.parse(userJson);
-    const userId = userData.payload?.userid ?? userData.userid;
-    if (!userId) return rejectWithValue("User ID not found");
+>("contractors/fetchContractors", async (userId, { rejectWithValue }) => {
+  const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`;
+  const online = await isOnline();
 
-    const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`;
-    const online = await isOnline();
-
-    if (!online) {
+  if (!online) {
+    // Offline: load from cache, default to empty
+    try {
       const cached = await getCache(cacheKey);
-      if (cached?.payload) {
-        const arr = Array.isArray(cached.payload) ? cached.payload : [];
-        return arr;
-      }
-      return rejectWithValue("No connection and no cache");
+      // Unwrap nested payload structure from caching
+      const arr = Array.isArray(cached?.payload?.payload)
+        ? cached.payload.payload
+        : [];
+      return arr;
+    } catch {
+      return [];
     }
+  }
 
+  // Online: fetch from API
+  try {
     const res = await fetch(`${BASE_API_URL}/contractors.php?userid=${userId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    // Assume server responds { status: 1, payload: [ ... ] }
     const arr = Array.isArray(json.payload) ? json.payload : [];
-    await setCache(cacheKey, arr);
+
+    // Cache the result for offline use
+    await setCache(cacheKey, arr, { expiresIn: 24 * 60 * 60 * 1000 });
     return arr;
   } catch (err: any) {
-    return rejectWithValue(err.message || "Error fetching contractors");
+    // on error, try cache before rejecting
+    try {
+      const cached = await getCache(cacheKey);
+      const arr = Array.isArray(cached?.payload?.payload)
+        ? cached.payload.payload
+        : [];
+      return arr;
+    } catch {
+      return rejectWithValue(err.message || "Error fetching contractors");
+    }
   }
 });
 
@@ -75,8 +83,7 @@ const contractorSlice = createSlice({
         fetchContractors.fulfilled,
         (state, action: PayloadAction<Contractor[]>) => {
           state.isLoading = false;
-          // Ensure we always have an array
-          state.data = Array.isArray(action.payload) ? action.payload : [];
+          state.data = action.payload;
         }
       )
       .addCase(fetchContractors.rejected, (state, action) => {

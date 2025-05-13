@@ -13,15 +13,16 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
+import GetAllCache from "../components/TestCases/GetAllCache";
 import { SYNC_EVENTS } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { formatDate } from "../helper";
+import { getAllCosts } from "../services/costService";
 import { getAllJobs } from "../services/jobService";
 import { AppDispatch } from "../store";
 import { selectPendingJobsCount, syncPendingJobs } from "../store/jobSlice";
-import { Job } from "../types";
-import GetAllCache from "../components/TestCases/GetAllCache";
+import { Costs, Job } from "../types";
 
 const PendingDataScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -30,11 +31,28 @@ const PendingDataScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [costs, setCosts] = useState<Costs[]>([]);
 
   // Load jobs on initial render and when pending count changes
   useEffect(() => {
     loadJobs();
   }, [pendingCount]);
+  useEffect(() => {
+    loadCosts();
+  }, []);
+
+  const loadCosts = async () => {
+    try {
+      setLoading(true);
+      const all = await getAllCosts();
+      setCosts(all);
+    } catch (err) {
+      console.error("[CostDataScreen] Error loading costs:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   // Set up event listeners for sync events
   useEffect(() => {
@@ -89,9 +107,6 @@ const PendingDataScreen = () => {
       setJobs(allJobs);
     } catch (error) {
       console.error("[PendingDataScreen] Error loading Pending Data:", error);
-      Alert.alert("Error", "Failed to load Pending Data. Please try again.", [
-        { text: "OK" },
-      ]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -101,6 +116,7 @@ const PendingDataScreen = () => {
   const onRefresh = () => {
     setRefreshing(true);
     loadJobs();
+    loadCosts();
   };
 
   const triggerManualSync = () => {
@@ -131,6 +147,37 @@ const PendingDataScreen = () => {
     );
   };
 
+  const renderCostItem = ({ item }: { item: Costs }) => (
+    <View style={innerStyles.card}>
+      <View style={innerStyles.row}>
+        <Text style={innerStyles.label}>Job ID:</Text>
+        <Text style={innerStyles.value}>{item.job_id}</Text>
+      </View>
+      <View style={innerStyles.row}>
+        <Text style={innerStyles.label}>Contractor ID:</Text>
+        <Text style={innerStyles.value}>{item.contractor_id ?? "N/A"}</Text>
+      </View>
+      <View style={innerStyles.row}>
+        <Text style={innerStyles.label}>Amount:</Text>
+        <Text style={innerStyles.value}>{Number(item.amount).toFixed(2)}</Text>
+      </View>
+      <View style={innerStyles.row}>
+        <Text style={innerStyles.label}>Material Cost:</Text>
+        <Text style={innerStyles.value}>
+          {Number(item.material_cost).toFixed(2)}
+        </Text>
+      </View>
+    </View>
+  );
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={color.primary} />
+        <Text style={innerStyles.loadingText}>Loading costs...</Text>
+      </View>
+    );
+  }
   const renderTasks = (job: Job) => {
     const taskElements = [];
     for (let i = 1; i <= 10; i++) {
@@ -215,6 +262,27 @@ const PendingDataScreen = () => {
             }
           />
         )}
+        <Text style={styles.heading}>Cost Records ({costs.length})</Text>
+
+        {costs.length === 0 ? (
+          <View style={innerStyles.emptyContainer}>
+            <Text style={innerStyles.emptyText}>No cost data available</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={costs}
+            keyExtractor={(item) => `${item.job_id}-${item.contractor_id}`}
+            renderItem={renderCostItem}
+            style={{ width: "100%" }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[color.primary]}
+              />
+            }
+          />
+        )}
       </View>
       <GetAllCache />
     </View>
@@ -241,6 +309,17 @@ const innerStyles = StyleSheet.create({
     marginVertical: 4,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginVertical: 6,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -290,6 +369,20 @@ const innerStyles = StyleSheet.create({
     padding: 8,
     borderRadius: 50,
     marginRight: 8,
+  },
+  row: {
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  label: {
+    fontWeight: "bold",
+    width: 120,
+    color: color.primary,
+  },
+  value: {
+    flex: 1,
+    fontSize: fontSize.small,
+    color: color.gray,
   },
 });
 

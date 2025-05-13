@@ -3,8 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
 import { DeviceEventEmitter } from "react-native";
 import { Toast } from "toastify-react-native";
-import { SYNC_EVENTS } from "../Constants/env";
-import { BASE_API_URL } from "../Constants/env";
+import { BASE_API_URL, SYNC_EVENTS } from "../Constants/env";
 import { deleteJob, getAllJobs } from "./jobService";
 
 export class SyncManager {
