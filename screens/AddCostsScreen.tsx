@@ -4,6 +4,7 @@ import { Picker } from "@react-native-picker/picker";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -39,47 +40,37 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   const { jobId } = route.params;
   const dispatch = useDispatch<AppDispatch>();
 
-  // Local auth state
   const [userId, setUserId] = useState<string | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ----- FIX: grab the jobs array, not the whole slice object -----
-  const jobsSlice = useSelector((s: RootState) => selectJobsList(s));
-  const jobItems = jobsSlice.items; // now this is Job[]
+  const jobs = useSelector((s: RootState) => selectJobsList(s).items);
   const jobDetail = useMemo(
-    () => jobItems.find((j) => j.id === jobId),
-    [jobItems, jobId]
+    () => jobs.find((j) => j.id === jobId),
+    [jobs, jobId]
   );
 
-  // Form state
-  const [materialCost, setMaterialCost] = useState<string>("");
-  const [initialMaterialCost, setInitialMaterialCost] = useState<string>("");
+  const [materialCost, setMaterialCost] = useState("");
+  const [initialMaterialCost, setInitialMaterialCost] = useState("");
   const [costRows, setCostRows] = useState<CostRow[]>([
     { contractorId: "", amount: "" },
   ]);
 
-  // Load user & init material cost
+  // Load user and init
   useEffect(() => {
-    const load = async () => {
-      try {
-        const json = await AsyncStorage.getItem("userData");
-        const data = json ? JSON.parse(json) : null;
-        const id = data?.payload?.userid ?? data?.userid ?? null;
-        setUserId(id);
+    (async () => {
+      const json = await AsyncStorage.getItem("userData");
+      const data = json ? JSON.parse(json) : null;
+      const id = data?.payload?.userid ?? data?.userid ?? null;
+      setUserId(id);
 
-        if (jobDetail && jobDetail.material_cost !== undefined) {
-          const mc = String(jobDetail.material_cost);
-          setMaterialCost(mc);
-          setInitialMaterialCost(mc);
-        }
-      } catch (err) {
-        console.error("Failed to load user data:", err);
-      } finally {
-        setLoadingUser(false);
+      if (jobDetail?.material_cost !== undefined) {
+        const mc = String(jobDetail.material_cost || "0");
+        setMaterialCost(mc);
+        setInitialMaterialCost(mc);
       }
-    };
-    load();
+      setLoadingUser(false);
+    })();
   }, [jobDetail]);
 
   // Fetch contractors & costs
@@ -89,11 +80,12 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   );
   const contractorError = useSelector((s: RootState) => s.contractors.error);
   const costs = useSelector((s: RootState) => selectCostsForJob(s, jobId));
+  const isOffline = useSelector((s: RootState) => s.cost.isOffline);
 
   useEffect(() => {
     if (userId) {
+      dispatch(fetchContractors(userId));
       dispatch(fetchCosts({ userId, jobId }));
-      dispatch(fetchContractors());
     }
   }, [dispatch, userId, jobId]);
 
@@ -110,12 +102,16 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
     }
     setCostRows((rows) => [...rows, { contractorId: "", amount: "" }]);
   };
-  const removeRow = (i: number) =>
+
+  const removeRow = (i: number) => {
     setCostRows((rows) => rows.filter((_, idx) => idx !== i));
-  const updateRow = (i: number, field: keyof CostRow, val: string) =>
+  };
+
+  const updateRow = (i: number, field: keyof CostRow, val: string) => {
     setCostRows((rows) =>
       rows.map((r, idx) => (idx === i ? { ...r, [field]: val } : r))
     );
+  };
 
   const hasEmptyRow = costRows.some(
     (r) =>
@@ -123,6 +119,11 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       (!r.contractorId.trim() || !r.amount.trim())
   );
   const materialChanged = materialCost.trim() !== initialMaterialCost.trim();
+  const hasAnyChanges =
+    materialChanged ||
+    costRows.some(
+      (r) => r.contractorId.trim() !== "" || r.amount.trim() !== ""
+    );
 
   // Loading & auth guards
   if (loadingUser || loadingContractors) {
@@ -132,17 +133,9 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
     );
   }
-  if (!userId) {
-    return (
-      <View style={styles.screenContainer}>
-        <Header />
-        <Text style={inner.error}>
-          You must be logged in to view this screen.
-        </Text>
-      </View>
-    );
-  }
-  if (contractorError) {
+
+  if (contractorError && !isOffline) {
+    // Only show error if not offline fallback
     return (
       <View style={styles.screenContainer}>
         <Header />
@@ -150,16 +143,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
     );
   }
-  if (!jobDetail) {
-    return (
-      <View style={styles.screenContainer}>
-        <Header />
-        <Text style={inner.error}>Job not found.</Text>
-      </View>
-    );
-  }
 
-  // Submit handler
   const handleSubmit = async () => {
     if (hasEmptyRow) {
       Toast.error(
@@ -172,46 +156,68 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsSubmitting(true);
       dispatch(resetCostsForJob(jobId));
 
-      // New cost entries
-      for (const row of costRows) {
-        if (row.contractorId && row.amount) {
-          await dispatch(
-            createCost({
-              userId: userId!,
-              jobId,
-              name: "Cost Entry",
-              amount: row.amount,
-              materialCost: materialChanged ? materialCost : undefined,
-              contractorId: row.contractorId,
-            })
-          ).unwrap();
-        }
-      }
+      const validRows = costRows.filter(
+        (row) => row.contractorId.trim() && row.amount.trim()
+      );
 
-      // Only material‐cost update
-      if (
-        costRows.every((r) => !r.contractorId && !r.amount) &&
-        materialChanged
-      ) {
-        await dispatch(
+      const costPromises = validRows.map((row, index) => {
+        return dispatch(
           createCost({
             userId: userId!,
             jobId,
-            name: "Material Cost Update",
-            amount: "0",
-            materialCost,
+            amount: row.amount,
+            materialCost: materialChanged ? materialCost : undefined,
+            contractorId: row.contractorId,
           })
         ).unwrap();
+      });
+
+      if (validRows.length === 0 && materialChanged) {
+        costPromises.push(
+          dispatch(
+            createCost({
+              userId: userId!,
+              jobId,
+              amount: "0",
+              materialCost,
+            })
+          ).unwrap()
+        );
       }
 
-      Toast.success("Costs and material cost updated successfully!");
-      navigation.navigate("JobDetailScreen", {
-        id: jobId,
-        refresh: Date.now(),
-      });
+      if (costPromises.length === 0) {
+        Toast.info("No changes to save");
+        setIsSubmitting(false);
+        return;
+      }
+      const results = await Promise.allSettled(costPromises);
+      const errors = results.filter(
+        (result) => result.status === "rejected"
+      ) as PromiseRejectedResult[];
+      if (errors.length > 0) {
+        errors.forEach((error, index) => {
+          const rowNumber = index + 1;
+          console.error(
+            `Error creating cost for row ${rowNumber}:`,
+            error.reason
+          );
+          Toast.error(
+            `Row ${rowNumber} failed: ${error.reason || "Unknown error"}`
+          );
+        });
+        if (errors.length < costPromises.length) {
+          Toast.success("Some costs were saved successfully.");
+        }
+      } else {
+        Toast.success("Costs and material cost updated successfully!");
+        navigation.navigate("JobDetailScreen", {
+          id: jobId,
+          refresh: Date.now(),
+        });
+      }
     } catch (e: any) {
-      console.error("Error submitting costs:", e);
-      Toast.error(`Error: ${e.message || e}`);
+      console.error("Unexpected error submitting costs:", e);
+      Toast.error(`Unexpected error: ${e.message || e}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -220,75 +226,88 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   return (
     <View style={styles.screenContainer}>
       <Header />
-      <View style={styles.container}>
-        {/* Material Cost */}
-        <View style={inner.row}>
-          <Text style={[styles.label, { width: 200 }]}>Material Cost</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Material Cost"
-            keyboardType="decimal-pad"
-            value={materialCost}
-            onChangeText={setMaterialCost}
-          />
-        </View>
-
-        {/* Contractor Cost Rows */}
-        {costRows.map((row, idx) => (
-          <View key={idx} style={inner.row}>
-            <Picker
-              selectedValue={row.contractorId}
-              style={inner.picker}
-              onValueChange={(val) => updateRow(idx, "contractorId", val)}
-            >
-              <Picker.Item label="Select Contractor" value="" />
-              {contractors.map((c) => (
-                <Picker.Item key={c.id} label={c.name} value={c.id} />
-              ))}
-            </Picker>
+      <ScrollView>
+        <View style={styles.container}>
+          <View style={inner.row}>
+            <Text style={[styles.label, { width: 200 }]}>Material Cost</Text>
             <TextInput
-              style={[styles.input, { flex: 0.7 }]}
-              placeholder="Amount"
-              keyboardType="numeric"
-              value={row.amount}
-              onChangeText={(val) => updateRow(idx, "amount", val)}
+              style={styles.input}
+              placeholder="Material Cost"
+              keyboardType="decimal-pad"
+              value={materialCost}
+              onChangeText={(val) => {
+                setMaterialCost(val);
+              }}
             />
-            {idx > 0 && (
-              <TouchableOpacity
-                onPress={() => removeRow(idx)}
-                style={{ paddingLeft: 10 }}
-              >
-                <FontAwesome5 name="times" size={24} color={color.red} />
-              </TouchableOpacity>
-            )}
           </View>
-        ))}
 
-        {/* Controls */}
-        <TouchableOpacity style={inner.addMore} onPress={addRow}>
-          <Text style={inner.addMoreText}>+ Add More</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            (hasEmptyRow || isSubmitting) && { opacity: 0.5 },
-          ]}
-          onPress={handleSubmit}
-          disabled={hasEmptyRow || isSubmitting}
-        >
-          <Text style={styles.buttonText}>
-            {isSubmitting ? "Saving..." : "Save"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          {costRows.map((row, idx) => (
+            <View key={idx} style={inner.row}>
+              <View style={inner.pickerWrapper}>
+                <Picker
+                  selectedValue={row.contractorId}
+                  onValueChange={(val) => updateRow(idx, "contractorId", val)}
+                >
+                  <Picker.Item label="Contractors" value="" />
+                  {contractors.map((c) => (
+                    <Picker.Item key={c.id} label={c.name} value={c.id} />
+                  ))}
+                </Picker>
+              </View>
+              <TextInput style={[styles.input, { marginLeft: 10 }]} />
+
+              {idx > 0 && (
+                <TouchableOpacity
+                  onPress={() => removeRow(idx)}
+                  style={{ paddingLeft: 10 }}
+                >
+                  <FontAwesome5 name="times" size={24} color={color.red} />
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+          <TouchableOpacity style={inner.addMore} onPress={addRow}>
+            <Text style={inner.addMoreText}>+ Add More</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              (!hasAnyChanges || hasEmptyRow || isSubmitting) && {
+                opacity: 0.5,
+              },
+            ]}
+            onPress={handleSubmit}
+            disabled={!hasAnyChanges || hasEmptyRow || isSubmitting}
+          >
+            <Text style={styles.buttonText}>
+              {isSubmitting ? "Saving..." : "Save"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 };
 
 const inner = StyleSheet.create({
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-  row: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  picker: { flex: 1, height: 50 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 12,
+  },
+  pickerWrapper: {
+    borderColor: color.secondary,
+    borderWidth: 1,
+    borderRadius: 5,
+    backgroundColor: "#fff",
+    width: 200,
+    height: 41,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+
   addMore: { alignSelf: "flex-end", marginVertical: 8 },
   addMoreText: { color: color.primary, fontWeight: "bold" },
   error: { color: color.red, textAlign: "center", marginTop: 20 },
