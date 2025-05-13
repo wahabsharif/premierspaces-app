@@ -231,26 +231,27 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.buttonText}>Add Cost</Text>
             </TouchableOpacity>
 
-            <View style={innerStyles.costItem}>
-              <Text style={[styles.smallText, { fontWeight: "bold" }]}>
-                Material Cost
-              </Text>
-              <Text style={innerStyles.costAmount}>
-                £ {parseFloat(String(jobDetail.material_cost || 0)).toFixed(2)}
-              </Text>
-            </View>
+            {parseFloat(String(jobDetail.material_cost || 0)) > 0 && (
+              <View style={innerStyles.costItem}>
+                <Text style={[styles.smallText, { fontWeight: "bold" }]}>
+                  Material Cost
+                </Text>
+                <Text style={innerStyles.costAmount}>
+                  £ {parseFloat(String(jobDetail.material_cost)).toFixed(2)}
+                </Text>
+              </View>
+            )}
 
-            <View style={innerStyles.costItem}>
-              <Text style={[styles.smallText, { fontWeight: "bold" }]}>
-                Smart Care Cost
-              </Text>
-              <Text style={innerStyles.costAmount}>
-                £{" "}
-                {parseFloat(String(jobDetail.smart_care_amount || 0)).toFixed(
-                  2
-                )}
-              </Text>
-            </View>
+            {parseFloat(String(jobDetail.smart_care_amount || 0)) > 0 && (
+              <View style={innerStyles.costItem}>
+                <Text style={[styles.smallText, { fontWeight: "bold" }]}>
+                  Smart Care Cost
+                </Text>
+                <Text style={innerStyles.costAmount}>
+                  £ {parseFloat(String(jobDetail.smart_care_amount)).toFixed(2)}
+                </Text>
+              </View>
+            )}
 
             {costs.length > 0 ? (
               costs.map((c, idx) => (

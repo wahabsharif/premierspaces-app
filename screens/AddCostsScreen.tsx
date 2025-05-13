@@ -60,6 +60,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       const json = await AsyncStorage.getItem("userData");
       const data = json ? JSON.parse(json) : null;
       const id = data?.payload?.userid ?? data?.userid ?? null;
+
       setUserId(id);
 
       if (jobDetail?.material_cost !== undefined) {

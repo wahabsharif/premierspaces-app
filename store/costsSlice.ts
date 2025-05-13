@@ -1,3 +1,4 @@
+/* store/costsSlice.ts */
 import {
   createAsyncThunk,
   createSelector,
@@ -43,11 +44,7 @@ export const fetchCosts = createAsyncThunk<
     if (fresh && items[jobId]) {
       const online = await isOnline();
       dispatch(setOfflineMode(!online));
-      return {
-        jobId,
-        costs: items[jobId],
-        isOffline: !online,
-      };
+      return { jobId, costs: items[jobId], isOffline: !online };
     }
 
     const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
@@ -73,10 +70,9 @@ export const fetchCosts = createAsyncThunk<
 
         await setCache(cacheKey, payloadArray);
         const filtered = payloadArray.filter((c) => c.job_id === jobId);
-
         return { jobId, costs: filtered, isOffline: false };
-      } catch {
-        // fallback to cache
+      } catch (error) {
+        console.error("[fetchCosts] API error, falling back to cache", error);
       }
     }
 
@@ -88,8 +84,8 @@ export const fetchCosts = createAsyncThunk<
           : cacheEntry?.payload?.payload || [];
       const filtered = (archived as Costs[]).filter((c) => c.job_id === jobId);
       return { jobId, costs: filtered, isOffline: !online };
-    } catch {
-      // no cache
+    } catch (error) {
+      console.error("[fetchCosts] cache fallback error", error);
     }
 
     if (online) {
@@ -146,15 +142,37 @@ export const createCost = createAsyncThunk<
           else existing.push(newCost);
 
           await setCache(cacheKey, existing);
-        } catch {
-          // ignore cache write errors
+        } catch (cacheErr) {
+          console.error("[createCost] cache write error", cacheErr);
         }
 
         await dispatch(fetchCosts({ userId, jobId }));
-      } else {
-        // online create logic goes here
+        return;
       }
+
+      const payload = {
+        userid: userId,
+        job_id: jobId,
+        amount: amount,
+        material_cost: materialCost,
+        contractor_id: contractorId,
+      };
+      const { data } = await axios.post(`${BASE_API_URL}/costs.php`, payload, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
+
+      if (data.status !== 1) {
+        const errorMsg =
+          data.payload?.error ||
+          data.message ||
+          "Failed to create cost on server";
+        throw new Error(errorMsg);
+      }
+
+      await dispatch(fetchCosts({ userId, jobId }));
     } catch (err: any) {
+      console.error("[createCost] error", err);
       return rejectWithValue(err.message || "Error creating cost");
     }
   }
