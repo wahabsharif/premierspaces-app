@@ -130,3 +130,15 @@ export interface GroupedFiles {
   files: FileItem[];
   fileTypeCounts: FileTypeCount[];
 }
+
+export interface Costs {
+  id?: string | number;
+  job_id?: string;
+  contractor_id?: string | null;
+  name?: string;
+  amount?: string | number;
+  payment_status?: string;
+  payment_date?: string;
+  smart_care_amount?: string;
+  material_cost?: string | number | null;
+}
