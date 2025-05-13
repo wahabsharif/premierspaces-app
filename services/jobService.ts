@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Job } from "../types";
 
 const initializeDatabase = async () => {
-  const db = await SQLite.openDatabaseAsync("premierDatabase");
+  const db = await SQLite.openDatabaseAsync("jobsDB");
 
   // Initialize table with default status of '1'
   await db.execAsync(`
