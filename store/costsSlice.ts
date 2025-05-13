@@ -1,4 +1,3 @@
-// store/costsSlice.ts
 import {
   createAsyncThunk,
   createSelector,
@@ -44,7 +43,11 @@ export const fetchCosts = createAsyncThunk<
     if (fresh && items[jobId]) {
       const online = await isOnline();
       dispatch(setOfflineMode(!online));
-      return { jobId, costs: items[jobId], isOffline: !online };
+      return {
+        jobId,
+        costs: items[jobId],
+        isOffline: !online,
+      };
     }
 
     const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
@@ -70,12 +73,10 @@ export const fetchCosts = createAsyncThunk<
 
         await setCache(cacheKey, payloadArray);
         const filtered = payloadArray.filter((c) => c.job_id === jobId);
+
         return { jobId, costs: filtered, isOffline: false };
-      } catch (err) {
-        console.warn(
-          "Network error fetching costs, falling back to cache",
-          err
-        );
+      } catch {
+        // fallback to cache
       }
     }
 
@@ -87,8 +88,8 @@ export const fetchCosts = createAsyncThunk<
           : cacheEntry?.payload?.payload || [];
       const filtered = (archived as Costs[]).filter((c) => c.job_id === jobId);
       return { jobId, costs: filtered, isOffline: !online };
-    } catch (cacheErr) {
-      console.warn("No cache available for costs", cacheErr);
+    } catch {
+      // no cache
     }
 
     if (online) {
@@ -98,7 +99,6 @@ export const fetchCosts = createAsyncThunk<
   }
 );
 
-// Updated createCost thunk with improved error handling and logging
 export const createCost = createAsyncThunk<
   void,
   {
@@ -119,71 +119,43 @@ export const createCost = createAsyncThunk<
       const online = await isOnline();
       dispatch(setOfflineMode(!online));
 
-      const costPayload: any = {
-        job_id: jobId,
-        amount: parseFloat(amount || "0").toFixed(2),
-        contractor_id:
-          contractorId && contractorId !== "" ? contractorId : null,
-      };
+      if (!online) {
+        const newCost = await createLocalCost({
+          job_id: jobId,
+          contractor_id: contractorId || null,
+          amount: parseFloat(amount || "0").toFixed(2),
+          material_cost:
+            materialCost !== undefined
+              ? parseFloat(materialCost || "0").toFixed(2)
+              : null,
+        });
 
-      if (materialCost !== undefined) {
-        costPayload.material_cost = parseFloat(materialCost || "0").toFixed(2);
-      }
-
-      const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
-
-      if (online) {
-        // Online version would go here
-      } else {
+        const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
         try {
-          // Create locally with improved error handling
-          const newCost = await createLocalCost({
-            job_id: jobId,
-            contractor_id: contractorId || null,
-            amount: parseFloat(amount || "0").toFixed(2),
-            material_cost:
-              materialCost !== undefined
-                ? parseFloat(materialCost || "0").toFixed(2)
-                : null,
-          });
+          const cacheEntry = await getCache(cacheKey);
+          const existing: any[] =
+            cacheEntry && Array.isArray(cacheEntry.payload)
+              ? cacheEntry.payload
+              : cacheEntry?.payload?.payload || [];
 
-          // Update cache with newCost
-          try {
-            const cacheEntry = await getCache(cacheKey);
-            const existing: any[] =
-              cacheEntry && Array.isArray(cacheEntry.payload)
-                ? cacheEntry.payload
-                : cacheEntry?.payload?.payload || [];
-
-            // Find and replace if exists, otherwise add
-            const existingIndex = existing.findIndex(
-              (c) =>
-                c.job_id === jobId && c.contractor_id === (contractorId || null)
-            );
-
-            if (existingIndex >= 0) {
-              existing[existingIndex] = newCost;
-            } else {
-              existing.push(newCost);
-            }
-
-            await setCache(cacheKey, existing);
-          } catch (cacheErr) {
-            console.warn("Failed to update cache after local create", cacheErr);
-            // Continue execution - don't fail the entire operation if only cache update fails
-          }
-
-          await dispatch(fetchCosts({ userId, jobId }));
-        } catch (err: any) {
-          console.error("createLocalCost error:", err);
-          return rejectWithValue(
-            err?.message || "Failed to create cost locally"
+          const idx = existing.findIndex(
+            (c) =>
+              c.job_id === jobId && c.contractor_id === (contractorId || null)
           );
+          if (idx >= 0) existing[idx] = newCost;
+          else existing.push(newCost);
+
+          await setCache(cacheKey, existing);
+        } catch {
+          // ignore cache write errors
         }
+
+        await dispatch(fetchCosts({ userId, jobId }));
+      } else {
+        // online create logic goes here
       }
-    } catch (error: any) {
-      console.error("Unexpected error in createCost thunk:", error);
-      return rejectWithValue(error?.message || "An unexpected error occurred");
+    } catch (err: any) {
+      return rejectWithValue(err.message || "Error creating cost");
     }
   }
 );
@@ -241,6 +213,24 @@ export const { resetCosts, resetCostsForJob, setOfflineMode } =
   costSlice.actions;
 
 const selectCostItems = (state: RootState) => state.cost.items;
+const selectAllContractors = (state: RootState) => state.contractors.data;
+
+export const selectCostsForJobWithNames = createSelector(
+  [
+    selectCostItems,
+    (_: RootState, jobId: string) => jobId,
+    selectAllContractors,
+  ],
+  (items, jobId, contractors) => {
+    const raw = items[jobId] ?? [];
+    return raw.map((c) => ({
+      ...c,
+      name:
+        contractors.find((ct) => ct.id === c.contractor_id)?.name ??
+        "(No contractor)",
+    }));
+  }
+);
 export const selectCostsForJob = createSelector(
   [selectCostItems, (_: RootState, jobId: string) => jobId],
   (items, jobId) => items[jobId] ?? []

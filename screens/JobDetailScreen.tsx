@@ -18,7 +18,8 @@ import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { RootState } from "../store";
-import { fetchCosts, selectCostsForJob } from "../store/costsSlice";
+import { fetchContractors } from "../store/contractorSlice";
+import { fetchCosts, selectCostsForJobWithNames } from "../store/costsSlice";
 import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
 
@@ -35,18 +36,18 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redux state
+  // Redux selectors
   const { items: jobItems } = useSelector(selectJobsList);
   const jobDetail = useMemo(
     () => jobItems.find((j) => j.id === jobId),
     [jobItems, jobId]
   );
   const costs = useSelector((state: RootState) =>
-    selectCostsForJob(state, jobId)
+    selectCostsForJobWithNames(state, jobId)
   );
   const costsLoading = useSelector((state: RootState) => state.cost.loading);
 
-  // Load user & property from storage
+  // Load local storage
   const loadLocalData = useCallback(async () => {
     try {
       const [userJson, propJson] = await Promise.all([
@@ -69,34 +70,34 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     loadLocalData();
   }, [loadLocalData]);
 
-  // Initial fetch of jobs when we know userId
+  // Whenever userId becomes available, fetch contractors & jobs
   useEffect(() => {
-    if (userId) {
-      dispatch(fetchJobs({ userId }) as any);
-    }
+    if (!userId) return;
+    dispatch(fetchContractors(userId) as any);
+    dispatch(fetchJobs({ userId }) as any);
   }, [userId, dispatch]);
 
-  // Fetch jobs & costs any time the screen gains focus
+  // On screen focus, reload jobs + costs
   useFocusEffect(
     useCallback(() => {
       if (!userId) return;
       setIsLoading(true);
       Promise.all([
         dispatch(fetchJobs({ userId }) as any),
+        dispatch(fetchContractors(userId) as any),
         dispatch(fetchCosts({ userId, jobId }) as any),
-      ]).finally(() => {
-        setIsLoading(false);
-      });
+      ]).finally(() => setIsLoading(false));
     }, [userId, jobId, dispatch])
   );
 
-  // Pull-to-refresh handler
+  // Pull-to-refresh
   const onRefresh = useCallback(async () => {
     if (!userId) return;
     setRefreshing(true);
     try {
       await Promise.all([
         dispatch(fetchJobs({ userId }) as any),
+        dispatch(fetchContractors(userId) as any),
         dispatch(fetchCosts({ userId, jobId }) as any),
       ]);
     } catch (err) {
@@ -106,7 +107,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [userId, jobId, dispatch]);
 
-  // Gather tasks into an array
+  // Tasks array
   const tasks = useMemo(() => {
     if (!jobDetail) return [];
     return [
@@ -123,10 +124,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     ].filter((t): t is string => !!t?.trim());
   }, [jobDetail]);
 
-  // Compute total
+  // Total cost
   const totalAmount = useMemo(() => {
-    const lineItems = Array.isArray(costs) ? costs : [];
-    const sum = lineItems.reduce(
+    const sum = costs.reduce(
       (acc, c) => acc + parseFloat(String(c.amount ?? "0")),
       0
     );
@@ -161,11 +161,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     <View style={styles.screenContainer}>
       <Header />
       <View style={{ ...styles.container, width: "100%" }}>
-        {/* Fixed header + upload */}
         <View style={innerStyles.fixedSection}>
           <View style={styles.headingContainer}>
             <Text style={styles.heading}>Job Detail</Text>
           </View>
+
           {property && (
             <View style={styles.screenBanner}>
               <Text style={styles.bannerLabel}>Selected Property:</Text>
@@ -173,6 +173,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.extraSmallText}>{property.company}</Text>
             </View>
           )}
+
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => navigation.navigate("UploadScreen", { jobId })}
@@ -181,7 +182,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Scrollable content */}
         <ScrollView
           style={innerStyles.scrollableSection}
           contentContainerStyle={innerStyles.scrollContent}
@@ -200,7 +200,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             <View style={{ marginVertical: 10 }}>
               <Text style={styles.label}>Tasks</Text>
               {tasks.map((t, i) => (
-                <Text key={i} style={styles.smallText}>{`\u2022 ${t}`}</Text>
+                <Text key={i} style={styles.smallText}>
+                  {`\u2022 ${t}`}
+                </Text>
               ))}
             </View>
           )}
@@ -217,14 +219,18 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 />
               )}
             </View>
+
             <TouchableOpacity
-              style={{ ...styles.primaryButton, width: 120, marginVertical: 8 }}
+              style={{
+                ...styles.primaryButton,
+                width: 120,
+                marginVertical: 8,
+              }}
               onPress={() => navigation.navigate("AddCostsScreen", { jobId })}
             >
               <Text style={styles.buttonText}>Add Cost</Text>
             </TouchableOpacity>
 
-            {/* Material & Smart Care */}
             <View style={innerStyles.costItem}>
               <Text style={[styles.smallText, { fontWeight: "bold" }]}>
                 Material Cost
@@ -233,6 +239,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 £ {parseFloat(String(jobDetail.material_cost || 0)).toFixed(2)}
               </Text>
             </View>
+
             <View style={innerStyles.costItem}>
               <Text style={[styles.smallText, { fontWeight: "bold" }]}>
                 Smart Care Cost
@@ -245,23 +252,19 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               </Text>
             </View>
 
-            {/* Dynamic cost items */}
-            {Array.isArray(costs) && costs.length > 0 ? (
-              <>
-                {costs.map((c, idx) => (
-                  <View key={c.id ?? idx} style={innerStyles.costItem}>
-                    <Text style={styles.smallText}>{c.name || "Unknown"}</Text>
-                    <Text style={innerStyles.costAmount}>
-                      £ {parseFloat(String(c.amount ?? "0")).toFixed(2)}
-                    </Text>
-                  </View>
-                ))}
-              </>
+            {costs.length > 0 ? (
+              costs.map((c, idx) => (
+                <View key={c.id ?? idx} style={innerStyles.costItem}>
+                  <Text style={styles.smallText}>{c.name}</Text>
+                  <Text style={innerStyles.costAmount}>
+                    £ {parseFloat(String(c.amount ?? "0")).toFixed(2)}
+                  </Text>
+                </View>
+              ))
             ) : (
               <Text style={innerStyles.noDataText}>No cost data available</Text>
             )}
 
-            {/* Total */}
             <View style={innerStyles.totalContainer}>
               <Text style={innerStyles.totalLabel}>Total Cost</Text>
               <Text style={innerStyles.totalAmount}>
@@ -292,6 +295,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </Text>
               </View>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={innerStyles.countBlock}
               onPress={() =>
@@ -312,6 +316,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </Text>
               </View>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={innerStyles.countBlock}
               onPress={() =>
@@ -342,7 +347,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 const innerStyles = StyleSheet.create({
   fixedSection: { width: "100%" },
   scrollableSection: { flex: 1, width: "100%" },
-  scrollContent: { paddingBottom: 20, paddingHorizontal: 15, width: "100%" },
+  scrollContent: {
+    paddingBottom: 20,
+    paddingHorizontal: 15,
+    width: "100%",
+  },
   sectionHeader: { flexDirection: "row", alignItems: "center" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
 
