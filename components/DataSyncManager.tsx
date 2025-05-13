@@ -26,10 +26,9 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
       try {
         const jobs = await getAllJobs();
         dispatch(updatePendingCount(jobs.length));
-
         DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
           count: jobs.length,
-          jobs: jobs,
+          jobs,
         });
       } catch (error) {
         console.error("[DataSyncManager] Error updating job count:", error);
@@ -37,12 +36,8 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
     };
 
     updateOfflineJobCount();
-
     const intervalId = setInterval(updateOfflineJobCount, 30000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    return () => clearInterval(intervalId);
   }, [dispatch]);
 
   useEffect(() => {
@@ -65,35 +60,26 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
             console.error("[DataSyncManager] Sync error:", error);
             DeviceEventEmitter.emit(SYNC_EVENTS.SYNC_FAILED, { error });
           })
-          .finally(() => {
-            setIsSyncing(false);
-          });
+          .finally(() => setIsSyncing(false));
       }
     });
-
-    return () => {
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [dispatch, pendingCount, isSyncing]);
 
   useEffect(() => {
     syncManager.initialize();
-
     const syncListener = syncManager.addSyncListener((syncState) => {
       if (syncState.status === "complete") {
         getAllJobs().then((jobs) => {
           dispatch(updatePendingCount(jobs.length));
           DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
             count: jobs.length,
-            jobs: jobs,
+            jobs,
           });
         });
       }
     });
-
-    return () => {
-      syncListener();
-    };
+    return () => syncListener();
   }, [dispatch]);
 
   return <>{children}</>;

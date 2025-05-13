@@ -12,13 +12,12 @@ interface CostRow {
   created_at: number;
 }
 
-// === DB init ===
 const initializeDatabase = async () => {
   const db = await SQLite.openDatabaseAsync("costsDB");
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS costs (
-      id TEXT PRIMARY KEY, 
+      id TEXT PRIMARY KEY,
       job_id TEXT NOT NULL,
       contractor_id TEXT,
       amount REAL NOT NULL DEFAULT 0,
@@ -51,7 +50,6 @@ const SQL = {
   DELETE: `DELETE FROM costs WHERE id = ?`,
 };
 
-// === Helpers ===
 const safeString = (v: any): string | null =>
   v == null || v === "" ? null : String(v);
 const safeNumber = (v: any): number | null => {
@@ -60,39 +58,30 @@ const safeNumber = (v: any): number | null => {
   return isNaN(n) ? null : n;
 };
 
-// === CRUD ===
-
 export async function createLocalCost(cost: Costs): Promise<Costs> {
   const db = await dbPromise;
   const stmt = await db.prepareAsync(SQL.INSERT);
   try {
     const id = uuidv4();
     const now = Math.floor(Date.now() / 1000);
-
     const params: (string | number | null)[] = [
       id,
-      safeString(cost.job_id) ?? "", // NOT NULL
-      safeString(cost.contractor_id), // nullable
-      safeNumber(cost.amount) ?? 0, // default 0
-      safeNumber(cost.material_cost), // nullable
+      safeString(cost.job_id) ?? "",
+      safeString(cost.contractor_id),
+      safeNumber(cost.amount) ?? 0,
+      safeNumber(cost.material_cost),
       now,
     ];
-
     await stmt.executeAsync(params);
     await stmt.finalizeAsync();
-
     return {
       id,
-      job_id: cost.job_id ?? "",
+      job_id: cost.job_id,
       contractor_id: cost.contractor_id ?? null,
-      amount:
-        typeof cost.amount === "number"
-          ? cost.amount
-          : safeNumber(cost.amount) ?? 0,
+      amount: Number(cost.amount),
       material_cost: safeNumber(cost.material_cost),
     };
   } finally {
-    // ensure finalization on error
     try {
       await stmt.finalizeAsync();
     } catch {}
@@ -125,7 +114,6 @@ export async function getAllCosts(): Promise<Costs[]> {
   const stmt = await db.prepareAsync(SQL.SELECT_ALL);
   try {
     const result = await stmt.executeAsync([]);
-    // === Cast each row to CostRow ===
     const rows = (await result.getAllAsync()) as CostRow[];
     return rows.map((row) => ({
       id: row.id,

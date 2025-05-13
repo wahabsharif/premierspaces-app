@@ -24,7 +24,6 @@ import {
   resetCostsForJob,
   selectCostsForJob,
 } from "../store/costsSlice";
-import { selectJobsList } from "../store/jobSlice";
 
 interface CostRow {
   contractorId: string;
@@ -44,19 +43,18 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const jobs = useSelector((s: RootState) => selectJobsList(s).items);
+  const jobs = useSelector((s: RootState) => selectCostsForJob(s, jobId));
   const jobDetail = useMemo(
     () => jobs.find((j) => j.id === jobId),
     [jobs, jobId]
   );
 
-  const [materialCost, setMaterialCost] = useState("");
-  const [initialMaterialCost, setInitialMaterialCost] = useState("");
+  const [materialCost, setMaterialCost] = useState("0");
+  const [initialMaterialCost, setInitialMaterialCost] = useState("0");
   const [costRows, setCostRows] = useState<CostRow[]>([
     { contractorId: "", amount: "" },
   ]);
 
-  // Load user and init
   useEffect(() => {
     (async () => {
       const json = await AsyncStorage.getItem("userData");
@@ -69,16 +67,17 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         setMaterialCost(mc);
         setInitialMaterialCost(mc);
       }
+
       setLoadingUser(false);
     })();
   }, [jobDetail]);
 
-  // Fetch contractors & costs
   const contractors = useSelector((s: RootState) => s.contractors.data);
   const loadingContractors = useSelector(
     (s: RootState) => s.contractors.isLoading
   );
   const contractorError = useSelector((s: RootState) => s.contractors.error);
+
   const costs = useSelector((s: RootState) => selectCostsForJob(s, jobId));
   const isOffline = useSelector((s: RootState) => s.cost.isOffline);
 
@@ -89,7 +88,6 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [dispatch, userId, jobId]);
 
-  // Row handlers
   const addRow = () => {
     const idx = costRows.findIndex(
       (r) =>
@@ -122,10 +120,9 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   const hasAnyChanges =
     materialChanged ||
     costRows.some(
-      (r) => r.contractorId.trim() !== "" || r.amount.trim() !== ""
+      (r) => r.contractorId.trim() !== "" && r.amount.trim() !== ""
     );
 
-  // Loading & auth guards
   if (loadingUser || loadingContractors) {
     return (
       <View style={inner.loader}>
@@ -135,7 +132,6 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   if (contractorError && !isOffline) {
-    // Only show error if not offline fallback
     return (
       <View style={styles.screenContainer}>
         <Header />
@@ -160,8 +156,8 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         (row) => row.contractorId.trim() && row.amount.trim()
       );
 
-      const costPromises = validRows.map((row, index) => {
-        return dispatch(
+      const costPromises = validRows.map((row) =>
+        dispatch(
           createCost({
             userId: userId!,
             jobId,
@@ -169,8 +165,8 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
             materialCost: materialChanged ? materialCost : undefined,
             contractorId: row.contractorId,
           })
-        ).unwrap();
-      });
+        ).unwrap()
+      );
 
       if (validRows.length === 0 && materialChanged) {
         costPromises.push(
@@ -190,10 +186,12 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         setIsSubmitting(false);
         return;
       }
+
       const results = await Promise.allSettled(costPromises);
       const errors = results.filter(
         (result) => result.status === "rejected"
       ) as PromiseRejectedResult[];
+
       if (errors.length > 0) {
         errors.forEach((error, index) => {
           const rowNumber = index + 1;
@@ -235,9 +233,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
               placeholder="Material Cost"
               keyboardType="decimal-pad"
               value={materialCost}
-              onChangeText={(val) => {
-                setMaterialCost(val);
-              }}
+              onChangeText={setMaterialCost}
             />
           </View>
 
@@ -254,7 +250,13 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
                   ))}
                 </Picker>
               </View>
-              <TextInput style={[styles.input, { marginLeft: 10 }]} />
+              <TextInput
+                style={[styles.input, { marginLeft: 10 }]}
+                placeholder="Amount"
+                keyboardType="decimal-pad"
+                value={row.amount}
+                onChangeText={(val) => updateRow(idx, "amount", val)}
+              />
 
               {idx > 0 && (
                 <TouchableOpacity
@@ -266,6 +268,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
               )}
             </View>
           ))}
+
           <TouchableOpacity style={inner.addMore} onPress={addRow}>
             <Text style={inner.addMoreText}>+ Add More</Text>
           </TouchableOpacity>
@@ -307,7 +310,6 @@ const inner = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 10,
   },
-
   addMore: { alignSelf: "flex-end", marginVertical: 8 },
   addMoreText: { color: color.primary, fontWeight: "bold" },
   error: { color: color.red, textAlign: "center", marginTop: 20 },
