@@ -6,6 +6,7 @@ import jobReducer from "./jobSlice";
 import propertyReducer from "./propertySlice";
 import costReducer from "./costsSlice";
 import contractorReducer from "./contractorSlice";
+import uploaderReducer from "./uploaderSlice";
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +17,7 @@ export const store = configureStore({
     files: filesReducer,
     cost: costReducer,
     contractors: contractorReducer,
+    uploader: uploaderReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

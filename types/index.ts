@@ -94,6 +94,25 @@ export interface ChangeAppPinScreenProps {
   navigation: any;
 }
 
+export interface MediaFile {
+  uri: string;
+  type: "image" | "video" | "document";
+  name: string;
+  mimeType: string;
+  size?: number;
+}
+
+export interface UploadProgress {
+  [uri: string]: number;
+}
+
+export interface UploaderState {
+  uploading: boolean;
+  progress: UploadProgress;
+  successCount: number;
+  failedCount: number;
+  error?: string;
+}
 export interface FileItem {
   id: string;
   user_id: string;

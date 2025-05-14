@@ -2,7 +2,6 @@ import { AntDesign, MaterialIcons } from "@expo/vector-icons";
 import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { ResizeMode, Video } from "expo-av";
 import * as Camera from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
@@ -21,55 +20,37 @@ import {
   View,
 } from "react-native";
 import { Button, Dialog, Portal, Snackbar } from "react-native-paper";
+import { useDispatch, useSelector } from "react-redux";
 import { Header, ProgressBar, UploadStatusModal } from "../components";
-import { BASE_API_URL } from "../Constants/env";
 import { default as style, default as styles } from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import { getFileId } from "../helper";
-import { UploadScreenProps } from "../types";
-
+import { AppDispatch, RootState } from "../store";
+import { clearFiles, setFiles, uploadFiles } from "../store/uploaderSlice";
+import { MediaFile, UploadScreenProps } from "../types";
 const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
 
-type MediaFile = {
-  uri: string;
-  type: "image" | "video" | "document";
-  name: string;
-  mimeType: string;
-  size?: number;
-};
-
-// Helper function to limit concurrency of async tasks
-const uploadQueue = async (tasks: (() => Promise<any>)[], limit: number) => {
-  const results: any[] = [];
-  const executing: Promise<any>[] = [];
-  for (const task of tasks) {
-    const p = task().then((result) => {
-      executing.splice(executing.indexOf(p), 1);
-      return result;
-    });
-    results.push(p);
-    executing.push(p);
-    if (executing.length >= limit) {
-      await Promise.race(executing);
-    }
-  }
-  return Promise.all(results);
-};
-
 const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const { category = {}, subCategory = {} } = route.params || {};
-  const [media, setMedia] = useState<MediaFile[]>([]);
+  const dispatch = useDispatch<AppDispatch>();
+  const files = useSelector((state: RootState) => state.uploader.files);
+  const uploading = useSelector((state: RootState) => state.uploader.uploading);
+  const uploadProgress = useSelector(
+    (state: RootState) => state.uploader.progress
+  );
+  const successCount = useSelector(
+    (state: RootState) => state.uploader.successCount
+  );
+  const failedCount = useSelector(
+    (state: RootState) => state.uploader.failedCount
+  );
+
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const [micPermission, requestMicPermission] =
     Camera.useMicrophonePermissions();
   const [storedProperty, setStoredProperty] = useState<any>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{
-    [key: string]: string;
-  }>({});
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [jobData, setJobData] = useState<any>(null);
@@ -78,10 +59,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
-  const [uploadedCount, setUploadedCount] = useState(0);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
-  const [successCount, setSuccessCount] = useState(0);
-  const [failedCount, setFailedCount] = useState(0);
 
   // Helper function to infer mimeType from file name (for documents)
   const inferMimeType = (fileName: string) => {
@@ -156,6 +134,16 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     fetchJobData();
   }, []);
 
+  useEffect(() => {
+    if (
+      !uploading &&
+      files.length > 0 &&
+      successCount + failedCount === files.length
+    ) {
+      setStatusModalVisible(true);
+    }
+  }, [uploading, successCount, failedCount, files]);
+
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
     setAlertMessage(message);
@@ -193,8 +181,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     return true;
   };
 
-  // Pick images or videos from the gallery
-  // Replace the pickImage function with this updated version:
   const pickImage = async () => {
     setLoadingMedia(true);
     try {
@@ -217,7 +203,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           }
           return { uri: asset.uri, type: fileType, name, mimeType };
         });
-        setMedia([...media, ...newFiles]);
+        dispatch(setFiles([...files, ...newFiles]));
       }
     } catch (error) {
       showAlert("Error", "Failed to pick media. Please try again.");
@@ -247,7 +233,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         const asset = result.assets[0];
         const name = asset.uri.split("/").pop() || `video_${Date.now()}.mp4`;
         const mimeType = "video/mp4";
-        setMedia([...media, { uri: asset.uri, type: "video", name, mimeType }]);
+        dispatch(
+          setFiles([
+            ...files,
+            { uri: asset.uri, type: "video", name, mimeType },
+          ])
+        );
       }
     } catch (error) {
       showAlert("Error", "Failed to record video. Please try again.");
@@ -257,7 +248,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
-  // Take a photo
   const takePhoto = async () => {
     setLoadingMedia(true);
     try {
@@ -275,7 +265,12 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         const asset = result.assets[0];
         const name = asset.uri.split("/").pop() || `photo_${Date.now()}.jpg`;
         const mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
-        setMedia([...media, { uri: asset.uri, type: "image", name, mimeType }]);
+        dispatch(
+          setFiles([
+            ...files,
+            { uri: asset.uri, type: "image", name, mimeType },
+          ])
+        );
       }
     } catch (error) {
       showAlert("Error", "Failed to take photo. Please try again.");
@@ -285,7 +280,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     }
   };
 
-  // Pick a document
   const pickDocument = async () => {
     setLoadingMedia(true);
     try {
@@ -305,7 +299,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           mimeType,
           size: doc.size,
         };
-        setMedia((prev) => [...prev, newFile]);
+        dispatch(setFiles([...files, newFile]));
       }
     } catch (error) {
       showAlert("Error", "Failed to pick a document. Please try again.");
@@ -316,9 +310,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   };
 
   const removeFile = (index: number) => {
-    const updatedMedia = [...media];
-    updatedMedia.splice(index, 1);
-    setMedia(updatedMedia);
+    const updatedFiles = [...files];
+    updatedFiles.splice(index, 1);
+    dispatch(setFiles(updatedFiles));
   };
 
   const getFileHeader = async (
@@ -341,110 +335,30 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     setModalVisible(true);
   };
 
-  const getFileSize = async (uri: string): Promise<number | null> => {
-    try {
-      const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
-      if (!fileInfo.exists) {
-        // console.error("File does not exist:", uri);
-        return null;
-      }
-      return fileInfo.size;
-    } catch (error) {
-      // console.error("Error getting file size:", error);
-      return null;
-    }
-  };
-
-  const uploadImages = async () => {
-    if (media.length === 0) {
+  const handleUpload = () => {
+    if (files.length === 0) {
       showAlert("Error", "Please select at least one file to upload.");
       return;
     }
+    const mainCategoryId = category?.id?.toString() || "";
+    const subCategoryId = subCategory?.id?.toString() || "";
+    const propertyId = storedProperty ? storedProperty.id : "";
+    const jobId = jobData ? jobData.id : "";
+    const userName = userData?.payload?.name || "";
+    dispatch(
+      uploadFiles({
+        mainCategoryId,
+        subCategoryId,
+        propertyId,
+        jobId,
+        userName,
+      })
+    );
+  };
 
-    setUploading(true);
-    setUploadedCount(0);
-    setSuccessCount(0);
-    setFailedCount(0);
-
-    const fileId = getFileId();
-    const totalFiles = media.length;
-    const newUploadProgress = { ...uploadProgress };
-
-    const tasks = media.map((file, index) => async () => {
-      const fileSize = file.size ? file.size : await getFileSize(file.uri);
-      if (fileSize === null) return;
-      const formData = new FormData();
-      const fileName =
-        file.name || file.uri.split("/").pop() || `file_${index}`;
-      const fileType = file.mimeType;
-      const fileHeaderValue = await getFileHeader(file.uri, file.mimeType);
-      const propertyId = storedProperty ? storedProperty.id : "";
-      const jobId =
-        route.params?.source === "CategoryScreen"
-          ? ""
-          : jobData
-          ? jobData.id
-          : "";
-      const userName = userData?.payload?.name || "";
-      formData.append("id", fileId || "");
-      formData.append("total_segments", totalFiles.toString());
-      formData.append("segment_number", (index + 1).toString());
-      formData.append("main_category", category?.id?.toString() || "");
-      formData.append("category_level_1", subCategory?.id?.toString() || "");
-      formData.append("property_id", propertyId);
-      formData.append("job_id", jobId);
-      formData.append("file_header", fileHeaderValue);
-      formData.append("file_name", fileName);
-      formData.append("file_type", fileType);
-      formData.append("file_size", fileSize.toString());
-      formData.append("user_name", userName);
-      formData.append("content", {
-        uri: file.uri,
-        type: fileType,
-        name: fileName,
-      } as any);
-      try {
-        const response = await axios.post(
-          `${BASE_API_URL}/media-uploader.php`,
-          formData,
-          {
-            headers: { "Content-Type": "multipart/form-data" },
-            onUploadProgress: (progressEvent) => {
-              if (progressEvent.total) {
-                const percentCompleted = Math.round(
-                  (progressEvent.loaded * 100) / progressEvent.total
-                );
-                newUploadProgress[file.uri] = `${percentCompleted}%`;
-                setUploadProgress({ ...newUploadProgress });
-              }
-            },
-          }
-        );
-
-        newUploadProgress[file.uri] = "Complete";
-        setUploadProgress({ ...newUploadProgress });
-        setUploadedCount((prevCount) => prevCount + 1);
-        setSuccessCount((prevCount) => prevCount + 1);
-        return response.data;
-      } catch (error) {
-        // console.error(`Error uploading file ${index + 1}:`, error);
-        newUploadProgress[file.uri] = "Failed";
-        setUploadProgress({ ...newUploadProgress });
-        setFailedCount((prevCount) => prevCount + 1);
-        throw error;
-      }
-    });
-
-    try {
-      await uploadQueue(tasks, 3);
-      setStatusModalVisible(true);
-      setMedia([]);
-    } catch (error) {
-      // console.error("Error uploading files:", error);
-      setStatusModalVisible(true);
-    } finally {
-      setUploading(false);
-    }
+  const handleStatusModalClose = () => {
+    setStatusModalVisible(false);
+    dispatch(clearFiles());
   };
 
   return (
@@ -525,13 +439,15 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         )}
         {uploading && (
           <ProgressBar
-            progress={Math.round((uploadedCount / media.length) * 100)}
-            uploadedCount={uploadedCount}
-            totalCount={media.length}
+            progress={Math.round(
+              ((successCount + failedCount) / files.length) * 100
+            )}
+            uploadedCount={successCount + failedCount}
+            totalCount={files.length}
           />
         )}
         <FlatList
-          data={media}
+          data={files}
           keyExtractor={(_, index) => index.toString()}
           numColumns={2}
           renderItem={({ item, index }) => (
@@ -575,20 +491,20 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           )}
           contentContainerStyle={internalStyle.grid}
         />
-        {media.length > 0 && (
+        {files.length > 0 && (
           <TouchableOpacity
             style={[
               style.primaryButton,
               uploading && { backgroundColor: color.gray },
             ]}
-            onPress={uploadImages}
+            onPress={handleUpload}
             disabled={uploading}
           >
             {uploading ? (
               <ActivityIndicator color="white" size="small" />
             ) : (
               <Text style={style.buttonText}>
-                Upload {media.length} File{media.length > 1 ? "s" : ""}
+                Upload {files.length} File{files.length > 1 ? "s" : ""}
               </Text>
             )}
           </TouchableOpacity>
@@ -626,7 +542,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
                 </View>
               )}
               <FlatList
-                data={media}
+                data={files}
                 horizontal
                 keyExtractor={(_, index) => index.toString()}
                 renderItem={({ item }) => (
@@ -698,7 +614,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       </View>
       <UploadStatusModal
         visible={statusModalVisible}
-        onClose={() => setStatusModalVisible(false)}
+        onClose={handleStatusModalClose}
         successCount={successCount}
         failedCount={failedCount}
         totalCount={successCount + failedCount}
@@ -714,7 +630,7 @@ const internalStyle = StyleSheet.create({
     position: "relative",
   },
   actionButton: {
-    flex: 1, // Equal width for all buttons
+    flex: 1,
     height: 80,
     borderRadius: 8,
     justifyContent: "center",
@@ -722,7 +638,7 @@ const internalStyle = StyleSheet.create({
   },
   actionButtonLabel: {
     marginTop: 4,
-    fontSize: 12, // Smaller font size to fit
+    fontSize: 12,
     color: color.white,
     textAlign: "center",
   },
