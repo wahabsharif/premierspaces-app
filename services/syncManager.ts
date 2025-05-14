@@ -42,10 +42,19 @@ export class SyncManager {
 
   private async checkAndSync() {
     if (this.isSyncing) return;
-    const jobs = await getAllJobs();
-    const costs = await getAllCosts();
-    if ((jobs.length || costs.length) && (await NetInfo.fetch()).isConnected) {
-      this.syncAll();
+
+    try {
+      const jobs = await getAllJobs();
+      const costs = await getAllCosts();
+
+      if (
+        (jobs.length > 0 || costs.length > 0) &&
+        (await NetInfo.fetch()).isConnected
+      ) {
+        this.syncAll();
+      }
+    } catch (error) {
+      console.error("[SyncManager] Error checking for pending data:", error);
     }
   }
 
@@ -88,10 +97,13 @@ export class SyncManager {
 
     try {
       const userStr = await AsyncStorage.getItem("userData");
-      console.log("User data from AsyncStorage:", userStr);
 
-      const userId = userStr ? JSON.parse(userStr).payload?.userid : null;
-      if (!userId) throw new Error("No user ID");
+      const userData = userStr ? JSON.parse(userStr) : null;
+      const userId = userData?.payload?.userid || userData?.userid;
+
+      if (!userId) {
+        throw new Error("No user ID found in AsyncStorage");
+      }
 
       // Sync Jobs
       const jobs = await getAllJobs();
@@ -106,20 +118,32 @@ export class SyncManager {
             },
           };
 
-          await axios.post(`${BASE_API_URL}/newjob.php`, jobData, {
-            timeout: 10000,
-            validateStatus: () => true, // Allow checking response status manually
-          });
+          const response = await axios.post(
+            `${BASE_API_URL}/newjob.php?userid=${userId}`, // Fixed: Added userId to URL
+            jobData,
+            {
+              timeout: 10000,
+              validateStatus: (status) => status < 500, // Allow 4xx responses to be handled
+            }
+          );
+
+          if (response.status >= 400) {
+            throw new Error(
+              `Server error ${response.status}: ${
+                response.data?.message || "Unknown error"
+              }`
+            );
+          }
 
           await deleteJob(job.id);
           jobSynced++;
 
           this.notify({
             status: "in_progress",
-            message: `Jobs ${jobSynced}/${jobs.length}`,
-            progress: jobSynced / jobs.length,
-            syncedCount: jobSynced,
-            failedCount: jobFailed,
+            message: `Syncing jobs ${jobSynced}/${jobs.length}`,
+            progress: jobs.length > 0 ? jobSynced / jobs.length : 1,
+            syncedCount: jobSynced + costSynced,
+            failedCount: jobFailed + costFailed,
           });
         } catch (error) {
           console.error(`Job sync failed for job ${job.id}:`, error);
@@ -131,25 +155,25 @@ export class SyncManager {
       const costs = await getAllCosts();
       for (const cost of costs) {
         try {
-          // Ensure proper data structure for API request
+          // FIX: Format the cost data according to what the API expects
+          // The API expects direct properties at the top level, not nested in payload
           const costData = {
             userid: userId,
-            payload: {
-              ...cost,
-              id: undefined, // Remove local ID if present
-            },
+            job_id: cost.job_id,
+            contractor_id: cost.contractor_id,
+            amount: cost.amount,
+            material_cost: cost.material_cost,
           };
 
           const response = await axios.post(
-            `${BASE_API_URL}/costs.php`,
+            `${BASE_API_URL}/costs.php?userid=${userId}`,
             costData,
             {
               timeout: 10000,
-              validateStatus: () => true,
+              validateStatus: (status) => status < 500, // Allow 4xx responses to be handled
             }
           );
 
-          // Check server response status
           if (response.status >= 400) {
             throw new Error(
               `Server error ${response.status}: ${
@@ -163,10 +187,10 @@ export class SyncManager {
 
           this.notify({
             status: "in_progress",
-            message: `Costs ${costSynced}/${costs.length}`,
-            progress: costSynced / costs.length,
-            syncedCount: costSynced,
-            failedCount: costFailed,
+            message: `Syncing costs ${costSynced}/${costs.length}`,
+            progress: costs.length > 0 ? costSynced / costs.length : 1,
+            syncedCount: jobSynced + costSynced,
+            failedCount: jobFailed + costFailed,
           });
         } catch (error) {
           console.error(`Cost sync failed for cost ${cost.id}:`, error);
@@ -188,29 +212,42 @@ export class SyncManager {
         failedCount: totalFailed,
       });
 
-      if (totalSynced) Toast.success(msg);
-    } catch (error) {
+      if (totalSynced > 0) {
+        Toast.success(msg);
+        // Emit event to notify about pending data changes
+        DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_DATA_CHANGED, {
+          jobsSynced: jobSynced,
+          costsSynced: costSynced,
+          jobsFailed: jobFailed,
+          costsFailed: costFailed,
+        });
+      }
+    } catch (error: any) {
       console.error("Sync operation failed:", error);
+      this.notify({
+        status: "error",
+        message: error.message || "Sync failed; will retry when online.",
+      });
       Toast.error("Sync failed; will retry when online.");
     } finally {
       this.isSyncing = false;
     }
   }
 
-  // Add network monitoring
-  // public initialize() {
-  //   NetInfo.addEventListener((state) => {
-  //     if (state.isConnected && !this.isSyncing) {
-  //       this.checkAndSync();
-  //     }
-  //   });
-
-  //   // Initial sync check
-  //   this.checkAndSync();
-  // }
-
   public async manualSync() {
     this.syncAll();
+  }
+
+  // Utility method to check if there's pending data
+  public async hasPendingData(): Promise<{ jobs: number; costs: number }> {
+    try {
+      const jobs = await getAllJobs();
+      const costs = await getAllCosts();
+      return { jobs: jobs.length, costs: costs.length };
+    } catch (error) {
+      console.error("[SyncManager] Error checking pending data:", error);
+      return { jobs: 0, costs: 0 };
+    }
   }
 }
 
