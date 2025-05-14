@@ -15,7 +15,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Toast } from "toastify-react-native";
 import { Header } from "../components";
 import styles from "../Constants/styles";
-import { color } from "../Constants/theme";
+import { color, fontSize } from "../Constants/theme";
 import { AppDispatch, RootState } from "../store";
 import { fetchContractors } from "../store/contractorSlice";
 import {
@@ -229,8 +229,11 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       <Header />
       <ScrollView>
         <View style={styles.container}>
+          <View style={styles.headingContainer}>
+            <Text style={styles.heading}>Add Costs</Text>
+          </View>
           <View style={inner.row}>
-            <Text style={[styles.label, { width: 200 }]}>Material Cost</Text>
+            <Text style={[styles.label, { width: 250 }]}>Material Cost</Text>
             <TextInput
               style={styles.input}
               placeholder="Material Cost"
@@ -247,7 +250,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
                   selectedValue={row.contractorId}
                   onValueChange={(val) => updateRow(idx, "contractorId", val)}
                 >
-                  <Picker.Item label="Contractors" value="" />
+                  <Picker.Item label="Select Contractor" value="" />
                   {contractors.map((c) => (
                     <Picker.Item key={c.id} label={c.name} value={c.id} />
                   ))}
@@ -307,14 +310,20 @@ const inner = StyleSheet.create({
     borderColor: color.secondary,
     borderWidth: 1,
     borderRadius: 5,
-    backgroundColor: "#fff",
-    width: 200,
+    backgroundColor: color.white,
+    width: 250,
     height: 41,
     justifyContent: "center",
-    paddingHorizontal: 10,
   },
-  addMore: { alignSelf: "flex-end", marginVertical: 8 },
-  addMoreText: { color: color.primary, fontWeight: "bold" },
+  addMore: {
+    alignSelf: "flex-end",
+    marginVertical: 8,
+  },
+  addMoreText: {
+    color: color.primary,
+    fontWeight: "bold",
+    fontSize: fontSize.medium,
+  },
   error: { color: color.red, textAlign: "center", marginTop: 20 },
 });
 
