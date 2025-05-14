@@ -1,18 +1,20 @@
+// components/DataSyncManager.tsx
+
 import NetInfo from "@react-native-community/netinfo";
 import React, { useEffect, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { Toast } from "toastify-react-native";
 import { SYNC_EVENTS } from "../Constants/env";
-import { getAllJobs } from "../services/jobService";
 import { getAllCosts } from "../services/costService";
+import { getAllJobs } from "../services/jobService";
 import { syncManager, SyncState } from "../services/syncManager";
+import { getAllUploads } from "../services/uploadService";
 import { AppDispatch } from "../store";
 import {
   selectPendingJobsCount,
-  syncPendingJobs,
-  updatePendingCount,
+  updatePendingCount as updatePendingJobsCount,
 } from "../store/jobSlice";
-import { Toast } from "toastify-react-native";
 
 interface DataSyncManagerProps {
   children: React.ReactNode;
@@ -20,119 +22,115 @@ interface DataSyncManagerProps {
 
 const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const pendingCount = useSelector(selectPendingJobsCount);
+  const pendingJobs = useSelector(selectPendingJobsCount);
+
+  const [pendingCosts, setPendingCosts] = useState(0);
+  const [pendingUploads, setPendingUploads] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [pendingCostsCount, setPendingCostsCount] = useState(0);
 
-  // Function to update counts of pending data (jobs and costs)
-  const updatePendingDataCounts = async () => {
+  /** Refresh counts of jobs, costs, and uploads */
+  const refreshPendingCounts = async () => {
     try {
-      const jobs = await getAllJobs();
-      const costs = await getAllCosts();
+      const [jobs, costs, uploads] = await Promise.all([
+        getAllJobs(),
+        getAllCosts(),
+        getAllUploads(),
+      ]);
 
-      dispatch(updatePendingCount(jobs.length));
-      setPendingCostsCount(costs.length);
+      dispatch(updatePendingJobsCount(jobs.length));
+      setPendingCosts(costs.length);
+      setPendingUploads(uploads.length);
 
       DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
         jobsCount: jobs.length,
         costsCount: costs.length,
+        uploadsCount: uploads.length,
         jobs,
         costs,
+        uploads,
       });
-    } catch (error) {
-      console.error(
-        "[DataSyncManager] Error updating pending data counts:",
-        error
-      );
+    } catch (err) {
+      console.error("[DataSyncManager] Error fetching pending counts:", err);
     }
   };
 
-  // Handle sync state changes
-  const handleSyncStateChange = (syncState: SyncState) => {
-    if (syncState.status === "syncing") {
+  /** Handle sync state changes from SyncManager */
+  const handleSyncStateChange = (state: SyncState) => {
+    if (state.status === "syncing") {
       setIsSyncing(true);
-    } else if (["complete", "error"].includes(syncState.status)) {
+      return;
+    }
+
+    if (state.status === "complete" || state.status === "error") {
       setIsSyncing(false);
-      updatePendingDataCounts();
+      refreshPendingCounts();
 
-      if (syncState.status === "complete") {
-        const totalSynced = syncState.syncedCount || 0;
-        const totalFailed = syncState.failedCount || 0;
-
-        if (totalSynced > 0 || totalFailed > 0) {
-          const message = totalFailed
-            ? `Synced ${totalSynced} items, ${totalFailed} failed`
-            : `Successfully synced ${totalSynced} items`;
-
-          Toast.success(message);
-        }
+      if (state.status === "complete") {
+        const synced = state.syncedCount ?? 0;
+        const failed = state.failedCount ?? 0;
+        const msg = failed
+          ? `Synced ${synced} items, ${failed} failed`
+          : `Successfully synced ${synced} items`;
+        Toast.success(msg);
       }
     }
   };
 
-  // Initialize periodic data count updates
+  /** Periodically refresh counts every 30s */
   useEffect(() => {
-    updatePendingDataCounts();
-    const intervalId = setInterval(updatePendingDataCounts, 30000);
-    return () => clearInterval(intervalId);
+    refreshPendingCounts();
+    const id = setInterval(refreshPendingCounts, 30_000);
+    return () => clearInterval(id);
   }, [dispatch]);
 
-  // Initialize network connectivity monitoring
+  /** Auto‑trigger sync when network returns and any queue is non‑empty */
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
+    const unsubscribe = NetInfo.addEventListener(({ isConnected }) => {
       if (
-        state.isConnected &&
-        (pendingCount > 0 || pendingCostsCount > 0) &&
-        !isSyncing
+        isConnected &&
+        !isSyncing &&
+        (pendingJobs > 0 || pendingCosts > 0 || pendingUploads > 0)
       ) {
         syncManager.syncAll();
       }
     });
-    return () => unsubscribe();
-  }, [dispatch, pendingCount, pendingCostsCount, isSyncing]);
+    return unsubscribe;
+  }, [pendingJobs, pendingCosts, pendingUploads, isSyncing]);
 
-  // Initialize sync manager and add listener
+  /** Initialize SyncManager and register listeners */
   useEffect(() => {
     syncManager.initialize();
-    const syncListener = syncManager.addSyncListener(handleSyncStateChange);
+    const removeListener = syncManager.addSyncListener(handleSyncStateChange);
 
-    // Listen for sync events
-    const startedListener = DeviceEventEmitter.addListener(
+    const startSub = DeviceEventEmitter.addListener(
       SYNC_EVENTS.SYNC_STARTED,
-      () => {
-        setIsSyncing(true);
-      }
+      () => setIsSyncing(true)
     );
-
-    const completedListener = DeviceEventEmitter.addListener(
+    const completeSub = DeviceEventEmitter.addListener(
       SYNC_EVENTS.SYNC_COMPLETED,
       () => {
         setIsSyncing(false);
-        updatePendingDataCounts();
+        refreshPendingCounts();
       }
     );
-
-    const failedListener = DeviceEventEmitter.addListener(
+    const failSub = DeviceEventEmitter.addListener(
       SYNC_EVENTS.SYNC_FAILED,
       () => {
         setIsSyncing(false);
-        updatePendingDataCounts();
+        refreshPendingCounts();
       }
     );
-
-    const manualSyncListener = DeviceEventEmitter.addListener(
+    const manualSub = DeviceEventEmitter.addListener(
       SYNC_EVENTS.MANUAL_SYNC_REQUESTED,
-      () => {
-        syncManager.manualSync();
-      }
+      () => syncManager.manualSync()
     );
 
     return () => {
-      syncListener();
-      startedListener.remove();
-      completedListener.remove();
-      failedListener.remove();
-      manualSyncListener.remove();
+      removeListener();
+      startSub.remove();
+      completeSub.remove();
+      failSub.remove();
+      manualSub.remove();
     };
   }, [dispatch]);
 

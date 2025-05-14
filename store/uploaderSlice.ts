@@ -1,19 +1,18 @@
 // uploaderSlice.ts
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
 import NetInfo from "@react-native-community/netinfo";
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import axios from "axios";
 import * as FileSystem from "expo-file-system";
 import { BASE_API_URL } from "../Constants/env";
 import { getFileId } from "../helper";
-import { MediaFile } from "../types";
-import { RootState } from "./index";
 import {
   createLocalUpload,
-  getAllUploads,
   deleteUpload,
-  getFileContent,
+  getAllUploads,
   UploadSegment,
 } from "../services/uploadService";
+import { MediaFile } from "../types";
+import { RootState } from "./index";
 
 interface UploaderState {
   files: MediaFile[];

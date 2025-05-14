@@ -1,9 +1,12 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState, useRef } from "react";
+import { Video } from "expo-av";
+import * as FileSystem from "expo-file-system";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   DeviceEventEmitter,
+  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -13,10 +16,7 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Dimensions,
 } from "react-native";
-import { Video } from "expo-av";
-import * as FileSystem from "expo-file-system";
 import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
 import { SYNC_EVENTS } from "../Constants/env";
@@ -25,15 +25,11 @@ import { color, fontSize } from "../Constants/theme";
 import { formatDate } from "../helper";
 import { getAllCosts } from "../services/costService";
 import { getAllJobs } from "../services/jobService";
+import { getAllUploads, UploadSegment } from "../services/uploadService";
 import { AppDispatch, RootState } from "../store";
 import { selectPendingJobsCount, syncPendingJobs } from "../store/jobSlice";
-import { Costs, Job, MediaFile } from "../types";
-import {
-  getAllUploads,
-  UploadSegment,
-  getFileContent,
-} from "../services/uploadService";
 import { syncOfflineUploads } from "../store/uploaderSlice";
+import { Costs, Job } from "../types";
 
 const { width } = Dimensions.get("window");
 

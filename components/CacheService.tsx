@@ -11,7 +11,6 @@ import React, {
   useState,
 } from "react";
 import { Modal, Text, TouchableOpacity, View } from "react-native";
-
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 import styles from "../Constants/styles";
 import {
@@ -63,6 +62,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     costs: false,
     contractors: false,
   });
+  const abortController = useRef<AbortController>(new AbortController());
 
   const lastPrefetchTime = useRef<number>(0);
   const lastFetchTimes = useRef<Record<string, number>>({
@@ -84,25 +84,46 @@ const CacheService: React.FC<CacheServiceProps> = ({
     lastConnectivityChange: 0,
   });
 
-  const handleError = (err: any, dataType: string) => {
-    console.error(`[CacheService] Error fetching ${dataType}:`, err);
-    if (axios.isAxiosError(err) && err.response?.status === 401) {
-      if (!isLoginScreen) {
-        setShowSessionExpired(true);
-      }
+  const handleSessionExpired = () => {
+    if (!isLoginScreen) {
+      setShowSessionExpired(true);
+      abortController.current.abort();
+      Object.keys(fetchInProgress.current).forEach(
+        (key) => (fetchInProgress.current[key] = false)
+      );
     }
-    throw err;
+  };
+
+  const fetchWithSessionCheck = async (url: string) => {
+    try {
+      const response = await axios.get(url, {
+        signal: abortController.current.signal,
+      });
+      if (
+        response.data.status === 0 &&
+        response.data.message === "Session expired"
+      ) {
+        handleSessionExpired();
+        return null;
+      }
+      return response.data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+      } else {
+      }
+      return null;
+    }
   };
 
   const isDataStale = (
     cacheType: keyof typeof CACHE_CONFIG.FRESHNESS_DURATION,
     lastUpdated: number
-  ): boolean => {
+  ) => {
     const freshnessDuration = CACHE_CONFIG.FRESHNESS_DURATION[cacheType];
     return Date.now() - lastUpdated > freshnessDuration;
   };
 
-  const canPrefetch = (): boolean => {
+  const canPrefetch = () => {
     const now = Date.now();
     return (
       lastPrefetchTime.current === 0 ||
@@ -123,21 +144,18 @@ const CacheService: React.FC<CacheServiceProps> = ({
         }
         const userData = await AsyncStorage.getItem("userData");
         if (!userData) {
-          setLoading(false);
           if (!isLoginScreen) navigation.navigate("LoginScreen" as never);
           return;
         }
-        const userObj = JSON.parse(userData);
-        const userId = userObj.payload?.userid ?? userObj.userid;
+        const { payload, userid } = JSON.parse(userData);
+        const userId = payload?.userid ?? userid;
         if (!userId) {
-          setLoading(false);
           if (!isLoginScreen) navigation.navigate("LoginScreen" as never);
           return;
         }
         await cleanupUserCache(userId);
         await prefetchUserData(userId, force);
       } catch (error) {
-        console.error("[CacheService] Prefetch error:", error);
       } finally {
         setLoading(false);
       }
@@ -154,28 +172,30 @@ const CacheService: React.FC<CacheServiceProps> = ({
     if (isLoginScreen && showSessionExpired) {
       setShowSessionExpired(false);
     }
-  }, [isLoginScreen, showSessionExpired]);
+  }, [isLoginScreen]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
     if (isLoggedIn) {
-      timer = setTimeout(
+      const timer = setTimeout(
         () => prefetchAll(true),
         CACHE_CONFIG.INITIAL_PREFETCH_DELAY
       );
+      return () => {
+        clearTimeout(timer);
+        debouncedPrefetch.cancel?.();
+      };
     }
-    return () => {
-      if (timer) clearTimeout(timer);
-      debouncedPrefetch.cancel?.();
-    };
   }, [isLoggedIn, prefetchAll, debouncedPrefetch]);
+
+  useEffect(() => {
+    if (isLoggedIn) abortController.current = new AbortController();
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       const now = Date.now();
       const { wasOffline, pendingRefresh, lastConnectivityChange } =
         networkState.current;
-
       if (state.isConnected && wasOffline) {
         networkState.current.wasOffline = false;
         if (
@@ -191,7 +211,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
       }
     });
     return () => unsubscribe();
-  }, [debouncedPrefetch, isLoggedIn, prefetchAll]);
+  }, [prefetchAll, isLoggedIn]);
 
   const cleanupUserCache = async (currentUserId: string) => {
     try {
@@ -204,28 +224,25 @@ const CacheService: React.FC<CacheServiceProps> = ({
               entry.table_key.startsWith("categoryCache_") ||
               entry.table_key.startsWith("filesCache_") ||
               entry.table_key.startsWith(CACHE_CONFIG.CACHE_KEYS.COST) ||
-              entry.table_key.startsWith(CACHE_CONFIG.CACHE_KEYS.COST)) &&
+              entry.table_key.startsWith(
+                CACHE_CONFIG.CACHE_KEYS.CONTRACTORS
+              )) &&
             !entry.table_key.includes(`_${currentUserId}`)
         )
         .map((e) => e.table_key);
       for (let i = 0; i < staleKeys.length; i += 20) {
         await Promise.all(staleKeys.slice(i, i + 20).map(deleteCache));
       }
-    } catch (err) {
-      console.error("[CacheService] Error cleaning up user cache:", err);
-    }
+    } catch (err) {}
   };
 
   const prefetchContractors = async (userId: string) => {
     const key = `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`;
-
     if (fetchInProgress.current.contractors) return;
     fetchInProgress.current.contractors = true;
-
     try {
       const cacheEntry = await getCache(key);
       const now = Date.now();
-
       if (
         cacheEntry?.payload &&
         now - cacheEntry.updated_at <
@@ -234,22 +251,15 @@ const CacheService: React.FC<CacheServiceProps> = ({
         lastFetchTimes.current.contractors = cacheEntry.updated_at;
         return;
       }
-
-      const { data } = await axios.get(
+      const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/contractors.php?userid=${userId}`
       );
-
-      if (!data) throw new Error("No data received for contractors");
-      if (data.status !== 1)
-        console.warn("[CacheService] Contractors API status:", data.status);
+      if (!data) return;
       if (!Array.isArray(data.payload))
         throw new Error("Invalid contractors data");
-
       await setCache(key, data.payload);
       lastFetchTimes.current.contractors = now;
     } catch (error) {
-      console.error("[CacheService] Error fetching contractors:", error);
-      throw error;
     } finally {
       fetchInProgress.current.contractors = false;
     }
@@ -266,35 +276,30 @@ const CacheService: React.FC<CacheServiceProps> = ({
           force || isDataStale("CATEGORIES", lastFetchTimes.current.categories),
         fn: () => prefetchCategories(userId),
         inProgressKey: "categories",
-        errorHandler: (err: any) => handleError(err, "categories"),
       },
       JOB_TYPES: {
         shouldFetch: () =>
           force || isDataStale("JOB_TYPES", lastFetchTimes.current.jobTypes),
         fn: () => prefetchJobTypes(userId),
         inProgressKey: "jobTypes",
-        errorHandler: (err: any) => handleError(err, "job types"),
       },
       JOBS: {
         shouldFetch: () =>
           force || isDataStale("JOBS", lastFetchTimes.current.jobs),
         fn: () => prefetchJobs(userId),
         inProgressKey: "jobs",
-        errorHandler: (err: any) => handleError(err, "jobs"),
       },
       FILES: {
         shouldFetch: () =>
           force || isDataStale("FILES", lastFetchTimes.current.files),
         fn: () => prefetchFiles(userId),
         inProgressKey: "files",
-        errorHandler: (err: any) => handleError(err, "files"),
       },
       COSTS: {
         shouldFetch: () =>
           force || isDataStale("COSTS", lastFetchTimes.current.costs),
         fn: () => prefetchActiveJobCosts(userId),
         inProgressKey: "costs",
-        errorHandler: (err: any) => handleError(err, "costs"),
       },
       CONTRACTORS: {
         shouldFetch: () =>
@@ -302,69 +307,44 @@ const CacheService: React.FC<CacheServiceProps> = ({
           isDataStale("CONTRACTORS", lastFetchTimes.current.contractors),
         fn: () => prefetchContractors(userId),
         inProgressKey: "contractors",
-        errorHandler: (err: any) => handleError(err, "contractors"),
       },
     };
 
     for (const key of Object.keys(map) as Array<keyof typeof map>) {
-      const { shouldFetch, fn, inProgressKey, errorHandler } = map[key];
+      const { shouldFetch, fn, inProgressKey } = map[key];
       if (!fetchInProgress.current[inProgressKey] && shouldFetch()) {
-        tasks.push(fn().catch(errorHandler));
+        tasks.push(fn());
       }
     }
 
     await Promise.all(tasks);
   };
 
-  // --------------------------
-  // prefetchCategories now uses setCategories
   const prefetchJobTypes = async (userId: string) => {
     const key = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
-
-    // Prevent duplicate fetches
     if (fetchInProgress.current.jobTypes) return;
     fetchInProgress.current.jobTypes = true;
-
     try {
-      // First check if we have unexpired cache
       const cacheEntry = await getCache(key);
       const now = Date.now();
-
-      // If cache exists and is fresh, use cached data
       if (
-        cacheEntry &&
-        cacheEntry.payload &&
+        cacheEntry?.payload &&
         now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOB_TYPES
       ) {
         store.dispatch(fetchJobTypes({ userId }));
         lastFetchTimes.current.jobTypes = cacheEntry.updated_at;
         return;
       }
-
-      const { data } = await axios.get(
+      const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/jobtypes.php?userid=${userId}`
       );
-
-      if (!data) {
-        throw new Error("No data received for job types");
-      }
-
-      if (data.status !== 1) {
-        console.warn(
-          `[CacheService] Job types API returned status: ${data.status}`
-        );
-      }
-
-      if (!Array.isArray(data.payload)) {
-        throw new Error("Invalid job types data structure");
-      }
-
+      if (!data) return;
+      if (!Array.isArray(data.payload))
+        throw new Error("Invalid job types data");
       await setCache(key, data.payload);
       store.dispatch(fetchJobTypes({ userId }));
       lastFetchTimes.current.jobTypes = now;
     } catch (error) {
-      console.error("[CacheService] Error fetching job types:", error);
-      throw error; // Re-throw for the parent handler
     } finally {
       fetchInProgress.current.jobTypes = false;
     }
@@ -374,9 +354,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     const key = `getJobsCache_${userId}`;
     if (fetchInProgress.current.jobs) return;
     fetchInProgress.current.jobs = true;
-
     try {
-      // 1. Check cache first
       const cacheEntry = await getCache(key);
       const now = Date.now();
       if (
@@ -384,29 +362,19 @@ const CacheService: React.FC<CacheServiceProps> = ({
         now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.JOBS
       ) {
         lastFetchTimes.current.jobs = cacheEntry.updated_at;
-        // Populate Redux from cache/SQLite + offline automatically
         await store.dispatch(fetchJobsThunk({ userId }));
         return;
       }
-
-      // 2. Fetch fresh from server
-      const { data } = await axios.get(
+      const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/getjobs.php?userid=${userId}`
       );
-      if (!data || data.status !== 1 || !Array.isArray(data.payload)) {
+      if (!data) return;
+      if (!Array.isArray(data.payload))
         throw new Error("Invalid jobs response");
-      }
-
-      // 3. Cache it locally
       await setCache(key, data.payload);
-
-      // 4. Dispatch the thunk to merge with offline and update Redux
       await store.dispatch(fetchJobsThunk({ userId }));
-
       lastFetchTimes.current.jobs = now;
     } catch (error) {
-      console.error("[CacheService] Error fetching jobs:", error);
-      throw error;
     } finally {
       fetchInProgress.current.jobs = false;
     }
@@ -431,17 +399,12 @@ const CacheService: React.FC<CacheServiceProps> = ({
         store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
         lastFetchTimes.current.categories = cacheEntry.updated_at;
       } else {
-        const { data } = await axios.get<{
-          status: number;
-          payload: any[];
-        }>(`${BASE_API_URL}/fileuploadcats.php?userid=${userId}`);
-        if (data.status !== 1) {
-          console.warn(
-            `[CacheService] Categories API returned status ${data.status}`
-          );
-        }
+        const data = await fetchWithSessionCheck(
+          `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
+        );
+        if (!data) return;
         await setCache(key, data.payload);
-        store.dispatch(loadCategories()); // now only when truly fetching fresh
+        store.dispatch(loadCategories());
         const { categoryMap, subCategoryMap } = createCategoryMappings(
           data.payload
         );
@@ -455,48 +418,27 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
   const prefetchFiles = async (userId: string) => {
     const key = `filesCache_${userId}`;
-
-    // Prevent duplicate fetches
     if (fetchInProgress.current.files) return;
     fetchInProgress.current.files = true;
-
     try {
-      // Check cache first
       const cacheEntry = await getCache(key);
       const now = Date.now();
-
-      // If cache exists and is fresh, skip the fetch
       if (
-        cacheEntry &&
-        cacheEntry.payload &&
+        cacheEntry?.payload &&
         now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.FILES
       ) {
         lastFetchTimes.current.files = cacheEntry.updated_at;
         return;
       }
-      const { data } = await axios.get(
+      const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/get-files.php?userid=${userId}`
       );
-
-      if (!data) {
-        throw new Error("No data received for files");
-      }
-
-      if (data.status !== 1) {
-        console.warn(
-          `[CacheService] Files API returned status: ${data.status}`
-        );
-      }
-
-      if (!Array.isArray(data.payload)) {
+      if (!data) return;
+      if (!Array.isArray(data.payload))
         throw new Error("Invalid files data structure");
-      }
-
       await setCache(key, data.payload);
       lastFetchTimes.current.files = now;
     } catch (error) {
-      console.error("[CacheService] Error fetching files:", error);
-      throw error; // Re-throw for the parent handler
     } finally {
       fetchInProgress.current.files = false;
     }
@@ -504,37 +446,28 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
   const prefetchActiveJobCosts = async (userId: string) => {
     const key = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
-
     if (fetchInProgress.current.costs) return;
     fetchInProgress.current.costs = true;
-
     try {
       const cacheEntry = await getCache(key);
       const now = Date.now();
-
       if (
-        cacheEntry &&
-        cacheEntry.payload &&
+        cacheEntry?.payload &&
         now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.COSTS
       ) {
         lastFetchTimes.current.costs = cacheEntry.updated_at;
         return;
       }
-
-      const { data } = await axios.get(
+      const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/costs.php?userid=${userId}`
       );
-
-      let costs: any[] = [];
-      if (data.status === 1) {
-        costs = Array.isArray(data.payload) ? data.payload : [data.payload];
-      }
-
+      if (!data) return;
+      let costs: any[] = Array.isArray(data.payload)
+        ? data.payload
+        : [data.payload];
       await setCache(key, costs);
       lastFetchTimes.current.costs = now;
     } catch (error) {
-      console.error("[CacheService] Error fetching costs:", error);
-      throw error;
     } finally {
       fetchInProgress.current.costs = false;
     }

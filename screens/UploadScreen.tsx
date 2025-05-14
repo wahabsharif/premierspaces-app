@@ -125,7 +125,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             // console.error("Error parsing job data:", parseError);
           }
         } else {
-          console.log("No job data found in AsyncStorage");
         }
       } catch (error) {
         // console.error("Error retrieving job data", error);
@@ -192,18 +191,24 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         quality: 1,
       });
       if (!result.canceled) {
-        const newFiles: MediaFile[] = result.assets.map((asset) => {
-          const fileType = asset.type === "video" ? "video" : "image";
-          const name = asset.uri.split("/").pop() || `file_${Date.now()}`;
-          let mimeType = "";
-          if (fileType === "image") {
-            mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
-          } else if (fileType === "video") {
-            mimeType = name.endsWith(".mp4") ? "video/mp4" : "video/mp4";
-          }
-          return { uri: asset.uri, type: fileType, name, mimeType };
-        });
-        dispatch(setFiles([...files, ...newFiles]));
+        const newFiles: MediaFile[] = await Promise.all(
+          result.assets.map(async (asset) => {
+            const fileType = asset.type === "video" ? "video" : "image";
+            const name = asset.uri.split("/").pop() || `file_${Date.now()}`;
+            let mimeType = "";
+            if (fileType === "image") {
+              mimeType = name.endsWith(".png") ? "image/png" : "image/jpeg";
+            } else if (fileType === "video") {
+              mimeType = name.endsWith(".mp4") ? "video/mp4" : "video/mp4";
+            }
+            const content = await FileSystem.readAsStringAsync(asset.uri, {
+              encoding: "base64",
+            });
+            return { uri: asset.uri, type: fileType, name, mimeType, content };
+          })
+        );
+        const newFilesArray = await Promise.all(newFiles);
+        dispatch(setFiles([...files, ...newFilesArray]));
       }
     } catch (error) {
       showAlert("Error", "Failed to pick media. Please try again.");
@@ -298,6 +303,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
           name,
           mimeType,
           size: doc.size,
+          content: await FileSystem.readAsStringAsync(doc.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          }),
         };
         dispatch(setFiles([...files, newFile]));
       }
