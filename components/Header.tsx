@@ -99,13 +99,16 @@ const Header = () => {
         </TouchableOpacity>
 
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <TouchableOpacity onPress={handleReload} style={{ padding: 20 }}>
+          <TouchableOpacity
+            onPress={handleReload}
+            style={{ paddingHorizontal: 10 }}
+          >
             <Octicons name="sync" size={fontSize.large} color="black" />
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setDropdownVisible((p) => !p)}
-            style={{ padding: 20 }}
+            style={{ paddingHorizontal: 10 }}
           >
             <Octicons name="three-bars" size={fontSize.large} color="black" />
           </TouchableOpacity>

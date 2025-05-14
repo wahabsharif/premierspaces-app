@@ -35,7 +35,7 @@ export default StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     position: "relative",
     backgroundColor: color.white,
     elevation: 5,
