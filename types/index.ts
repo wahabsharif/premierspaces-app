@@ -99,6 +99,7 @@ export interface MediaFile {
   type: "image" | "video" | "document";
   name: string;
   mimeType: string;
+  content: string | Uint8Array;
   size?: number;
 }
 

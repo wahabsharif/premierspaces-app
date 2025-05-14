@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
@@ -15,12 +16,27 @@ export interface UploadSegment {
   file_size: number | null;
   file_type: string | null;
   file_index: number | null;
-  content: Uint8Array | null;
+  content_path: string | null; // Store file path instead of binary content
+  uri: string | null; // Original file URI
 }
 
-interface UploadRow extends UploadSegment {}
+interface UploadRow extends Omit<UploadSegment, "content"> {}
+
+const UPLOAD_DIRECTORY = `${FileSystem.documentDirectory}offline_uploads/`;
+
+// Ensure upload directory exists
+const ensureDirectoryExists = async () => {
+  const dirInfo = await FileSystem.getInfoAsync(UPLOAD_DIRECTORY);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(UPLOAD_DIRECTORY, {
+      intermediates: true,
+    });
+  }
+};
 
 const initializeDatabase = async () => {
+  await ensureDirectoryExists();
+
   const db = await SQLite.openDatabaseAsync("uploadsDB");
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -37,7 +53,8 @@ const initializeDatabase = async () => {
       file_size REAL,
       file_type TEXT,
       file_index INTEGER,
-      content BLOB
+      content_path TEXT,
+      uri TEXT
     );
   `);
   return db;
@@ -58,7 +75,8 @@ const COLUMNS = [
   "file_size",
   "file_type",
   "file_index",
-  "content",
+  "content_path",
+  "uri",
 ];
 
 const SQL = {
@@ -81,14 +99,91 @@ const safeNumber = (v: any): number | null => {
   return isNaN(n) ? null : n;
 };
 
+// Write binary content to a file
+const saveBinaryContent = async (
+  content: Uint8Array | null,
+  id: string,
+  fileName: string | null
+): Promise<string | null> => {
+  if (!content) return null;
+
+  const fileExtension = fileName ? fileName.split(".").pop() || "" : "";
+  const filePath = `${UPLOAD_DIRECTORY}${id}-${Date.now()}.${fileExtension}`;
+
+  try {
+    await FileSystem.writeAsStringAsync(
+      filePath,
+      arrayBufferToBase64(content),
+      {
+        encoding: FileSystem.EncodingType.Base64,
+      }
+    );
+    return filePath;
+  } catch (error) {
+    console.error("Error saving file content:", error);
+    return null;
+  }
+};
+
+// Convert ArrayBuffer to Base64 string
+function arrayBufferToBase64(buffer: Uint8Array): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+
+  return btoa(binary);
+}
+
+// Save file from URI to local storage
+const saveFileFromUri = async (
+  uri: string,
+  id: string,
+  fileName: string | null
+): Promise<string | null> => {
+  try {
+    const fileExtension = fileName ? fileName.split(".").pop() || "" : "";
+    const destinationPath = `${UPLOAD_DIRECTORY}${id}-${Date.now()}.${fileExtension}`;
+
+    await FileSystem.copyAsync({
+      from: uri,
+      to: destinationPath,
+    });
+
+    return destinationPath;
+  } catch (error) {
+    console.error("Error copying file:", error);
+    return null;
+  }
+};
+
 export async function createLocalUpload(
-  segment: Omit<UploadSegment, "id">
+  segment: Omit<UploadSegment, "id" | "content_path"> & {
+    content?: Uint8Array | null;
+    uri: string;
+  }
 ): Promise<UploadSegment> {
   const db = await dbPromise;
+  const id = uuidv4();
+
+  // Save file content or copy from URI
+  let contentPath = null;
+  if (segment.content) {
+    contentPath = await saveBinaryContent(
+      segment.content,
+      id,
+      segment.file_name
+    );
+  } else if (segment.uri) {
+    contentPath = await saveFileFromUri(segment.uri, id, segment.file_name);
+  }
+
   const stmt = await db.prepareAsync(SQL.INSERT);
   try {
-    const id = uuidv4().slice(0, 5);
-    const params: (string | number | Uint8Array | null)[] = [
+    const params: (string | number | null)[] = [
       id,
       safeNumber(segment.total_segments),
       safeNumber(segment.segment_number),
@@ -101,10 +196,15 @@ export async function createLocalUpload(
       safeNumber(segment.file_size),
       safeString(segment.file_type),
       safeNumber(segment.file_index),
-      segment.content ?? null,
+      contentPath,
+      safeString(segment.uri),
     ];
     await stmt.executeAsync(params);
-    return { id, ...segment };
+    return {
+      id,
+      ...segment,
+      content_path: contentPath,
+    };
   } finally {
     try {
       await stmt.finalizeAsync();
@@ -141,7 +241,7 @@ export async function updateUpload(segment: UploadSegment): Promise<number> {
   const db = await dbPromise;
   const stmt = await db.prepareAsync(SQL.UPDATE);
   try {
-    const params: (string | number | Uint8Array | null)[] = [
+    const params: (string | number | null)[] = [
       safeNumber(segment.total_segments),
       safeNumber(segment.segment_number),
       safeNumber(segment.main_category),
@@ -153,7 +253,8 @@ export async function updateUpload(segment: UploadSegment): Promise<number> {
       safeNumber(segment.file_size),
       safeString(segment.file_type),
       safeNumber(segment.file_index),
-      segment.content ?? null,
+      safeString(segment.content_path),
+      safeString(segment.uri),
       safeString(segment.id) ?? "",
     ];
     const result = await stmt.executeAsync(params);
@@ -164,6 +265,22 @@ export async function updateUpload(segment: UploadSegment): Promise<number> {
 }
 
 export async function deleteUpload(id: string): Promise<number> {
+  // First get the upload to delete associated file
+  const upload = await getUploadById(id);
+
+  // Delete associated file if it exists
+  if (upload && upload.content_path) {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(upload.content_path);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(upload.content_path);
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error);
+    }
+  }
+
+  // Delete database entry
   const db = await dbPromise;
   const stmt = await db.prepareAsync(SQL.DELETE);
   try {
@@ -172,4 +289,32 @@ export async function deleteUpload(id: string): Promise<number> {
   } finally {
     await stmt.finalizeAsync();
   }
+}
+
+// Function to read file content when needed
+export async function getFileContent(
+  contentPath: string
+): Promise<Uint8Array | null> {
+  try {
+    const base64Content = await FileSystem.readAsStringAsync(contentPath, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return base64ToUint8Array(base64Content);
+  } catch (error) {
+    console.error("Error reading file content:", error);
+    return null;
+  }
+}
+
+// Convert Base64 to Uint8Array
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  return bytes;
 }
