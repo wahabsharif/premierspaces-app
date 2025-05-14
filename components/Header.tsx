@@ -3,7 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import React, { useEffect, useState } from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View, DevSettings } from "react-native";
+import * as Updates from "expo-updates";
 import styles from "../Constants/styles";
 import { RootStackParamList } from "../types";
 import { fontSize } from "../Constants/theme";
@@ -22,49 +23,53 @@ const Header = () => {
     const fetchUserData = async () => {
       try {
         const userDataJson = await AsyncStorage.getItem("userData");
-        if (userDataJson !== null) {
+        if (userDataJson) {
           const userData = JSON.parse(userDataJson);
           if (userData?.payload?.name) {
             setUserName(userData.payload.name);
           }
         }
-      } catch (error) {
-        // // console.error("Error fetching user data:", error);
+      } catch {
+        // silent
       }
     };
-
     fetchUserData();
   }, []);
 
   const dropdownOptions = ["Home", "Settings", "Pending Data", "Logout"];
-
-  const handleDropdownPress = () => {
-    setDropdownVisible((prev) => !prev);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await AsyncStorage.clear();
-
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "LoginScreen" }],
-      });
-    } catch (error) {
-      // // console.error("Error during logout:", error);
+  const handleOptionSelect = (option: string) => {
+    setDropdownVisible(false);
+    switch (option) {
+      case "Settings":
+        navigation.navigate("SettingScreen");
+        break;
+      case "Home":
+        navigation.navigate("SearchPropertyScreen");
+        break;
+      case "Pending Data":
+        navigation.navigate("PendingDataScreen");
+        break;
+      case "Logout":
+        AsyncStorage.clear().then(() =>
+          navigation.reset({ index: 0, routes: [{ name: "LoginScreen" }] })
+        );
+        break;
     }
   };
 
-  const handleOptionSelect = (option: string) => {
-    setDropdownVisible(false);
-    if (option === "Settings") {
-      navigation.navigate("SettingScreen");
-    } else if (option === "Home") {
-      navigation.navigate("SearchPropertyScreen");
-    } else if (option === "Pending Data") {
-      navigation.navigate("PendingDataScreen");
-    } else if (option === "Logout") {
-      handleLogout();
+  const handleReload = async () => {
+    try {
+      if (Updates.reloadAsync) {
+        await Updates.reloadAsync();
+        return;
+      }
+    } catch (e) {
+      console.warn("expo-updates failed:", e);
+    }
+    if (__DEV__ && DevSettings.reload) {
+      DevSettings.reload();
+    } else {
+      console.error("Unable to reload programmatically.");
     }
   };
 
@@ -92,9 +97,19 @@ const Header = () => {
             resizeMode="contain"
           />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleDropdownPress} style={{ padding: 20 }}>
-          <Octicons name="three-bars" size={fontSize.large} color="black" />
-        </TouchableOpacity>
+
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={handleReload} style={{ padding: 20 }}>
+            <Octicons name="sync" size={fontSize.large} color="black" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setDropdownVisible((p) => !p)}
+            style={{ padding: 20 }}
+          >
+            <Octicons name="three-bars" size={fontSize.large} color="black" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {dropdownVisible && (
