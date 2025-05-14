@@ -14,6 +14,7 @@ import {
 import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
 import { RootState } from "./index";
+import { createCost } from "./costsSlice";
 
 export interface JobState {
   loading: boolean;
@@ -331,6 +332,21 @@ const slice = createSlice({
       .addCase(fetchJobs.rejected, (state, action) => {
         state.jobsList.loading = false;
         state.jobsList.error = action.payload || "Failed to load jobs";
+      })
+      .addCase(createCost.fulfilled, (state, action) => {
+        // action.meta.arg is the object you passed to createCost()
+        const { jobId, materialCost } = action.meta.arg as {
+          jobId: string;
+          materialCost?: string;
+        };
+
+        // Find and update the job's material_cost
+        const job = state.jobsList.items.find(
+          (j: Job) => j.id === jobId // ③ explicitly type j: Job
+        );
+        if (job && materialCost !== undefined) {
+          job.material_cost = materialCost;
+        }
       })
       .addCase(syncPendingJobs.fulfilled, (state, action) => {
         if (action.payload.syncedCount > 0) {
