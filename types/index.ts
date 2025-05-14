@@ -5,7 +5,7 @@ export type RootStackParamList = {
   AppLockSettingScreen: undefined;
   CategoryScreen: { paramKey: string; fromOfflineMode?: boolean };
   SearchPropertyScreen: undefined;
-  UploadScreen: { jobId: string };
+  UploadScreen: { job_id: string; common_id: string };
   AddCostsScreen: { jobId: string; materialCost: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
@@ -76,6 +76,7 @@ export interface Job {
   image_file_count: string;
   doc_file_count: string;
   video_file_count: string;
+  common_id: string;
   [key: string]: string | undefined;
 }
 
@@ -136,6 +137,7 @@ export interface FileItem {
   tags?: string[];
   notes?: string;
   file_category?: string;
+  common_id?: string;
 }
 
 export interface FileTypeCount {

@@ -15,6 +15,8 @@ import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
 import { RootState } from "./index";
 import { createCost } from "./costsSlice";
+import { generateCommonId } from "../helper";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export interface JobState {
   loading: boolean;
@@ -177,10 +179,14 @@ export const createJob = createAsyncThunk<
   { rejectValue: string; state: RootState }
 >("job/create", async ({ userId, jobData }, { rejectWithValue, dispatch }) => {
   try {
+    // Generate common_id for the job
+    const common_id = generateCommonId();
+    await AsyncStorage.setItem(`${common_id}`, JSON.stringify(jobData));
+    console.log("Stored job with common_id:", common_id);
+    const jobWithCommonId = { ...jobData, common_id };
     const netInfo = await NetInfo.fetch();
-
     if (netInfo.isConnected) {
-      const postData = { userid: userId, payload: jobData };
+      const postData = { userid: userId, payload: jobWithCommonId };
       const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
 
       // Force a job list refresh after creating a job
@@ -189,7 +195,7 @@ export const createJob = createAsyncThunk<
       return response.data;
     } else {
       // Save job locally and note that it's pending sync
-      const offlineId = await createOfflineJob(jobData);
+      const offlineId = await createOfflineJob(jobWithCommonId);
 
       // Force a job list refresh after creating a job
       dispatch(resetJobsList());
@@ -341,9 +347,7 @@ const slice = createSlice({
         };
 
         // Find and update the job's material_cost
-        const job = state.jobsList.items.find(
-          (j: Job) => j.id === jobId // ③ explicitly type j: Job
-        );
+        const job = state.jobsList.items.find((j: Job) => j.id === jobId);
         if (job && materialCost !== undefined) {
           job.material_cost = materialCost;
         }

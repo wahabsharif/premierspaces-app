@@ -16,8 +16,9 @@ export interface UploadSegment {
   file_size: number | null;
   file_type: string | null;
   file_index: number | null;
-  content_path: string | null; // Store file path instead of binary content
-  uri: string | null; // Original file URI
+  content_path: string | null;
+  uri: string | null;
+  common_id?: string;
 }
 
 interface UploadRow extends Omit<UploadSegment, "content"> {}
@@ -39,24 +40,25 @@ const initializeDatabase = async () => {
 
   const db = await SQLite.openDatabaseAsync("uploadsDB");
   await db.execAsync(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS upload_segments (
-      id TEXT PRIMARY KEY,
-      total_segments INTEGER,
-      segment_number INTEGER,
-      main_category INTEGER,
-      category_level_1 INTEGER,
-      property_id INTEGER,
-      job_id INTEGER,
-      file_name TEXT,
-      file_header TEXT,
-      file_size REAL,
-      file_type TEXT,
-      file_index INTEGER,
-      content_path TEXT,
-      uri TEXT
-    );
-  `);
+  PRAGMA journal_mode = WAL;
+  CREATE TABLE IF NOT EXISTS upload_segments (
+    id TEXT PRIMARY KEY,
+    total_segments INTEGER,
+    segment_number INTEGER,
+    main_category INTEGER,
+    category_level_1 INTEGER,
+    property_id INTEGER,
+    job_id INTEGER,
+    file_name TEXT,
+    file_header TEXT,
+    file_size REAL,
+    file_type TEXT,
+    file_index INTEGER,
+    content_path TEXT,
+    uri TEXT,
+    common_id TEXT
+  );
+`);
   return db;
 };
 
@@ -77,6 +79,7 @@ const COLUMNS = [
   "file_index",
   "content_path",
   "uri",
+  "common_id",
 ];
 
 const SQL = {
@@ -198,6 +201,7 @@ export async function createLocalUpload(
       safeNumber(segment.file_index),
       contentPath,
       safeString(segment.uri),
+      safeString(segment.common_id),
     ];
     await stmt.executeAsync(params);
     return {
@@ -255,6 +259,7 @@ export async function updateUpload(segment: UploadSegment): Promise<number> {
       safeNumber(segment.file_index),
       safeString(segment.content_path),
       safeString(segment.uri),
+      safeString(segment.common_id),
       safeString(segment.id) ?? "",
     ];
     const result = await stmt.executeAsync(params);
