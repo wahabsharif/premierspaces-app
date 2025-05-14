@@ -192,7 +192,11 @@ const JobsScreen = ({
   const handleJobPress = useCallback(
     async (item: Job) => {
       await AsyncStorage.setItem("jobData", JSON.stringify(item));
-      navigation.navigate("JobDetailScreen", { id: item.id });
+      navigation.navigate("JobDetailScreen", {
+        id: item.id,
+        refresh: true,
+        materialCost: "",
+      });
     },
     [navigation]
   );
