@@ -220,6 +220,9 @@ const PendingDataScreen = () => {
           <Text style={{ fontWeight: "bold", color: color.primary }}>
             Property Id #{item.property_id || "N/A"}
           </Text>
+          <Text style={{ fontWeight: "bold", color: color.primary }}>
+            Common Id #{item.common_id || "N/A"}
+          </Text>
           <Text style={{ fontSize: fontSize.xs, color: color.gray }}>
             {formatDate(item.date_created)}
           </Text>
@@ -286,6 +289,10 @@ const PendingDataScreen = () => {
       <View style={innerStyles.row}>
         <Text style={innerStyles.label}>Job ID:</Text>
         <Text style={innerStyles.value}>{item.job_id ?? "N/A"}</Text>
+      </View>
+      <View style={innerStyles.row}>
+        <Text style={innerStyles.label}>Common ID:</Text>
+        <Text style={innerStyles.value}>{item.common_id ?? "N/A"}</Text>
       </View>
       <View style={innerStyles.row}>
         <Text style={innerStyles.label}>Property ID:</Text>

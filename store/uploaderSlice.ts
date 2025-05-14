@@ -22,6 +22,7 @@ interface UploaderState {
   progress: { [uri: string]: string };
   successCount: number;
   failedCount: number;
+  common_id: string; // Added common_id field
 }
 
 const initialState: UploaderState = {
@@ -32,6 +33,7 @@ const initialState: UploaderState = {
   progress: {},
   successCount: 0,
   failedCount: 0,
+  common_id: "", // Initialize common_id with empty string
 };
 
 // Async thunk to upload files (or store offline)
@@ -42,14 +44,16 @@ export const uploadFiles = createAsyncThunk(
       mainCategoryId,
       subCategoryId,
       propertyId,
-      jobId,
+      job_id,
       userName,
+      common_id, // Added common_id parameter
     }: {
       mainCategoryId: string;
       subCategoryId: string;
       propertyId: string;
-      jobId: string;
+      job_id: string;
       userName: string;
+      common_id: string; // Added common_id type
     },
     { getState, dispatch }
   ) => {
@@ -78,19 +82,21 @@ export const uploadFiles = createAsyncThunk(
         // Create a segment without the binary content - we'll save the file separately
         const segment: Omit<UploadSegment, "id" | "content_path"> & {
           uri: string;
+          common_id: string;
         } = {
           total_segments: totalFiles,
           segment_number: index + 1,
           main_category: parseInt(mainCategoryId, 10),
           category_level_1: parseInt(subCategoryId, 10),
           property_id: parseInt(propertyId, 10),
-          job_id: parseInt(jobId, 10),
+          job_id: parseInt(job_id, 10),
           file_name: fileName,
           file_header: null,
           file_size: file.size || null,
           file_type: file.mimeType || null,
           file_index: index,
-          uri: file.uri, // Store the original URI
+          uri: file.uri,
+          common_id: common_id,
         };
 
         try {
@@ -127,10 +133,11 @@ export const uploadFiles = createAsyncThunk(
       formData.append("main_category", mainCategoryId);
       formData.append("category_level_1", subCategoryId);
       formData.append("property_id", propertyId);
-      formData.append("job_id", jobId);
+      formData.append("job_id", job_id);
       formData.append("file_name", fileName);
       formData.append("file_type", fileType);
       formData.append("user_name", userName);
+      formData.append("common_id", common_id); // Added common_id
       formData.append("content", {
         uri: file.uri,
         type: fileType,
@@ -248,6 +255,7 @@ export const syncOfflineUploads = createAsyncThunk(
         formData.append("file_name", upload.file_name || "");
         formData.append("file_type", upload.file_type || "");
         formData.append("user_name", userName);
+        formData.append("common_id", upload.common_id || "");
 
         // Check if the content_path file exists
         const fileInfo = await FileSystem.getInfoAsync(upload.content_path);
@@ -367,6 +375,10 @@ const uploaderSlice = createSlice({
     incrementFailedCount: (state) => {
       state.failedCount += 1;
     },
+    setCommonId: (state, action) => {
+      // Added reducer for setting common_id
+      state.common_id = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -400,6 +412,7 @@ export const {
   updateProgress,
   incrementSuccessCount,
   incrementFailedCount,
+  setCommonId, // Export the new action
 } = uploaderSlice.actions;
 
 export default uploaderSlice.reducer;

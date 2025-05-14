@@ -12,6 +12,7 @@ const initializeDatabase = async () => {
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY NOT NULL,
       job_num TEXT,
+      common_id TEXT,
       date_created TEXT,
       property_id TEXT,
       tenant_id TEXT,
@@ -49,6 +50,7 @@ const dbPromise = initializeDatabase();
 const COLUMNS = [
   "id",
   "job_num",
+  "common_id",
   "date_created",
   "property_id",
   "tenant_id",

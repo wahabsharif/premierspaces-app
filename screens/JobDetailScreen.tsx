@@ -190,7 +190,12 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.navigate("UploadScreen", { jobId })}
+            onPress={() =>
+              navigation.navigate("UploadScreen", {
+                job_id: jobDetail.job_id ?? "",
+                common_id: jobDetail.common_id,
+              })
+            }
           >
             <Text style={styles.buttonText}>Upload Files</Text>
           </TouchableOpacity>
