@@ -1,3 +1,4 @@
+//hooks/index.ts
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useRef } from "react";
 

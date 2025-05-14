@@ -1,6 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -17,6 +16,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
+import { useReloadOnFocus } from "../hooks";
 import { RootState } from "../store";
 import { fetchContractors } from "../store/contractorSlice";
 import { fetchCosts, selectCostsForJobWithNames } from "../store/costsSlice";
@@ -77,23 +77,10 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     dispatch(fetchJobs({ userId }) as any);
   }, [userId, dispatch]);
 
-  // On screen focus, reload jobs + costs
-  useFocusEffect(
-    useCallback(() => {
-      if (!userId) return;
-      setIsLoading(true);
-      Promise.all([
-        dispatch(fetchJobs({ userId }) as any),
-        dispatch(fetchContractors(userId) as any),
-        dispatch(fetchCosts({ userId, jobId }) as any),
-      ]).finally(() => setIsLoading(false));
-    }, [userId, jobId, dispatch])
-  );
-
-  // Pull-to-refresh
-  const onRefresh = useCallback(async () => {
+  // Function to load data
+  const loadData = useCallback(async () => {
     if (!userId) return;
-    setRefreshing(true);
+    setIsLoading(true);
     try {
       await Promise.all([
         dispatch(fetchJobs({ userId }) as any),
@@ -101,11 +88,27 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         dispatch(fetchCosts({ userId, jobId }) as any),
       ]);
     } catch (err) {
-      console.error("Error reloading:", err);
+      console.error("Error loading data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, jobId, dispatch]);
+
+  // Use our custom hook to reload data when screen comes into focus
+  useReloadOnFocus(loadData, [userId, jobId]);
+
+  // Pull-to-refresh
+  const onRefresh = useCallback(async () => {
+    if (!userId) return;
+    setRefreshing(true);
+    try {
+      await loadData();
+    } catch (err) {
+      console.error("Error refreshing:", err);
     } finally {
       setRefreshing(false);
     }
-  }, [userId, jobId, dispatch]);
+  }, [userId, loadData]);
 
   // Tasks array
   const tasks = useMemo(() => {
