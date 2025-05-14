@@ -24,6 +24,7 @@ import {
   resetCostsForJob,
   selectCostsForJob,
 } from "../store/costsSlice";
+import { selectJobsList } from "../store/jobSlice";
 
 interface CostRow {
   contractorId: string;
@@ -43,10 +44,11 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const jobs = useSelector((s: RootState) => selectCostsForJob(s, jobId));
+  // Get the job details from the jobs slice instead of costs slice
+  const { items: jobItems } = useSelector(selectJobsList);
   const jobDetail = useMemo(
-    () => jobs.find((j) => j.id === jobId),
-    [jobs, jobId]
+    () => jobItems.find((j) => j.id === jobId),
+    [jobItems, jobId]
   );
 
   const [materialCost, setMaterialCost] = useState("0");

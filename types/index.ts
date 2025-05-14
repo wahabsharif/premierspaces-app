@@ -6,7 +6,7 @@ export type RootStackParamList = {
   CategoryScreen: { paramKey: string; fromOfflineMode?: boolean };
   SearchPropertyScreen: undefined;
   UploadScreen: { jobId: string };
-  AddCostsScreen: { jobId: string };
+  AddCostsScreen: { jobId: string; materialCost: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;
@@ -18,7 +18,7 @@ export type RootStackParamList = {
   };
   JobsScreen: { refresh?: boolean } | undefined;
   PendingDataScreen: undefined;
-  JobDetailScreen: { id: string; refresh?: boolean };
+  JobDetailScreen: { id: string; refresh?: boolean; materialCost: string };
 };
 
 export interface PropertyData {

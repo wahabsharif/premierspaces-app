@@ -229,7 +229,12 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 width: 120,
                 marginVertical: 8,
               }}
-              onPress={() => navigation.navigate("AddCostsScreen", { jobId })}
+              onPress={() =>
+                navigation.navigate("AddCostsScreen", {
+                  jobId,
+                  materialCost: jobDetail?.material_cost,
+                })
+              }
             >
               <Text style={styles.buttonText}>Add Cost</Text>
             </TouchableOpacity>
