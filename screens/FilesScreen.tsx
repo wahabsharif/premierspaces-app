@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -51,6 +52,14 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
     address: string;
     company: string;
   } | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsConnected(state.isConnected ?? false);
+    });
+    return unsubscribe;
+  }, []);
 
   // Fetch property from AsyncStorage
   useEffect(() => {
@@ -112,19 +121,36 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
 
     return (
       <TouchableOpacity
-        style={{
-          width: "100%",
-          marginBottom: 8,
-          borderBottomColor: color.secondary,
-          borderBottomWidth: 1,
-          paddingVertical: 15,
-        }}
+        disabled={!isConnected}
+        activeOpacity={0.7}
+        style={[
+          {
+            width: "100%",
+            marginBottom: 8,
+            borderBottomColor: color.secondary,
+            borderBottomWidth: 1,
+            paddingVertical: 15,
+            opacity: isConnected ? 1 : 0.5,
+          },
+        ]}
         onPress={() => navigateToFileList(item)}
       >
         <View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Ionicons name="folder-open" size={22} color={color.darkYellow} />
-            <Text style={[styles.smallText, { fontWeight: "bold" }]}>
+            <Ionicons
+              name="folder-open"
+              size={22}
+              color={isConnected ? color.darkYellow : color.gray}
+            />
+            <Text
+              style={[
+                styles.smallText,
+                {
+                  fontWeight: "bold",
+                  color: isConnected ? color.black : color.gray,
+                },
+              ]}
+            >
               {item.files[0].job_num}
             </Text>
 
@@ -170,7 +196,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
                   <Ionicons
                     name={typeCount.icon as any}
                     size={22}
-                    color={color.primary}
+                    color={isConnected ? color.primary : color.gray}
                   />
                   <Text
                     style={{

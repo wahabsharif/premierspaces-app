@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 
+import NetInfo from "@react-native-community/netinfo";
 import { Header } from "../components";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
@@ -35,6 +36,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
   // Redux selectors
   const { items: jobItems } = useSelector(selectJobsList);
@@ -69,6 +71,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     loadLocalData();
   }, [loadLocalData]);
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsConnected(state.isConnected ?? true);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // Whenever userId becomes available, fetch contractors & jobs
   useEffect(() => {
@@ -228,13 +239,16 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 ...styles.primaryButton,
                 width: 120,
                 marginVertical: 8,
+                opacity: isConnected ? 1 : 0.5,
               }}
               onPress={() =>
+                isConnected &&
                 navigation.navigate("AddCostsScreen", {
                   jobId,
                   materialCost: jobDetail?.material_cost,
                 })
               }
+              disabled={!isConnected}
             >
               <Text style={styles.buttonText}>Add Cost</Text>
             </TouchableOpacity>

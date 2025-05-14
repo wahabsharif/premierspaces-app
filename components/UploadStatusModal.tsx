@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal, StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native"; // ← import this
 import { color, fontSize } from "../Constants/theme";
 import styles from "../Constants/styles";
 
@@ -19,14 +20,22 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
   failedCount,
   totalCount,
 }) => {
+  const navigation = useNavigation(); // ← hook for navigation
   const allSuccess = failedCount === 0;
+
+  const handleOkay = () => {
+    onClose(); // hide the modal
+    navigation.goBack(); // go back to previous screen
+    // — OR —
+    // navigation.navigate('YourListScreen', { refresh: true });
+  };
 
   return (
     <Modal
       visible={visible}
-      transparent={true}
+      transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleOkay}
     >
       <View style={styles.modalContainer}>
         <View style={styles.modalView}>
@@ -81,7 +90,7 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
               : `${successCount} of ${totalCount} files were uploaded successfully.`}
           </Text>
 
-          <TouchableOpacity style={styles.primaryButton} onPress={onClose}>
+          <TouchableOpacity style={styles.primaryButton} onPress={handleOkay}>
             <Text style={styles.buttonText}>Okay</Text>
           </TouchableOpacity>
         </View>
