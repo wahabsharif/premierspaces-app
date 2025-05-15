@@ -2,7 +2,7 @@
   "expo": {
     "name": "Premier Spaces",
     "slug": "premier-spaces",
-    "version": "1.2.8",
+    "version": "2.2.8",
     "orientation": "portrait",
     "icon": "./assets/touch-icon.png",
     "userInterfaceStyle": "light",
@@ -18,6 +18,13 @@
       "hidden": false
     },
     "plugins": [
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
+      ],
       [
         "expo-image-picker",
         {
