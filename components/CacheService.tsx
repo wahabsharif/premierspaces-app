@@ -448,26 +448,36 @@ const CacheService: React.FC<CacheServiceProps> = ({
     const key = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
     if (fetchInProgress.current.costs) return;
     fetchInProgress.current.costs = true;
+
     try {
-      const cacheEntry = await getCache(key);
-      const now = Date.now();
-      if (
-        cacheEntry?.payload &&
-        now - cacheEntry.updated_at < CACHE_CONFIG.FRESHNESS_DURATION.COSTS
-      ) {
-        lastFetchTimes.current.costs = cacheEntry.updated_at;
+      const online = await isOnline();
+      if (online) {
+        const data = await fetchWithSessionCheck(
+          `${BASE_API_URL}/costs.php?userid=${userId}`
+        );
+
+        if (!data) return;
+
+        let costs: any[] = Array.isArray(data.payload)
+          ? data.payload
+          : Array.isArray(data.payload.payload)
+          ? data.payload.payload
+          : [data.payload];
+
+        // Store costs in cache with no expiration (expiresIn: 0)
+        await setCache(key, costs, { expiresIn: 0 });
+        lastFetchTimes.current.costs = Date.now();
         return;
       }
-      const data = await fetchWithSessionCheck(
-        `${BASE_API_URL}/costs.php?userid=${userId}`
-      );
-      if (!data) return;
-      let costs: any[] = Array.isArray(data.payload)
-        ? data.payload
-        : [data.payload];
-      await setCache(key, costs);
-      lastFetchTimes.current.costs = now;
+
+      // If offline, we don't need to do anything - the existing cache will be used
+      // Just update the last fetch time to avoid repeated attempts
+      const cacheEntry = await getCache(key);
+      if (cacheEntry?.payload) {
+        lastFetchTimes.current.costs = Date.now();
+      }
     } catch (error) {
+      console.error("[prefetchActiveJobCosts] error:", error);
     } finally {
       fetchInProgress.current.costs = false;
     }

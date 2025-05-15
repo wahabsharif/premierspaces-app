@@ -159,6 +159,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
 
     try {
       setIsSubmitting(true);
+      // Reset costs for this job to ensure we get fresh data
       dispatch(resetCostsForJob(jobId));
 
       const validRows = costRows.filter(
@@ -170,7 +171,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
           createCost({
             userId: userId!,
             jobId,
-            common_id, // Use common_id from route params directly
+            common_id,
             amount: row.amount,
             materialCost: materialChanged ? materialCost : undefined,
             contractorId: row.contractorId,
@@ -184,7 +185,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
             createCost({
               userId: userId!,
               jobId,
-              common_id, // Use common_id from route params directly
+              common_id,
               amount: "0",
               materialCost,
             })
@@ -219,6 +220,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         }
       } else {
         Toast.success("Costs and material cost updated successfully!");
+        dispatch(resetCostsForJob(jobId));
         navigation.navigate("JobDetailScreen", {
           id: jobId,
           refresh: Date.now(),

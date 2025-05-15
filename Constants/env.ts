@@ -1,6 +1,6 @@
 // export const BASE_API_URL = "http://easyhomz.co.uk/mapp";
 
-export const BASE_API_URL = "http://192.168.18.133:8000/api/mapp";
+export const BASE_API_URL = "http://192.168.1.12:8000/api/mapp";
 
 export const JOB_TYPES_CACHE_EXPIRY = 3600000; // 1 hour in milliseconds
 
@@ -27,7 +27,7 @@ export const CACHE_CONFIG = {
     JOBS: 5 * 60 * 1000, // 5 minutes
     CATEGORIES: 30 * 60 * 1000, // 30 minutes
     FILES: 10 * 60 * 1000, // 10 minutes
-    COSTS: 10 * 60 * 1000, // 10 minutes
+    COSTS: Number.MAX_SAFE_INTEGER, // Never expire based on time - we'll control refresh explicitly
     CONTRACTORS: 24 * 60 * 60 * 1000, // 24 hours
   },
   // Initial delay before prefetching data
