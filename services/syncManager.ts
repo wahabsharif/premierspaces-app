@@ -143,6 +143,7 @@ export class SyncManager {
           const costData = {
             userid: userId,
             job_id: cost.job_id,
+            common_id: cost.common_id,
             contractor_id: cost.contractor_id,
             amount: cost.amount,
             material_cost: cost.material_cost,
@@ -193,13 +194,13 @@ export class SyncManager {
             formData.append("file_type", upload.file_type);
           }
           formData.append("user_name", userData?.payload?.username || "");
+          formData.append("common_id", upload.common_id || "");
 
           formData.append("content", {
             uri: contentUri,
             type: upload.file_type || "application/octet-stream",
             name: upload.file_name,
           } as any);
-
           const resp = await axios.post(
             `${BASE_API_URL}/media-uploader.php`,
             formData,

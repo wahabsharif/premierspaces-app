@@ -182,7 +182,6 @@ export const createJob = createAsyncThunk<
     // Generate common_id for the job
     const common_id = generateCommonId();
     await AsyncStorage.setItem(`${common_id}`, JSON.stringify(jobData));
-    console.log("Stored job with common_id:", common_id);
     const jobWithCommonId = { ...jobData, common_id };
     const netInfo = await NetInfo.fetch();
     if (netInfo.isConnected) {

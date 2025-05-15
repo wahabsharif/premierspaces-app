@@ -74,7 +74,6 @@ export const uploadFiles = createAsyncThunk(
 
     // Offline mode: store segments locally
     if (!isConnected) {
-      console.log("Saving files in offline mode");
       for (const [index, file] of files.entries()) {
         const fileName =
           file.name || file.uri.split("/").pop() || `file_${index}`;
@@ -89,7 +88,7 @@ export const uploadFiles = createAsyncThunk(
           main_category: parseInt(mainCategoryId, 10),
           category_level_1: parseInt(subCategoryId, 10),
           property_id: parseInt(propertyId, 10),
-          job_id: parseInt(job_id, 10),
+          job_id: null,
           file_name: fileName,
           file_header: null,
           file_size: file.size || null,

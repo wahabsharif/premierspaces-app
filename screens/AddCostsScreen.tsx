@@ -32,12 +32,14 @@ interface CostRow {
 }
 
 interface Props {
-  route: { params: { jobId: string } };
+  route: {
+    params: { jobId: string; common_id: string; materialCost?: string };
+  };
   navigation: any;
 }
 
 const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { jobId } = route.params;
+  const { jobId, common_id } = route.params;
   const dispatch = useDispatch<AppDispatch>();
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -65,7 +67,11 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
 
       setUserId(id);
 
-      if (jobDetail?.material_cost !== undefined) {
+      if (route.params.materialCost !== undefined) {
+        const mc = String(route.params.materialCost || "0");
+        setMaterialCost(mc);
+        setInitialMaterialCost(mc);
+      } else if (jobDetail?.material_cost !== undefined) {
         const mc = String(jobDetail.material_cost || "0");
         setMaterialCost(mc);
         setInitialMaterialCost(mc);
@@ -73,7 +79,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
 
       setLoadingUser(false);
     })();
-  }, [jobDetail]);
+  }, [jobDetail, route.params.materialCost]);
 
   const contractors = useSelector((s: RootState) => s.contractors.data);
   const loadingContractors = useSelector(
@@ -87,9 +93,9 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     if (userId) {
       dispatch(fetchContractors(userId));
-      dispatch(fetchCosts({ userId, jobId }));
+      dispatch(fetchCosts({ userId, jobId, common_id }));
     }
-  }, [dispatch, userId, jobId]);
+  }, [dispatch, userId, jobId, common_id]);
 
   const addRow = () => {
     const idx = costRows.findIndex(
@@ -164,6 +170,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
           createCost({
             userId: userId!,
             jobId,
+            common_id, // Use common_id from route params directly
             amount: row.amount,
             materialCost: materialChanged ? materialCost : undefined,
             contractorId: row.contractorId,
@@ -177,6 +184,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
             createCost({
               userId: userId!,
               jobId,
+              common_id, // Use common_id from route params directly
               amount: "0",
               materialCost,
             })

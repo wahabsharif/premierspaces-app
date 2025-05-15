@@ -43,8 +43,6 @@ const dbPromise = initializeDatabase();
 let dbReady = false;
 dbPromise.then(() => {
   dbReady = true;
-  console.log("[cacheService] Database initialized successfully");
-  // Start cleanup timer
   startCleanupTimer();
 });
 
@@ -402,9 +400,6 @@ export async function cleanExpiredCache(): Promise<number> {
 
     const deletedCount = res.changes;
     if (deletedCount > 0) {
-      console.log(
-        `[cacheService] Cleaned up ${deletedCount} expired cache entries`
-      );
     }
     return deletedCount;
   } catch (err) {

@@ -246,6 +246,10 @@ const PendingDataScreen = () => {
         <Text style={innerStyles.value}>{item.job_id}</Text>
       </View>
       <View style={innerStyles.row}>
+        <Text style={innerStyles.label}>Common ID:</Text>
+        <Text style={innerStyles.value}>{item.common_id}</Text>
+      </View>
+      <View style={innerStyles.row}>
         <Text style={innerStyles.label}>Contractor ID:</Text>
         <Text style={innerStyles.value}>{item.contractor_id ?? "N/A"}</Text>
       </View>
