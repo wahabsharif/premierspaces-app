@@ -1,10 +1,10 @@
 // screens/CategoryScreen.tsx
 
 import { Ionicons } from "@expo/vector-icons";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useCallback, useEffect } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   StyleSheet,
@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
+import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { AppDispatch, RootState } from "../store";
@@ -25,7 +26,6 @@ import {
   selectCategoryLoading,
   SubCategory,
 } from "../store/categorySlice";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 const STORAGE_KEYS = {
   PROPERTY: "selectedProperty",
@@ -119,13 +119,89 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     [expandedId, toggleExpand, renderSubCategory]
   );
 
-  // UI states
-  if (loading) {
+  // Render skeleton loading UI
+  const renderSkeletonUI = () => {
     return (
-      <View style={[styles.screenContainer]}>
-        <ActivityIndicator size="large" color={color.primary} />
+      <View style={styles.screenContainer}>
+        <Header />
+        <View style={styles.container}>
+          <View style={styles.headingContainer}>
+            <SkeletonLoader.Line
+              width="80%"
+              height={24}
+              style={skeletonStyles.headingSkeleton}
+            />
+          </View>
+
+          {/* Property banner skeleton */}
+          <View style={skeletonStyles.propertyBanner}>
+            <SkeletonLoader.Line
+              width="40%"
+              height={16}
+              style={skeletonStyles.marginBottom}
+            />
+            <SkeletonLoader.Line width="70%" height={20} />
+            <SkeletonLoader.Line
+              width="50%"
+              height={14}
+              style={skeletonStyles.marginTop}
+            />
+          </View>
+
+          {/* Button skeletons */}
+          <SkeletonLoader.Line
+            width="100%"
+            height={48}
+            style={skeletonStyles.buttonSkeleton}
+          />
+          <SkeletonLoader.Line
+            width="100%"
+            height={48}
+            style={skeletonStyles.buttonSkeleton}
+          />
+
+          {/* Category skeletons */}
+          <View style={skeletonStyles.categoryList}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <View key={`category-skeleton-${index}`}>
+                <SkeletonLoader.Row
+                  labelWidth="70%"
+                  contentWidth="10%"
+                  height={20}
+                  style={skeletonStyles.categorySkeleton}
+                />
+                {index === 0 && (
+                  <View style={skeletonStyles.subCategoryList}>
+                    {Array.from({ length: 3 }).map((_, subIndex) => (
+                      <SkeletonLoader.Row
+                        key={`subcategory-skeleton-${subIndex}`}
+                        labelWidth="60%"
+                        contentWidth="10%"
+                        height={16}
+                        style={skeletonStyles.subCategorySkeleton}
+                      />
+                    ))}
+                  </View>
+                )}
+                <View style={skeletonStyles.separator} />
+              </View>
+            ))}
+          </View>
+
+          {/* Report problem button skeleton */}
+          <SkeletonLoader.Line
+            width="100%"
+            height={48}
+            style={skeletonStyles.buttonSkeleton}
+          />
+        </View>
       </View>
     );
+  };
+
+  // UI states
+  if (loading) {
+    return renderSkeletonUI();
   }
 
   if (error && categories.length === 0) {
@@ -245,6 +321,50 @@ const innerStyles = StyleSheet.create({
   },
   subCategoryText: { fontSize: fontSize.medium, color: color.primary },
   subList: { paddingLeft: 20 },
+});
+
+// Skeleton loader styles
+const skeletonStyles = StyleSheet.create({
+  headingSkeleton: {
+    marginVertical: 12,
+  },
+  propertyBanner: {
+    width: "100%",
+    padding: 12,
+    backgroundColor: "#f8f8f8",
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  marginBottom: {
+    marginBottom: 8,
+  },
+  marginTop: {
+    marginTop: 6,
+  },
+  buttonSkeleton: {
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  categoryList: {
+    width: "100%",
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  categorySkeleton: {
+    padding: 10,
+  },
+  subCategoryList: {
+    paddingLeft: 20,
+  },
+  subCategorySkeleton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: color.secondary,
+    marginVertical: 4,
+  },
 });
 
 export default CategoryScreen;

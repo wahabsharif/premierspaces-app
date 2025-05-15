@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Header } from "../components";
+import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { formatDate } from "../helper";
@@ -94,6 +95,47 @@ const JobItem = memo(
   }
 );
 
+const JobItemSkeleton = memo(() => {
+  return (
+    <View style={innerStyles.jobContainer}>
+      <View style={innerStyles.jobDetails}>
+        <SkeletonLoader.Line
+          width="50%"
+          height={16}
+          style={{ marginBottom: 5 }}
+        />
+        <SkeletonLoader.Line
+          width="70%"
+          height={12}
+          style={{ marginBottom: 5 }}
+        />
+        <View style={{ height: 25, marginBottom: 5 }}>
+          <SkeletonLoader.Line width="30%" height={20} />
+        </View>
+        <SkeletonLoader.Line width="40%" height={12} />
+      </View>
+      <View style={innerStyles.taskListContainer}>
+        {[1, 2, 3].map((i) => (
+          <SkeletonLoader.Line
+            key={i}
+            width="90%"
+            height={12}
+            style={{ marginBottom: 8 }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+});
+
+const PropertyBannerSkeleton = memo(() => (
+  <View style={styles.screenBanner}>
+    <SkeletonLoader.Line width="50%" height={14} style={{ marginBottom: 8 }} />
+    <SkeletonLoader.Line width="80%" height={16} style={{ marginBottom: 4 }} />
+    <SkeletonLoader.Line width="60%" height={12} />
+  </View>
+));
+
 const NoJobsFound = ({ address }: { address: string }) => (
   <View style={innerStyles.noJobsContainer}>
     <Text style={innerStyles.noJobsText}>No Jobs Found for {address}</Text>
@@ -119,6 +161,8 @@ const JobsScreen = ({
   } | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showSkeletons, setShowSkeletons] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const jobTypeMap = useMemo(
     () =>
@@ -151,6 +195,7 @@ const JobsScreen = ({
       if (!mounted) return;
       prop && setPropertyData(JSON.parse(prop));
       user && setUserData(JSON.parse(user));
+      setInitialLoad(false);
     })();
     return () => {
       mounted = false;
@@ -164,6 +209,24 @@ const JobsScreen = ({
       dispatch(fetchJobTypes({ userId: uid }) as any);
     }
   }, [userData, dispatch]);
+
+  // Handle skeleton loader visibility with delay to prevent flickering
+  useEffect(() => {
+    let skeletonTimer: NodeJS.Timeout;
+
+    if (loading || initialLoad) {
+      // Show skeletons after a small delay to avoid flickering
+      skeletonTimer = setTimeout(() => {
+        setShowSkeletons(true);
+      }, 300); // 300ms delay before showing skeletons
+    } else {
+      setShowSkeletons(false);
+    }
+
+    return () => {
+      clearTimeout(skeletonTimer);
+    };
+  }, [loading, initialLoad]);
 
   // Fetch jobs on screen focus
   useFocusEffect(
@@ -189,6 +252,7 @@ const JobsScreen = ({
       setRefreshing(false);
     });
   }, [userData, propertyData, dispatch]);
+
   const handleJobPress = useCallback(
     async (item: Job) => {
       await AsyncStorage.setItem("jobData", JSON.stringify(item));
@@ -203,6 +267,9 @@ const JobsScreen = ({
 
   const handleOpenNewJob = () => navigation.navigate("OpenNewJobScreen");
 
+  // We separate initial loading from refresh loading
+  const shouldShowContent = !initialLoad && propertyData && !showSkeletons;
+
   return (
     <View style={styles.screenContainer}>
       <Header />
@@ -211,49 +278,65 @@ const JobsScreen = ({
           <Text style={styles.heading}>Jobs List</Text>
         </View>
 
-        {propertyData && (
-          <View style={styles.screenBanner}>
-            <Text style={styles.bannerLabel}>Selected Property:</Text>
-            <Text style={styles.bannerText}>{propertyData.address}</Text>
-            <Text style={styles.extraSmallText}>{propertyData.company}</Text>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handleOpenNewJob}
-        >
-          <Text style={styles.buttonText}>Open New Job</Text>
-        </TouchableOpacity>
-
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <>
-          {jobs.length ? (
-            <FlatList
-              data={jobs}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <JobItem
-                  item={item}
-                  typeName={jobTypeMap[item.job_type] ?? ""}
-                  onPress={handleJobPress}
-                />
-              )}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              style={{ width: "100%" }}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={[color.primary]}
-                />
-              }
+        {showSkeletons ? (
+          <>
+            <PropertyBannerSkeleton />
+            <SkeletonLoader.Line
+              width="100%"
+              height={48}
+              style={{
+                borderRadius: 24,
+                marginVertical: 16,
+              }}
             />
-          ) : (
-            propertyData && <NoJobsFound address={propertyData.address} />
-          )}
-        </>
+
+            {[1, 2, 3, 4].map((i) => (
+              <JobItemSkeleton key={i} />
+            ))}
+          </>
+        ) : shouldShowContent ? (
+          <>
+            <View style={styles.screenBanner}>
+              <Text style={styles.bannerLabel}>Selected Property:</Text>
+              <Text style={styles.bannerText}>{propertyData.address}</Text>
+              <Text style={styles.extraSmallText}>{propertyData.company}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleOpenNewJob}
+            >
+              <Text style={styles.buttonText}>Open New Job</Text>
+            </TouchableOpacity>
+
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
+            {jobs.length ? (
+              <FlatList
+                data={jobs}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <JobItem
+                    item={item}
+                    typeName={jobTypeMap[item.job_type] ?? ""}
+                    onPress={handleJobPress}
+                  />
+                )}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                style={{ width: "100%" }}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[color.primary]}
+                  />
+                }
+              />
+            ) : (
+              <NoJobsFound address={propertyData.address} />
+            )}
+          </>
+        ) : null}
       </View>
     </View>
   );

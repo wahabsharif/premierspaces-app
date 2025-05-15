@@ -4,17 +4,17 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Header } from "../components";
+import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
-import { color } from "../Constants/theme";
 import { useAppDispatch, useAppSelector } from "../hooks/reduxHooks";
 import {
   checkConnectivity,
@@ -144,7 +144,6 @@ const SearchPropertyScreen: React.FC = () => {
     try {
       // First check if item contains all required fields
       if (!item || !item.id || !item.address) {
-        // // console.error("Invalid property data:", item);
         return;
       }
 
@@ -187,7 +186,7 @@ const SearchPropertyScreen: React.FC = () => {
         fromOfflineMode: !isConnected,
       });
     } catch (error) {
-      // // console.error("Error saving property:", error);
+      // Error handling
     }
   };
 
@@ -200,6 +199,29 @@ const SearchPropertyScreen: React.FC = () => {
         <Text style={styles.smallText}>{item.address}</Text>
         <Text style={styles.extraSmallText}>{item.company}</Text>
       </TouchableOpacity>
+    );
+  };
+
+  // Skeleton loader for search results
+  const renderSkeletonLoader = () => {
+    return (
+      <View style={skeletonStyles.loaderContainer}>
+        <SkeletonLoader.ContentBlock
+          hasHeading={true}
+          lines={1}
+          style={skeletonStyles.searchHeading}
+        />
+        <View style={skeletonStyles.resultsContainer}>
+          {Array.from({ length: 5 }).map((_, index) => (
+            <SkeletonLoader.ListItem
+              key={`skeleton-item-${index}`}
+              hasAvatar={false}
+              lines={2}
+              style={skeletonStyles.listItem}
+            />
+          ))}
+        </View>
+      </View>
     );
   };
 
@@ -219,9 +241,10 @@ const SearchPropertyScreen: React.FC = () => {
             onChangeText={setdoor_num}
           />
         </View>
-        {loading && <ActivityIndicator color={color.primary} />}
 
-        {filteredProperties.length > 0 && (
+        {loading && renderSkeletonLoader()}
+
+        {filteredProperties.length > 0 && !loading && (
           <View style={styles.list}>
             <Text style={styles.subHeading}>Property List</Text>
             <FlatList
@@ -269,5 +292,27 @@ const SearchPropertyScreen: React.FC = () => {
     </View>
   );
 };
+
+// Additional styles for skeleton loaders
+const skeletonStyles = StyleSheet.create({
+  loaderContainer: {
+    width: "100%",
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  searchHeading: {
+    marginBottom: 12,
+  },
+  resultsContainer: {
+    width: "100%",
+    marginTop: 8,
+  },
+  listItem: {
+    marginBottom: 12,
+    borderRadius: 8,
+    backgroundColor: "#f8f8f8",
+    padding: 8,
+  },
+});
 
 export default SearchPropertyScreen;

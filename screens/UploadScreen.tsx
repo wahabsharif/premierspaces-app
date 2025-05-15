@@ -387,10 +387,14 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             <Text style={styles.extraSmallText}>{storedProperty.company}</Text>
           </View>
         )}
-        <Text style={style.subHeading}>
-          {category?.category}
-          {subCategory ? ` - ${subCategory.sub_category}` : ""}
-        </Text>
+        {(category?.category || (subCategory && subCategory.sub_category)) && (
+          <Text style={style.subHeading}>
+            {category?.category}
+            {subCategory && subCategory.sub_category
+              ? ` - ${subCategory.sub_category}`
+              : ""}
+          </Text>
+        )}
         <Text style={style.subHeading}>Choose File From</Text>
         <View
           style={{
