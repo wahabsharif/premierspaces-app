@@ -36,7 +36,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
 
   // Redux selectors
   const { items: jobItems } = useSelector(selectJobsList);
@@ -71,15 +70,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     loadLocalData();
   }, [loadLocalData]);
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsConnected(state.isConnected ?? true);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   // Whenever userId becomes available, fetch contractors & jobs
   useEffect(() => {
@@ -96,7 +86,13 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       await Promise.all([
         dispatch(fetchJobs({ userId }) as any),
         dispatch(fetchContractors(userId) as any),
-        dispatch(fetchCosts({ userId, jobId }) as any),
+        dispatch(
+          fetchCosts({
+            userId,
+            jobId,
+            common_id: jobDetail?.common_id ?? "",
+          }) as any
+        ),
       ]);
     } catch (err) {
       console.error("Error loading data:", err);
@@ -179,7 +175,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           <View style={styles.headingContainer}>
             <Text style={styles.heading}>Job Detail</Text>
           </View>
-
           {property && (
             <View style={styles.screenBanner}>
               <Text style={styles.bannerLabel}>Selected Property:</Text>
@@ -187,15 +182,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.extraSmallText}>{property.company}</Text>
             </View>
           )}
-
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() =>
+            onPress={() => {
+              const id = jobId || jobDetail?.job_id || "";
               navigation.navigate("UploadScreen", {
-                job_id: jobDetail.job_id ?? "",
+                job_id: id,
                 common_id: jobDetail.common_id,
-              })
-            }
+              });
+            }}
           >
             <Text style={styles.buttonText}>Upload Files</Text>
           </TouchableOpacity>
@@ -244,16 +239,14 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 ...styles.primaryButton,
                 width: 120,
                 marginVertical: 8,
-                opacity: isConnected ? 1 : 0.5,
               }}
-              onPress={() =>
-                isConnected &&
+              onPress={() => {
                 navigation.navigate("AddCostsScreen", {
                   jobId,
                   materialCost: jobDetail?.material_cost,
-                })
-              }
-              disabled={!isConnected}
+                  common_id: jobDetail?.common_id ?? "",
+                });
+              }}
             >
               <Text style={styles.buttonText}>Add Cost</Text>
             </TouchableOpacity>

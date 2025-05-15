@@ -6,7 +6,7 @@ export type RootStackParamList = {
   CategoryScreen: { paramKey: string; fromOfflineMode?: boolean };
   SearchPropertyScreen: undefined;
   UploadScreen: { job_id: string; common_id: string };
-  AddCostsScreen: { jobId: string; materialCost: string };
+  AddCostsScreen: { jobId: string; materialCost: string; common_id: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
   OpenNewJobScreen: undefined;
@@ -156,6 +156,7 @@ export interface GroupedFiles {
 export interface Costs {
   id?: string | number;
   job_id?: string;
+  common_id?: string | null;
   contractor_id?: string | null;
   name?: string;
   amount?: string | number;
