@@ -1,47 +1,56 @@
-//hooks/index.ts
-import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useRef } from "react";
+import { useEffect, useRef } from "react";
+import { useNavigation } from "@react-navigation/native";
 
 /**
- * Custom hook that executes a reload function whenever the screen comes into focus
- * with debounce protection and improved error handling
- *
- * @param reloadFn - Function to execute when the screen comes into focus
- * @param dependencies - Optional array of dependencies that should trigger reloading
+ * Custom hook to run a callback when screen comes into focus,
+ * with proper controls to prevent duplicate calls
  */
-export function useReloadOnFocus(
-  reloadFn: () => Promise<any>,
-  dependencies: any[] = []
-) {
-  // Use a ref to track if we're currently loading data
-  const isLoadingRef = useRef(false);
+export const useReloadOnFocus = (
+  callback: () => void | Promise<void>,
+  dependencies: any[] = [],
+  forceReload = false
+) => {
+  const navigation = useNavigation();
+  const hasRunInitialRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const lastDepsRef = useRef<any[]>(dependencies);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
+  // Check if dependencies have changed
+  const depsChanged = () => {
+    if (dependencies.length !== lastDepsRef.current.length) return true;
 
-      const loadData = async () => {
-        // Prevent multiple simultaneous calls
-        if (isLoadingRef.current) return;
+    return dependencies.some((dep, i) => dep !== lastDepsRef.current[i]);
+  };
 
-        try {
-          isLoadingRef.current = true;
+  useEffect(() => {
+    // Update the last deps reference
+    lastDepsRef.current = dependencies;
 
-          if (active) {
-            await reloadFn();
-          }
-        } catch (error) {
-          console.error("Error in useReloadOnFocus:", error);
-        } finally {
-          isLoadingRef.current = false;
-        }
-      };
+    // Initial load - only run once
+    const runCallback = async () => {
+      if (!hasRunInitialRef.current && isMountedRef.current) {
+        hasRunInitialRef.current = true;
+        await callback();
+      }
+    };
 
-      loadData();
+    runCallback();
 
-      return () => {
-        active = false;
-      };
-    }, [reloadFn, ...dependencies])
-  );
-}
+    // Setup focus listener
+    const unsubscribe = navigation.addListener("focus", async () => {
+      // Only reload on focus if:
+      // 1. forceReload is true, OR
+      // 2. dependencies have changed since last run
+      if ((forceReload || depsChanged()) && isMountedRef.current) {
+        await callback();
+        lastDepsRef.current = dependencies;
+      }
+    });
+
+    // Cleanup
+    return () => {
+      isMountedRef.current = false;
+      unsubscribe();
+    };
+  }, [navigation, callback, ...dependencies, forceReload]);
+};

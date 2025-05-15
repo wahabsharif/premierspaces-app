@@ -1,7 +1,13 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -15,16 +21,19 @@ import { Header } from "../components";
 import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
-import { useReloadOnFocus } from "../hooks";
-import { RootState } from "../store";
+import { AppDispatch, RootState } from "../store";
 import { fetchContractors } from "../store/contractorSlice";
-import { fetchCosts, selectCostsForJobWithNames } from "../store/costsSlice";
+import {
+  fetchCosts,
+  resetCostsForJob,
+  selectCostsForJobWithNames,
+} from "../store/costsSlice";
 import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
-// Skeleton components for loading state
+// Skeleton components unchanged...
 const PropertySkeleton = () => (
   <View style={styles.screenBanner}>
     <SkeletonLoader.Line width="40%" height={14} style={{ marginBottom: 8 }} />
@@ -115,8 +124,8 @@ const FileCountsSkeleton = () => (
 );
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { id: jobId } = route.params;
-  const dispatch = useDispatch();
+  const { id: jobId, refresh } = route.params;
+  const dispatch = useDispatch<AppDispatch>();
   const [userId, setUserId] = useState<string | null>(null);
   const [property, setProperty] = useState<{
     address: string;
@@ -125,6 +134,13 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showSkeletons, setShowSkeletons] = useState(false);
+  const [forceReload, setForceReload] = useState(false);
+  const [refreshTimestamp, setRefreshTimestamp] = useState(Date.now());
+
+  // Add refs to prevent repeated fetches
+  const dataFetchedRef = useRef(false);
+  const isMounted = useRef(true);
+  const initialLoadComplete = useRef(false);
 
   // Redux selectors
   const { items: jobItems } = useSelector(selectJobsList);
@@ -143,7 +159,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
     if (isLoading) {
       skeletonTimer = setTimeout(() => {
-        setShowSkeletons(true);
+        if (isMounted.current) {
+          setShowSkeletons(true);
+        }
       }, 300); // 300ms delay before showing skeletons
     } else {
       setShowSkeletons(false);
@@ -154,18 +172,40 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
   }, [isLoading]);
 
-  // Load local storage
+  // Cleanup effect when component unmounts
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  // Force a reload when refresh parameter changes
+  useEffect(() => {
+    if (refresh && userId) {
+      console.log(
+        "[JobDetailScreen] Refresh parameter changed, forcing reload"
+      );
+      // Reset the cost data for this job to force a fresh fetch
+      dispatch(resetCostsForJob(jobId));
+      setForceReload(true);
+      setRefreshTimestamp(Date.now());
+    }
+  }, [refresh, jobId, dispatch, userId]);
+
+  // Load local storage - once only
   const loadLocalData = useCallback(async () => {
     try {
       const [userJson, propJson] = await Promise.all([
         AsyncStorage.getItem("userData"),
         AsyncStorage.getItem("selectedProperty"),
       ]);
-      if (userJson) {
+
+      if (userJson && isMounted.current) {
         const user = JSON.parse(userJson);
         setUserId(user.payload?.userid ?? user.userid ?? null);
       }
-      if (propJson) {
+
+      if (propJson && isMounted.current) {
         setProperty(JSON.parse(propJson));
       }
     } catch (e) {
@@ -173,55 +213,151 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, []);
 
+  // Run once on component mount
   useEffect(() => {
     loadLocalData();
-  }, [loadLocalData]);
+  }, []);
 
-  // Whenever userId becomes available, fetch contractors & jobs
+  // Primary data loading effect - fixed to prevent multiple calls
   useEffect(() => {
-    if (!userId) return;
-    dispatch(fetchContractors(userId) as any);
-    dispatch(fetchJobs({ userId }) as any);
-  }, [userId, dispatch]);
+    // Only run if we have userId and haven't completed the initial load yet
+    if (!userId || initialLoadComplete.current || dataFetchedRef.current)
+      return;
 
-  // Function to load data
-  const loadData = useCallback(async () => {
-    if (!userId) return;
-    setIsLoading(true);
+    const loadInitialData = async () => {
+      console.log("[JobDetailScreen] Starting initial data load");
+      setIsLoading(true);
+      dataFetchedRef.current = true;
+
+      try {
+        // Step 1: Fetch jobs and contractors first
+        await Promise.all([
+          dispatch(fetchContractors(userId)),
+          dispatch(fetchJobs({ userId })),
+        ]);
+
+        // Step 2: Now that we have job data, get the job details before fetching costs
+        const currentJob = jobItems.find((j) => j.id === jobId);
+
+        // Step 3: Only fetch costs if we have the job with common_id
+        if (currentJob?.common_id && isMounted.current) {
+          console.log(
+            `[JobDetailScreen] Fetching costs with common_id: ${currentJob.common_id}`
+          );
+          await dispatch(
+            fetchCosts({
+              userId,
+              jobId,
+              common_id: currentJob.common_id,
+            })
+          );
+        } else {
+          console.log(
+            `[JobDetailScreen] Cannot fetch costs - missing job or common_id`
+          );
+        }
+      } catch (err) {
+        console.error("[JobDetailScreen] Error loading initial data:", err);
+      } finally {
+        if (isMounted.current) {
+          setForceReload(false);
+          setIsLoading(false);
+          initialLoadComplete.current = true;
+          dataFetchedRef.current = false;
+        }
+      }
+    };
+
+    loadInitialData();
+  }, [userId, jobId, dispatch]);
+
+  // Separate effect for force reload
+  useEffect(() => {
+    if (!userId || !forceReload || dataFetchedRef.current) return;
+
+    const reloadData = async () => {
+      console.log("[JobDetailScreen] Force reloading data");
+      setIsLoading(true);
+      dataFetchedRef.current = true;
+
+      try {
+        // Step 1: Fetch jobs and contractors first
+        await Promise.all([
+          dispatch(fetchContractors(userId)),
+          dispatch(fetchJobs({ userId })),
+        ]);
+
+        // Step 2: Now that we have job data, get the job details before fetching costs
+        const currentJob = jobItems.find((j) => j.id === jobId);
+
+        // Step 3: Only fetch costs if we have the job with common_id
+        if (currentJob?.common_id && isMounted.current) {
+          console.log(
+            `[JobDetailScreen] Force reloading costs with common_id: ${currentJob.common_id}`
+          );
+          await dispatch(
+            fetchCosts({
+              userId,
+              jobId,
+              common_id: currentJob.common_id,
+            })
+          );
+        }
+      } catch (err) {
+        console.error("[JobDetailScreen] Error force reloading data:", err);
+      } finally {
+        if (isMounted.current) {
+          setForceReload(false);
+          setIsLoading(false);
+          dataFetchedRef.current = false;
+        }
+      }
+    };
+
+    reloadData();
+  }, [userId, jobId, dispatch, forceReload]);
+
+  // Handle refresh - completely separate from initial load
+  const onRefresh = useCallback(async () => {
+    if (!userId || refreshing || dataFetchedRef.current) return;
+
+    console.log("[JobDetailScreen] Manual refresh requested");
+    setRefreshing(true);
+    dataFetchedRef.current = true; // Prevent other loads during refresh
+
     try {
+      // Reset costs data to force a fresh fetch
+      dispatch(resetCostsForJob(jobId));
+
+      // Fetch jobs and contractors first
       await Promise.all([
-        dispatch(fetchJobs({ userId }) as any),
-        dispatch(fetchContractors(userId) as any),
-        dispatch(
+        dispatch(fetchContractors(userId)),
+        dispatch(fetchJobs({ userId })),
+      ]);
+
+      // Then fetch costs with the latest job data
+      const currentJob = jobItems.find((j) => j.id === jobId);
+      if (currentJob?.common_id) {
+        console.log(
+          `[JobDetailScreen] Refreshing costs with common_id: ${currentJob.common_id}`
+        );
+        await dispatch(
           fetchCosts({
             userId,
             jobId,
-            common_id: jobDetail?.common_id ?? "",
-          }) as any
-        ),
-      ]);
+            common_id: currentJob.common_id,
+          })
+        );
+      }
     } catch (err) {
-      console.error("Error loading data:", err);
+      console.error("[JobDetailScreen] Error refreshing:", err);
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setRefreshing(false);
+        dataFetchedRef.current = false;
+      }
     }
-  }, [userId, jobId, jobDetail?.common_id, dispatch]);
-
-  // Use our custom hook to reload data when screen comes into focus
-  useReloadOnFocus(loadData, [userId, jobId]);
-
-  // Pull-to-refresh
-  const onRefresh = useCallback(async () => {
-    if (!userId) return;
-    setRefreshing(true);
-    try {
-      await loadData();
-    } catch (err) {
-      console.error("Error refreshing:", err);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [userId, loadData]);
+  }, [userId, jobId, dispatch, jobItems, refreshing]);
 
   // Tasks array
   const tasks = useMemo(() => {
