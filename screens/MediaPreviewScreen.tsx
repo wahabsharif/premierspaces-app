@@ -1,12 +1,8 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import {
-  AVPlaybackStatus,
-  ResizeMode,
-  Video,
-  VideoFullscreenUpdate,
-} from "expo-av";
+import { useEvent } from "expo";
 import * as ScreenOrientation from "expo-screen-orientation";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -26,10 +22,10 @@ import { Header, VideoThumbnail } from "../components";
 import {
   loadFiles,
   selectFiles,
-  selectFilesLoading,
   selectFilesError,
+  selectFilesLoading,
 } from "../store/filesSlice";
-import { RootStackParamList, FileItem } from "../types";
+import { FileItem, RootStackParamList } from "../types";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NUM_COLUMNS = 2;
@@ -52,8 +48,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FileItem | null>(null);
   const [isModalReady, setIsModalReady] = useState(false);
-  const videoRef = useRef<Video>(null);
-  const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
   const [dimensions, setDimensions] = useState({
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
@@ -69,6 +63,36 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
   const [activeTab, setActiveTab] = useState<string>(fileCategory || "image");
   const thumbnailCache = useMemo(() => new Map<string, string>(), []);
+
+  // Add state to track current video URL
+  const [videoUrl, setVideoUrl] = useState<string>("");
+
+  // Use refs to store the video URL for reference
+  const videoUrlRef = React.useRef<string | null>(null);
+
+  // Always call the hook unconditionally with the state URL
+  const videoPlayer = useVideoPlayer(videoUrl, (player) => {
+    if (videoUrl) {
+      player.play();
+    }
+  });
+
+  // Update video URL when needed
+  useEffect(() => {
+    if (selectedItem && activeTab === "video" && isModalReady && modalVisible) {
+      setVideoUrl(selectedItem.stream_url);
+      videoUrlRef.current = selectedItem.stream_url;
+    } else {
+      // Clear URL when not needed
+      setVideoUrl("");
+      videoUrlRef.current = null;
+    }
+  }, [selectedItem, activeTab, isModalReady, modalVisible]);
+
+  // Get playing state from the video player
+  const { isPlaying } = useEvent(videoPlayer, "playingChange", {
+    isPlaying: videoPlayer.playing,
+  });
 
   useEffect(() => {
     const dimensionsListener = Dimensions.addEventListener(
@@ -178,7 +202,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const openModal = async (item: FileItem) => {
     setSelectedItem(item);
     setModalVisible(true);
-    setStatus(null);
 
     // Allow screen rotation if it's a video
     if (item.file_category === getFileCategoryNumber("video")) {
@@ -187,8 +210,9 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   };
 
   const closeModal = async () => {
-    if (videoRef.current) {
-      videoRef.current.pauseAsync().catch(() => {});
+    // Stop video playback if needed
+    if (videoPlayer && videoUrl) {
+      videoPlayer.pause();
     }
 
     // Lock back to portrait when closing
@@ -227,12 +251,22 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           resizeMode="cover"
         />
       ) : activeTab === "video" ? (
-        <VideoThumbnail
-          uri={item.stream_url}
-          onPress={() => openModal(item)}
-          active
-          cache={thumbnailCache}
-        />
+        <View style={innerStyles.videoThumbnailContainer}>
+          <View style={innerStyles.videoThumbnail}>
+            <VideoThumbnail
+              uri={item.stream_url}
+              onPress={() => openModal(item)}
+              active
+              cache={thumbnailCache}
+            />
+          </View>
+          <View style={innerStyles.videoThumbnailOverlay}>
+            <Text style={innerStyles.videoIcon}>▶</Text>
+          </View>
+          <Text style={innerStyles.videoLabel} numberOfLines={1}>
+            {item.file_name || "Video"}
+          </Text>
+        </View>
       ) : (
         <View style={innerStyles.documentPlaceholder}>
           <Text style={innerStyles.documentText}>Document</Text>
@@ -256,7 +290,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         <Image
           source={{ uri: selectedItem.stream_url }}
           style={innerStyles.modalImage}
-          resizeMode={ResizeMode.CONTAIN}
+          resizeMode="contain"
         />
       );
     }
@@ -279,40 +313,16 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
               : {},
           ]}
         >
-          <Video
-            ref={videoRef}
-            source={{ uri: selectedItem.stream_url }}
-            style={videoStyles}
-            useNativeControls={
-              !(status && "isPlaying" in status && status.isPlaying)
-            } // show controls only when not playing
-            resizeMode={ResizeMode.CONTAIN}
-            isLooping={false}
-            onPlaybackStatusUpdate={(status) => {
-              setStatus(status);
-
-              // Auto-rewind when ended
-              if (
-                status &&
-                "didJustFinish" in status &&
-                status.didJustFinish &&
-                !status.isLooping
-              ) {
-                videoRef.current?.setPositionAsync(0);
-              }
-            }}
-            onFullscreenUpdate={({ fullscreenUpdate }) => {
-              if (
-                fullscreenUpdate === VideoFullscreenUpdate.PLAYER_WILL_PRESENT
-              ) {
-                setIsFullscreen(true);
-              } else if (
-                fullscreenUpdate === VideoFullscreenUpdate.PLAYER_WILL_DISMISS
-              ) {
-                setIsFullscreen(false);
-              }
-            }}
-          />
+          {videoUrl && (
+            <>
+              <VideoView
+                style={videoStyles}
+                player={videoPlayer}
+                allowsFullscreen
+                allowsPictureInPicture
+              />
+            </>
+          )}
         </View>
       );
     }
@@ -731,6 +741,47 @@ const innerStyles = StyleSheet.create({
     color: "#ccc",
     fontSize: 12,
     marginTop: 4,
+  },
+  videoThumbnailContainer: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#111",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  videoThumbnail: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#222",
+  },
+  videoThumbnailOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  videoIcon: {
+    color: "#fff",
+    fontSize: 40,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  videoLabel: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    color: "#fff",
+    padding: 4,
+    fontSize: 12,
+    textAlign: "center",
   },
 });
 

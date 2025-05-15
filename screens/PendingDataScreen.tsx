@@ -1,10 +1,12 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { Video } from "expo-av";
+import { useEvent } from "expo";
 import * as FileSystem from "expo-file-system";
-import React, { useEffect, useRef, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Button,
   DeviceEventEmitter,
   Dimensions,
   FlatList,
@@ -51,7 +53,34 @@ const PendingDataScreen = () => {
     name: string | null;
   } | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
-  const videoRef = useRef<Video>(null);
+
+  // Add state for video URL
+  const [videoUrl, setVideoUrl] = useState<string>("");
+
+  // Always call useVideoPlayer without conditions
+  const videoPlayer = useVideoPlayer(videoUrl, (player) => {
+    if (videoUrl) {
+      player.play();
+    }
+  });
+
+  // Get playing state from the video player
+  const { isPlaying } = useEvent(videoPlayer, "playingChange", {
+    isPlaying: videoPlayer.playing,
+  });
+
+  // Update video URL when media selection changes
+  useEffect(() => {
+    if (
+      selectedMedia &&
+      selectedMedia.type?.startsWith("video/") &&
+      previewVisible
+    ) {
+      setVideoUrl(selectedMedia.uri || "");
+    } else {
+      setVideoUrl("");
+    }
+  }, [selectedMedia, previewVisible]);
 
   // Load data on initial render and when counts change
   useEffect(() => {
@@ -333,7 +362,7 @@ const PendingDataScreen = () => {
     </View>
   );
 
-  // Media Preview Modal
+  // Media Preview Modal - Modified to use state instead of conditional hooks
   const renderMediaPreview = () => {
     if (!selectedMedia) return null;
 
@@ -376,14 +405,15 @@ const PendingDataScreen = () => {
                 />
               )}
 
-              {isVideo && (
-                <Video
-                  ref={videoRef}
-                  source={{ uri: selectedMedia.uri ?? "" }}
-                  style={innerStyles.mediaPreview}
-                  useNativeControls
-                  isLooping={false}
-                />
+              {isVideo && videoUrl && (
+                <View style={{ width: "100%", height: "100%" }}>
+                  <VideoView
+                    style={innerStyles.mediaPreview}
+                    player={videoPlayer}
+                    allowsFullscreen
+                    allowsPictureInPicture
+                  />
+                </View>
               )}
 
               {!isImage && !isVideo && (

@@ -2,9 +2,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   FlatList,
+  ListRenderItemInfo,
   Modal,
   StyleSheet,
   Text,
@@ -26,13 +33,23 @@ import {
 } from "../store/propertySlice";
 import { RootStackParamList } from "../types";
 
+// Define property type for better type safety
+interface Property {
+  id: string;
+  address: string;
+  company: string;
+  [key: string]: any;
+}
+
 type SearchPropertyScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
   "SearchPropertyScreen"
 >;
 
+const DEBOUNCE_DELAY = 300; // Reduced from 500ms for better responsiveness
+
 const SearchPropertyScreen: React.FC = () => {
-  const [door_num, setdoor_num] = useState("");
+  const [doorNum, setDoorNum] = useState("");
   const [showSessionExpired, setShowSessionExpired] = useState(false);
   const [showNoResultsError, setShowNoResultsError] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -41,15 +58,42 @@ const SearchPropertyScreen: React.FC = () => {
 
   // Redux state
   const dispatch = useAppDispatch();
-  const { filteredProperties, loading, error, isConnected, lastUpdated } =
-    useAppSelector((state) => state.property);
+  const { filteredProperties, loading, isConnected } = useAppSelector(
+    (state) => state.property
+  );
+
+  // Initialize app data with useCallback for better performance
+  const initializeAppData = useCallback(async () => {
+    try {
+      const connectivityResult = await dispatch(checkConnectivity()).unwrap();
+
+      if (connectivityResult) {
+        dispatch(fetchAllProperties())
+          .unwrap()
+          .catch((error) => {
+            if (error === "Session expired") {
+              setShowSessionExpired(true);
+            }
+          });
+      } else {
+        dispatch(loadCachedProperties());
+      }
+    } catch (error) {
+      console.error("Failed to initialize app data:", error);
+    }
+  }, [dispatch]);
 
   // Check network connectivity and load appropriate data
   useEffect(() => {
+    // Initial data loading
+    initializeAppData();
+
+    // Setup network listener
     const unsubscribe = NetInfo.addEventListener((state) => {
       const isConnected = state.isConnected ?? false;
       dispatch(setConnectionStatus(isConnected));
 
+      // Only fetch new data if connection was restored (previously disconnected)
       if (isConnected) {
         dispatch(fetchAllProperties())
           .unwrap()
@@ -58,140 +102,111 @@ const SearchPropertyScreen: React.FC = () => {
               setShowSessionExpired(true);
             }
           });
-      } else {
-        // Load cached data when offline
-        dispatch(loadCachedProperties());
-      }
-    });
-
-    // Initial connectivity check and data loading
-    dispatch(checkConnectivity()).then((result) => {
-      if (result.payload) {
-        dispatch(fetchAllProperties())
-          .unwrap()
-          .catch((error) => {
-            if (error === "Session expired") {
-              setShowSessionExpired(true);
-            }
-          });
-      } else {
-        dispatch(loadCachedProperties());
       }
     });
 
     return () => {
       unsubscribe();
+      // Clear any lingering timeouts
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
     };
-  }, [dispatch]);
+  }, [dispatch, initializeAppData]);
 
-  // Handle search input with debounce
-  useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+  // Handle search input with debounce - memoized function
+  const handleSearch = useCallback(
+    (text: string) => {
+      setDoorNum(text);
 
-    // Also clear the error timeout when input changes
-    if (errorTimeoutRef.current) {
-      clearTimeout(errorTimeoutRef.current);
-      setShowNoResultsError(false);
-    }
-
-    if (door_num.trim() === "") {
-      dispatch(clearFilter());
-      setShowNoResultsError(false);
-      return;
-    }
-
-    debounceRef.current = setTimeout(() => {
-      dispatch(filterProperties(door_num));
-    }, 500);
-
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
+      // Clear any existing timeouts
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       if (errorTimeoutRef.current) {
         clearTimeout(errorTimeoutRef.current);
+        setShowNoResultsError(false);
       }
-    };
-  }, [door_num, dispatch]);
 
-  // Effect for delayed error message
-  useEffect(() => {
-    // Clear any existing timeout when loading state or results change
-    if (errorTimeoutRef.current) {
-      clearTimeout(errorTimeoutRef.current);
-      setShowNoResultsError(false);
-    }
-
-    // Only set timeout if we have a non-empty search, no results, and not loading
-    if (door_num.trim() !== "" && filteredProperties.length === 0 && !loading) {
-      errorTimeoutRef.current = setTimeout(() => {
-        setShowNoResultsError(true);
-      }, 500);
-    } else {
-      setShowNoResultsError(false);
-    }
-
-    return () => {
-      if (errorTimeoutRef.current) {
-        clearTimeout(errorTimeoutRef.current);
-      }
-    };
-  }, [door_num, filteredProperties.length, loading]);
-
-  const handleSelectAndNavigate = async (item: any) => {
-    try {
-      // First check if item contains all required fields
-      if (!item || !item.id || !item.address) {
+      if (text.trim() === "") {
+        dispatch(clearFilter());
         return;
       }
 
-      // Ensure we have a complete item object
-      const completeItem = {
-        id: item.id,
-        address: item.address,
-        company: item.company || "",
-        ...item,
-      };
+      debounceRef.current = setTimeout(() => {
+        dispatch(filterProperties(text));
+      }, DEBOUNCE_DELAY);
+    },
+    [dispatch]
+  );
 
-      // Store selected property in AsyncStorage
-      await AsyncStorage.setItem(
-        "selectedProperty",
-        JSON.stringify(completeItem)
-      );
-
-      // Also update the timestamp of when this property was last selected
-      await AsyncStorage.setItem(
-        "lastSelectedPropertyTimestamp",
-        new Date().toString()
-      );
-
-      // Check if we're in offline mode
-      if (!isConnected) {
-        // Create a special entry for offline navigation
-        await AsyncStorage.setItem(
-          "offlineSelectedProperty",
-          JSON.stringify({
-            ...completeItem,
-            selectedOffline: true,
-            selectionTime: new Date().toString(),
-          })
-        );
-      }
-
-      // Navigate to the next screen
-      navigation.navigate("CategoryScreen", {
-        paramKey: completeItem.address,
-        fromOfflineMode: !isConnected,
-      });
-    } catch (error) {
-      // Error handling
+  // Effect for delayed error message
+  useEffect(() => {
+    // Clear any existing timeout
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+      setShowNoResultsError(false);
     }
-  };
 
-  const renderResultItem = ({ item }: { item: any }) => {
-    return (
+    // Set error timeout only when needed
+    if (doorNum.trim() !== "" && filteredProperties.length === 0 && !loading) {
+      errorTimeoutRef.current = setTimeout(() => {
+        setShowNoResultsError(true);
+      }, DEBOUNCE_DELAY);
+    }
+
+    return () => {
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    };
+  }, [doorNum, filteredProperties.length, loading]);
+
+  const handleSelectAndNavigate = useCallback(
+    async (item: Property) => {
+      try {
+        // Skip if missing required fields
+        if (!item?.id || !item?.address) return;
+
+        // Create a complete property object
+        const completeItem = {
+          ...item,
+        };
+
+        // Store both items in parallel for better performance
+        await Promise.all([
+          AsyncStorage.setItem(
+            "selectedProperty",
+            JSON.stringify(completeItem)
+          ),
+          AsyncStorage.setItem(
+            "lastSelectedPropertyTimestamp",
+            new Date().toString()
+          ),
+        ]);
+
+        // Handle offline mode
+        if (!isConnected) {
+          await AsyncStorage.setItem(
+            "offlineSelectedProperty",
+            JSON.stringify({
+              ...completeItem,
+              selectedOffline: true,
+              selectionTime: new Date().toString(),
+            })
+          );
+        }
+
+        // Navigate to the next screen
+        navigation.navigate("CategoryScreen", {
+          paramKey: completeItem.address,
+          fromOfflineMode: !isConnected,
+        });
+      } catch (error) {
+        console.error("Error selecting property:", error);
+      }
+    },
+    [navigation, isConnected]
+  );
+
+  // Memoized render function to prevent recreating on each render
+  const renderResultItem = useCallback(
+    ({ item }: ListRenderItemInfo<Property>) => (
       <TouchableOpacity
         style={styles.resultItem}
         onPress={() => handleSelectAndNavigate(item)}
@@ -199,12 +214,16 @@ const SearchPropertyScreen: React.FC = () => {
         <Text style={styles.smallText}>{item.address}</Text>
         <Text style={styles.extraSmallText}>{item.company}</Text>
       </TouchableOpacity>
-    );
-  };
+    ),
+    [handleSelectAndNavigate]
+  );
 
-  // Skeleton loader for search results
-  const renderSkeletonLoader = () => {
-    return (
+  // Memorize FlatList keyExtractor for better performance
+  const keyExtractor = useCallback((item: Property) => item.id.toString(), []);
+
+  // Memoize the skeleton loader to prevent recreating on each render
+  const skeletonLoader = useMemo(
+    () => (
       <View style={skeletonStyles.loaderContainer}>
         <SkeletonLoader.ContentBlock
           hasHeading={true}
@@ -222,8 +241,15 @@ const SearchPropertyScreen: React.FC = () => {
           ))}
         </View>
       </View>
-    );
-  };
+    ),
+    []
+  );
+
+  // Handle modal close
+  const handleModalClose = useCallback(() => {
+    setShowSessionExpired(false);
+    navigation.navigate("LoginScreen");
+  }, [navigation]);
 
   return (
     <View style={styles.screenContainer}>
@@ -237,28 +263,29 @@ const SearchPropertyScreen: React.FC = () => {
           <TextInput
             style={styles.input}
             placeholder="Enter door number..."
-            value={door_num}
-            onChangeText={setdoor_num}
+            value={doorNum}
+            onChangeText={handleSearch}
           />
         </View>
 
-        {loading && renderSkeletonLoader()}
+        {loading && skeletonLoader}
 
         {filteredProperties.length > 0 && !loading && (
           <View style={styles.list}>
             <Text style={styles.subHeading}>Property List</Text>
             <FlatList
               data={filteredProperties}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={keyExtractor}
               renderItem={renderResultItem}
               contentContainerStyle={{ paddingVertical: 10 }}
+              removeClippedSubviews={true}
             />
           </View>
         )}
 
         {showNoResultsError && (
           <Text style={styles.errorText}>
-            No property found with ({door_num})
+            No property found with ({doorNum})
           </Text>
         )}
       </View>
@@ -267,10 +294,7 @@ const SearchPropertyScreen: React.FC = () => {
         animationType="fade"
         transparent={true}
         visible={showSessionExpired}
-        onRequestClose={() => {
-          setShowSessionExpired(false);
-          navigation.navigate("LoginScreen");
-        }}
+        onRequestClose={handleModalClose}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalView}>
@@ -279,10 +303,7 @@ const SearchPropertyScreen: React.FC = () => {
             </Text>
             <TouchableOpacity
               style={styles.modalButton}
-              onPress={() => {
-                setShowSessionExpired(false);
-                navigation.navigate("LoginScreen");
-              }}
+              onPress={handleModalClose}
             >
               <Text style={styles.modalButtonText}>Login</Text>
             </TouchableOpacity>

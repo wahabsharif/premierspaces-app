@@ -30,12 +30,45 @@ const initialState: PropertyState = {
   lastUpdated: null,
 };
 
-// Async thunk for fetching all properties
+// Cache keys
+const CACHE_KEYS = {
+  PROPERTIES: "cachedProperties",
+  LAST_UPDATED: "propertiesLastUpdated",
+};
+
+// Cache expiration time (12 hours in milliseconds)
+const CACHE_EXPIRATION = 12 * 60 * 60 * 1000;
+
+// Helper function to check if cache is valid
+const isCacheValid = async (): Promise<boolean> => {
+  try {
+    const lastUpdatedStr = await AsyncStorage.getItem(CACHE_KEYS.LAST_UPDATED);
+    if (!lastUpdatedStr) return false;
+
+    const lastUpdated = new Date(lastUpdatedStr).getTime();
+    const now = new Date().getTime();
+
+    return now - lastUpdated < CACHE_EXPIRATION;
+  } catch {
+    return false;
+  }
+};
+
+// Async thunk for fetching all properties with improved caching
 export const fetchAllProperties = createAsyncThunk(
   "property/fetchAll",
   async (_, { rejectWithValue }) => {
     try {
-      // Check if user is logged in
+      // Check if we have valid cached data first
+      const cacheValid = await isCacheValid();
+      if (cacheValid) {
+        const cachedData = await AsyncStorage.getItem(CACHE_KEYS.PROPERTIES);
+        if (cachedData) {
+          return JSON.parse(cachedData);
+        }
+      }
+
+      // If cache is invalid or missing, fetch from API
       const userDataJson = await AsyncStorage.getItem("userData");
       const userData = userDataJson ? JSON.parse(userDataJson) : null;
       const userid = userData?.payload?.userid;
@@ -46,7 +79,14 @@ export const fetchAllProperties = createAsyncThunk(
 
       // Fetch all properties
       const url = `${BASE_API_URL}/searchproperty.php?userid=${userid}`;
-      const response = await axios.get(url);
+      const response = await axios.get(url, {
+        timeout: 10000, // Add timeout for better error handling
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
       const data = response.data;
 
       if (data.status === 0 && data.payload?.message === "Session expired") {
@@ -54,31 +94,49 @@ export const fetchAllProperties = createAsyncThunk(
       }
 
       if (data.status === 1 && data.payload && Array.isArray(data.payload)) {
-        // Store the full properties data in AsyncStorage as a backup
-        await AsyncStorage.setItem(
-          "cachedProperties",
-          JSON.stringify(data.payload)
-        );
+        // Store data in cache
+        await Promise.all([
+          AsyncStorage.setItem(
+            CACHE_KEYS.PROPERTIES,
+            JSON.stringify(data.payload)
+          ),
+          AsyncStorage.setItem(
+            CACHE_KEYS.LAST_UPDATED,
+            new Date().toISOString()
+          ),
+        ]);
+
         return data.payload;
       } else {
         return rejectWithValue("No properties found");
       }
     } catch (error: any) {
-      return rejectWithValue(
+      // Enhanced error handling
+      const errorMsg =
         error.response?.status === 503
           ? "Service is temporarily unavailable. Please try again later."
-          : "Failed to fetch properties"
-      );
+          : error.code === "ECONNABORTED"
+          ? "Request timed out. Please check your connection and try again."
+          : "Failed to fetch properties";
+
+      return rejectWithValue(errorMsg);
     }
   }
 );
 
-// Thunk for loading cached properties from AsyncStorage
+// Thunk for loading cached properties with optimization
 export const loadCachedProperties = createAsyncThunk(
   "property/loadCached",
-  async () => {
-    const cachedData = await AsyncStorage.getItem("cachedProperties");
-    return cachedData ? JSON.parse(cachedData) : [];
+  async (_, { rejectWithValue }) => {
+    try {
+      const cachedData = await AsyncStorage.getItem(CACHE_KEYS.PROPERTIES);
+      if (!cachedData) {
+        return rejectWithValue("No cached properties available");
+      }
+      return JSON.parse(cachedData);
+    } catch (error) {
+      return rejectWithValue("Failed to load cached properties");
+    }
   }
 );
 
@@ -91,20 +149,30 @@ export const checkConnectivity = createAsyncThunk(
   }
 );
 
+// Optimized property filtering with memoization
+const filterPropertiesByDoorNum = (
+  properties: Property[],
+  doorNum: string
+): Property[] => {
+  const searchTerm = doorNum.trim().toLowerCase();
+  if (searchTerm === "") return [];
+
+  return properties.filter((property) =>
+    property.address.toLowerCase().includes(searchTerm)
+  );
+};
+
 // Property slice
 const propertySlice = createSlice({
   name: "property",
   initialState,
   reducers: {
     filterProperties: (state, action: PayloadAction<string>) => {
-      const doorNum = action.payload.trim().toLowerCase();
-      if (doorNum === "") {
-        state.filteredProperties = [];
-      } else {
-        state.filteredProperties = state.properties.filter((property) =>
-          property.address.toLowerCase().includes(doorNum)
-        );
-      }
+      const doorNum = action.payload;
+      state.filteredProperties = filterPropertiesByDoorNum(
+        state.properties,
+        doorNum
+      );
     },
     clearFilter: (state) => {
       state.filteredProperties = [];
@@ -124,6 +192,7 @@ const propertySlice = createSlice({
         state.loading = false;
         state.properties = action.payload;
         state.lastUpdated = new Date().toISOString();
+        state.error = null;
       })
       .addCase(fetchAllProperties.rejected, (state, action) => {
         state.loading = false;
@@ -132,14 +201,16 @@ const propertySlice = createSlice({
       // Handle loadCachedProperties
       .addCase(loadCachedProperties.pending, (state) => {
         state.loading = true;
+        state.error = null;
       })
       .addCase(loadCachedProperties.fulfilled, (state, action) => {
         state.loading = false;
         state.properties = action.payload;
+        state.error = null;
       })
-      .addCase(loadCachedProperties.rejected, (state) => {
+      .addCase(loadCachedProperties.rejected, (state, action) => {
         state.loading = false;
-        state.error = "Failed to load cached properties";
+        state.error = action.payload as string;
       })
       // Handle connectivity checks
       .addCase(checkConnectivity.fulfilled, (state, action) => {
