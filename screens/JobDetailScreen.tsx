@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, {
   useCallback,
   useEffect,
   useMemo,
-  useState,
   useRef,
+  useState,
 } from "react";
 import {
   RefreshControl,
@@ -21,6 +22,7 @@ import { Header } from "../components";
 import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
+import { useReloadOnFocus } from "../hooks";
 import { AppDispatch, RootState } from "../store";
 import { fetchContractors } from "../store/contractorSlice";
 import {
@@ -30,8 +32,26 @@ import {
 } from "../store/costsSlice";
 import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
+import {
+  disableBackgroundUpdates,
+  withoutBackgroundUpdates,
+} from "../utils/apiControl";
+import { enableApiThrottling, resetApiThrottling } from "../utils/apiThrottler";
 
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
+
+// Add this utility near the top of the file
+const debounce = (func: Function, wait: number) => {
+  let timeout: NodeJS.Timeout | null = null;
+
+  return (...args: any[]) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func(...args);
+      timeout = null;
+    }, wait);
+  };
+};
 
 // Skeleton components unchanged...
 const PropertySkeleton = () => (
@@ -141,6 +161,8 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const dataFetchedRef = useRef(false);
   const isMounted = useRef(true);
   const initialLoadComplete = useRef(false);
+  const lastFetchTimeRef = useRef(0);
+  const apiCallCountRef = useRef(0);
 
   // Redux selectors
   const { items: jobItems } = useSelector(selectJobsList);
@@ -175,7 +197,10 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Cleanup effect when component unmounts
   useEffect(() => {
     return () => {
+      console.log("[JobDetailScreen] Component unmounting, resetting flags");
       isMounted.current = false;
+      dataFetchedRef.current = false;
+      initialLoadComplete.current = false; // Reset this to force fetch on next mount
     };
   }, []);
 
@@ -216,7 +241,111 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Run once on component mount
   useEffect(() => {
     loadLocalData();
+    // Apply more aggressive throttling when this screen mounts
+    disableBackgroundUpdates();
+    enableApiThrottling();
+    resetApiThrottling(); // Clear any existing throttle records
+
+    // Reset the polling flags on component unmount
+    return () => {
+      console.log("[JobDetailScreen] Component unmounting, resetting flags");
+      isMounted.current = false;
+      dataFetchedRef.current = false;
+      initialLoadComplete.current = false;
+    };
   }, []);
+
+  // Function to fetch latest data when online - with throttling
+  const fetchLatestData = useCallback(async () => {
+    if (!userId) return;
+
+    // More aggressive throttling - prevent more than one call every 10 seconds
+    const now = Date.now();
+    if (now - lastFetchTimeRef.current < 10000) {
+      console.log("[JobDetailScreen] Throttling API calls - skipping fetch");
+      return;
+    }
+
+    // Reset API throttling to allow our manual fetch
+    resetApiThrottling();
+
+    // Reset this flag to allow fetch to occur
+    dataFetchedRef.current = false;
+    lastFetchTimeRef.current = now;
+    apiCallCountRef.current += 1;
+
+    console.log(
+      `[JobDetailScreen] Screen focused, checking connectivity (call #${apiCallCountRef.current})`
+    );
+
+    // Check internet connectivity
+    const netInfo = await NetInfo.fetch();
+    const isOnline = netInfo.isConnected;
+
+    console.log(
+      `[JobDetailScreen] Network status: ${isOnline ? "ONLINE" : "OFFLINE"}`
+    );
+
+    try {
+      // Reset costs data to force a fresh fetch
+      dispatch(resetCostsForJob(jobId));
+
+      console.log("[JobDetailScreen] Fetching jobs and contractors...");
+
+      // Always force a fresh fetch on focus - this is key to fixing the issue
+      dataFetchedRef.current = true;
+
+      // Get unique fetch parameters to prevent caching
+      const fetchParams = {
+        userId,
+        ...withoutBackgroundUpdates({
+          timestamp: Date.now(), // Add timestamp to make each request unique
+        }),
+      };
+
+      // Fetch jobs and contractors first - using parameters to disable background updates
+      await Promise.all([
+        dispatch(fetchContractors(userId)),
+        dispatch(fetchJobs(fetchParams)),
+      ]);
+
+      // Then fetch costs with the latest job data
+      const currentJob = jobItems.find((j) => j.id === jobId);
+      if (currentJob?.common_id) {
+        console.log(
+          `[JobDetailScreen] Fetching costs with common_id: ${currentJob.common_id}`
+        );
+        await dispatch(
+          fetchCosts({
+            userId,
+            jobId,
+            common_id: currentJob.common_id,
+          })
+        );
+      } else {
+        console.log(
+          `[JobDetailScreen] Cannot fetch costs - missing job or common_id`
+        );
+      }
+    } catch (err) {
+      console.error("[JobDetailScreen] Error fetching data:", err);
+    } finally {
+      if (isMounted.current) {
+        dataFetchedRef.current = false;
+      }
+    }
+  }, [userId, jobId, dispatch, jobItems]);
+
+  // Use our own debounced version for focus-based reload
+  const debouncedFetchData = useCallback(
+    debounce(() => {
+      fetchLatestData();
+    }, 500),
+    [fetchLatestData]
+  );
+
+  // Use custom hook to reload data when screen comes into focus
+  useReloadOnFocus(debouncedFetchData, [userId, jobId]);
 
   // Primary data loading effect - fixed to prevent multiple calls
   useEffect(() => {
@@ -228,12 +357,13 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       console.log("[JobDetailScreen] Starting initial data load");
       setIsLoading(true);
       dataFetchedRef.current = true;
+      lastFetchTimeRef.current = Date.now(); // Track this initial load
 
       try {
         // Step 1: Fetch jobs and contractors first
         await Promise.all([
           dispatch(fetchContractors(userId)),
-          dispatch(fetchJobs({ userId })),
+          dispatch(fetchJobs({ userId, ...withoutBackgroundUpdates() })),
         ]);
 
         // Step 2: Now that we have job data, get the job details before fetching costs
@@ -284,7 +414,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         // Step 1: Fetch jobs and contractors first
         await Promise.all([
           dispatch(fetchContractors(userId)),
-          dispatch(fetchJobs({ userId })),
+          dispatch(fetchJobs({ userId, ...withoutBackgroundUpdates() })),
         ]);
 
         // Step 2: Now that we have job data, get the job details before fetching costs
@@ -324,6 +454,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     console.log("[JobDetailScreen] Manual refresh requested");
     setRefreshing(true);
     dataFetchedRef.current = true; // Prevent other loads during refresh
+    lastFetchTimeRef.current = Date.now(); // Update last fetch time
 
     try {
       // Reset costs data to force a fresh fetch
@@ -332,7 +463,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       // Fetch jobs and contractors first
       await Promise.all([
         dispatch(fetchContractors(userId)),
-        dispatch(fetchJobs({ userId })),
+        dispatch(fetchJobs({ userId, ...withoutBackgroundUpdates() })),
       ]);
 
       // Then fetch costs with the latest job data

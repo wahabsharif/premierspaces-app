@@ -1,50 +1,95 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 
 /**
+ * Simple debounce function to prevent rapid repeated calls
+ */
+const debounce = (func: Function, wait: number) => {
+  let timeout: NodeJS.Timeout | null = null;
+
+  return (...args: any[]) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func(...args);
+      timeout = null;
+    }, wait);
+  };
+};
+
+/**
  * Custom hook to run a callback when screen comes into focus,
- * with proper controls to prevent duplicate calls
+ * with optimized performance to show data instantly
  */
 export const useReloadOnFocus = (
   callback: () => void | Promise<void>,
-  dependencies: any[] = [],
-  forceReload = false
+  dependencies: any[] = []
 ) => {
   const navigation = useNavigation();
-  const hasRunInitialRef = useRef(false);
+  const isFirstFocusRef = useRef(true);
   const isMountedRef = useRef(true);
-  const lastDepsRef = useRef<any[]>(dependencies);
+  const isLoadingRef = useRef(false);
+  const depsRef = useRef(dependencies);
+  const callbackRef = useRef(callback);
+  const lastExecutedRef = useRef(0);
 
-  // Check if dependencies have changed
-  const depsChanged = () => {
-    if (dependencies.length !== lastDepsRef.current.length) return true;
-
-    return dependencies.some((dep, i) => dep !== lastDepsRef.current[i]);
-  };
-
+  // Update refs when dependencies or callback change
   useEffect(() => {
-    // Update the last deps reference
-    lastDepsRef.current = dependencies;
+    depsRef.current = dependencies;
+    callbackRef.current = callback;
+  }, [dependencies, callback]);
 
-    // Initial load - only run once
-    const runCallback = async () => {
-      if (!hasRunInitialRef.current && isMountedRef.current) {
-        hasRunInitialRef.current = true;
-        await callback();
+  // Create a stable callback that executes immediately but
+  // prevents duplicate calls
+  const stableCallback = useCallback(async () => {
+    // Skip if we're already loading or unmounted
+    if (isLoadingRef.current || !isMountedRef.current) return;
+
+    // Throttle calls to once every 2 seconds
+    const now = Date.now();
+    if (now - lastExecutedRef.current < 2000 && !isFirstFocusRef.current) {
+      console.log("[useReloadOnFocus] Skipping rapid execution");
+      return;
+    }
+
+    try {
+      isLoadingRef.current = true;
+      lastExecutedRef.current = now;
+
+      // Execute callback immediately - this should show cached data first
+      await callbackRef.current();
+    } catch (error) {
+      console.error("[useReloadOnFocus] Error:", error);
+    } finally {
+      if (isMountedRef.current) {
+        isLoadingRef.current = false;
       }
-    };
+    }
+  }, []); // Empty dependency array to keep it stable
 
-    runCallback();
+  // Debounce the focus handler to prevent multiple rapid calls
+  const debouncedFocusHandler = useCallback(
+    debounce(() => {
+      stableCallback();
+    }, 500),
+    [stableCallback]
+  );
+
+  // Setup effect with minimal dependency array
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // Initial load - run immediately
+    if (isFirstFocusRef.current) {
+      isFirstFocusRef.current = false;
+      // Use setTimeout with 0 to ensure any initial state is set
+      // before attempting data load
+      setTimeout(stableCallback, 0);
+    }
 
     // Setup focus listener
-    const unsubscribe = navigation.addListener("focus", async () => {
-      // Only reload on focus if:
-      // 1. forceReload is true, OR
-      // 2. dependencies have changed since last run
-      if ((forceReload || depsChanged()) && isMountedRef.current) {
-        await callback();
-        lastDepsRef.current = dependencies;
-      }
+    const unsubscribe = navigation.addListener("focus", () => {
+      // Use debounced handler to prevent multiple rapid calls
+      debouncedFocusHandler();
     });
 
     // Cleanup
@@ -52,5 +97,5 @@ export const useReloadOnFocus = (
       isMountedRef.current = false;
       unsubscribe();
     };
-  }, [navigation, callback, ...dependencies, forceReload]);
+  }, [navigation, stableCallback, debouncedFocusHandler]);
 };
