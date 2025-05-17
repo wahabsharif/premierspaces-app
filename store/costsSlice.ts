@@ -31,14 +31,11 @@ const COSTS_CACHE_EXPIRY = 5 * 60 * 1000;
 
 export const fetchCosts = createAsyncThunk<
   { jobId: string; costs: Costs[]; isOffline: boolean },
-  { userId: string; jobId: string; common_id: string },
+  { userId: string; jobId: string },
   { state: RootState; dispatch: AppDispatch; rejectValue: string }
 >(
   "costs/fetch",
-  async (
-    { userId, jobId, common_id },
-    { getState, rejectWithValue, dispatch }
-  ) => {
+  async ({ userId, jobId }, { getState, rejectWithValue, dispatch }) => {
     const { lastFetched, items } = getState().cost;
     const now = Date.now();
     const fresh =
@@ -57,7 +54,7 @@ export const fetchCosts = createAsyncThunk<
     if (online) {
       try {
         const { data } = await axios.get(`${BASE_API_URL}/costs.php`, {
-          params: { userid: userId, common_id },
+          params: { userid: userId },
           headers: { "Content-Type": "application/json" },
           timeout: 10000,
         });
@@ -72,9 +69,7 @@ export const fetchCosts = createAsyncThunk<
         }
 
         await setCache(cacheKey, payloadArray);
-        const filtered = payloadArray.filter(
-          (c) => c.job_id === jobId && c.common_id === common_id
-        );
+        const filtered = payloadArray.filter((c) => c.job_id === jobId);
         return { jobId, costs: filtered, isOffline: false };
       } catch (error) {
         console.error("[fetchCosts] API error, falling back to cache", error);
@@ -87,9 +82,7 @@ export const fetchCosts = createAsyncThunk<
         cacheEntry && Array.isArray(cacheEntry.payload)
           ? cacheEntry.payload
           : cacheEntry?.payload?.payload || [];
-      const filtered = (archived as Costs[]).filter(
-        (c) => c.job_id === jobId && c.common_id === common_id
-      );
+      const filtered = (archived as Costs[]).filter((c) => c.job_id === jobId);
       return { jobId, costs: filtered, isOffline: !online };
     } catch (error) {
       console.error("[fetchCosts] cache fallback error", error);
@@ -106,8 +99,7 @@ export const createCost = createAsyncThunk<
   void,
   {
     userId: string;
-    jobId?: string;
-    common_id: string;
+    jobId: string;
     amount: string;
     materialCost?: string;
     contractorId?: string;
@@ -116,7 +108,7 @@ export const createCost = createAsyncThunk<
 >(
   "costs/create",
   async (
-    { userId, jobId, amount, materialCost, common_id, contractorId },
+    { userId, jobId, amount, materialCost, contractorId },
     { dispatch, rejectWithValue }
   ) => {
     try {
@@ -125,8 +117,7 @@ export const createCost = createAsyncThunk<
 
       if (!online) {
         const newCost = await createLocalCost({
-          job_id: "",
-          common_id: common_id,
+          job_id: jobId,
           contractor_id: contractorId || null,
           amount: parseFloat(amount || "0").toFixed(2),
           material_cost:
@@ -143,19 +134,25 @@ export const createCost = createAsyncThunk<
               ? cacheEntry.payload
               : cacheEntry?.payload?.payload || [];
 
+          const idx = existing.findIndex(
+            (c) =>
+              c.job_id === jobId && c.contractor_id === (contractorId || null)
+          );
+          if (idx >= 0) existing[idx] = newCost;
+          else existing.push(newCost);
+
           await setCache(cacheKey, existing);
         } catch (cacheErr) {
           console.error("[createCost] cache write error", cacheErr);
         }
 
-        await dispatch(fetchCosts({ userId, jobId: jobId || "", common_id }));
+        await dispatch(fetchCosts({ userId, jobId }));
         return;
       }
 
       const payload = {
         userid: userId,
-        job_id: jobId || null,
-        common_id,
+        job_id: jobId,
         amount: amount,
         material_cost: materialCost,
         contractor_id: contractorId,
@@ -173,13 +170,14 @@ export const createCost = createAsyncThunk<
         throw new Error(errorMsg);
       }
 
-      await dispatch(fetchCosts({ userId, jobId: jobId || "", common_id }));
+      await dispatch(fetchCosts({ userId, jobId }));
     } catch (err: any) {
       console.error("[createCost] error", err);
       return rejectWithValue(err.message || "Error creating cost");
     }
   }
 );
+
 const costSlice = createSlice({
   name: "cost",
   initialState,

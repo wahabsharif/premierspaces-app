@@ -153,6 +153,7 @@ const SearchPropertyScreen: React.FC = () => {
         id: item.id,
         address: item.address,
         company: item.company || "",
+        // Add any other fields that might be needed by subsequent screens
         ...item,
       };
 
@@ -167,6 +168,8 @@ const SearchPropertyScreen: React.FC = () => {
         "lastSelectedPropertyTimestamp",
         new Date().toString()
       );
+
+      console.log("Property saved to AsyncStorage:", completeItem);
 
       // Check if we're in offline mode
       if (!isConnected) {

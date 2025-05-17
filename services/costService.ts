@@ -6,7 +6,6 @@ import { Costs } from "../types";
 interface CostRow {
   id: string;
   job_id: string;
-  common_id: string | null;
   contractor_id: string | null;
   amount: number;
   material_cost: number | null;
@@ -16,16 +15,15 @@ interface CostRow {
 const initializeDatabase = async () => {
   const db = await SQLite.openDatabaseAsync("costsDB");
   await db.execAsync(`
-PRAGMA journal_mode = WAL;
-CREATE TABLE IF NOT EXISTS costs (
-  id TEXT PRIMARY KEY,
-  job_id TEXT ,
-  common_id TEXT,
-  contractor_id TEXT,
-  amount REAL NOT NULL DEFAULT 0,
-  material_cost REAL,
-  created_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS costs (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      contractor_id TEXT,
+      amount REAL NOT NULL DEFAULT 0,
+      material_cost REAL,
+      created_at INTEGER DEFAULT (strftime('%s', 'now'))
+    );
   `);
   return db;
 };
@@ -34,7 +32,6 @@ const dbPromise = initializeDatabase();
 const COLUMNS = [
   "id",
   "job_id",
-  "common_id",
   "contractor_id",
   "amount",
   "material_cost",
@@ -70,7 +67,6 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
     const params: (string | number | null)[] = [
       id,
       safeString(cost.job_id) ?? "",
-      safeString(cost.common_id) ?? "",
       safeString(cost.contractor_id),
       safeNumber(cost.amount) ?? 0,
       safeNumber(cost.material_cost),
@@ -81,7 +77,6 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
     return {
       id,
       job_id: cost.job_id,
-      common_id: cost.common_id ?? null,
       contractor_id: cost.contractor_id ?? null,
       amount: Number(cost.amount),
       material_cost: safeNumber(cost.material_cost),
@@ -105,7 +100,6 @@ export async function getCostById(id: string): Promise<Costs | null> {
     return {
       id: row.id,
       job_id: row.job_id,
-      common_id: row.common_id,
       contractor_id: row.contractor_id,
       amount: row.amount,
       material_cost: row.material_cost,
@@ -124,7 +118,6 @@ export async function getAllCosts(): Promise<Costs[]> {
     return rows.map((row) => ({
       id: row.id,
       job_id: row.job_id,
-      common_id: row.common_id,
       contractor_id: row.contractor_id,
       amount: row.amount,
       material_cost: row.material_cost,
@@ -141,7 +134,6 @@ export async function updateCost(cost: Costs): Promise<number> {
     const now = Math.floor(Date.now() / 1000);
     const params: (string | number | null)[] = [
       safeString(cost.job_id) ?? "",
-      safeString(cost.common_id) ?? "",
       safeString(cost.contractor_id),
       safeNumber(cost.amount) ?? 0,
       safeNumber(cost.material_cost),

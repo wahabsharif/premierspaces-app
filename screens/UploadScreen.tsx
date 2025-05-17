@@ -31,12 +31,7 @@ const screenWidth = Dimensions.get("window").width;
 const imageSize = screenWidth / 2 - 40;
 
 const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
-  const {
-    category = {},
-    subCategory = {},
-    common_id = "",
-    job_id = "",
-  } = route.params || {};
+  const { category = {}, subCategory = {} } = route.params || {};
   const dispatch = useDispatch<AppDispatch>();
   const files = useSelector((state: RootState) => state.uploader.files);
   const uploading = useSelector((state: RootState) => state.uploader.uploading);
@@ -92,6 +87,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         if (storedUserData) {
           const parsedUserData = JSON.parse(storedUserData);
           setUserData(parsedUserData);
+          console.log("User Data:", parsedUserData);
         }
       } catch (error) {
         // console.error("Error fetching user data:", error);
@@ -355,15 +351,15 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     const mainCategoryId = category?.id?.toString() || "";
     const subCategoryId = subCategory?.id?.toString() || "";
     const propertyId = storedProperty ? storedProperty.id : "";
+    const jobId = jobData ? jobData.id : "";
     const userName = userData?.payload?.name || "";
     dispatch(
       uploadFiles({
         mainCategoryId,
         subCategoryId,
         propertyId,
-        job_id,
+        jobId,
         userName,
-        common_id,
       })
     );
   };
