@@ -6,7 +6,6 @@ import { Button, Card, Dialog, Portal, Text } from "react-native-paper";
 import { PinInput } from "../../components";
 import styles from "../../Constants/styles";
 import { ChangeAppPinScreenProps } from "../../types";
-import { Toast } from "toastify-react-native";
 
 const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
   navigation,
@@ -44,13 +43,18 @@ const ChangeAppPinScreen: React.FC<ChangeAppPinScreenProps> = ({
       if (pin === newPin) {
         await SecureStore.setItemAsync("app_pin", newPin);
         setPinSuccess(true);
-        Toast.success("Your PIN has been updated successfully!");
-        setTimeout(() => {
-          navigation.goBack(); // Navigate back after a short delay
-        }, 500); // Adjust delay as needed for toast visibility
+        showDialog("Success", "Your PIN has been updated successfully!", () => {
+          if (navigation) {
+            navigation.goBack();
+          }
+          setDialogVisible(false);
+        });
       } else {
         setPinError(true);
-        Toast.error("PINs do not match. Please try again.");
+        showDialog("Error", "PINs do not match. Please try again.", () => {
+          setStep(2);
+          setDialogVisible(false);
+        });
         setTimeout(() => setPinError(false), 500);
       }
     }

@@ -1,3 +1,4 @@
+/* store/costsSlice.ts */
 import {
   createAsyncThunk,
   createSelector,
@@ -26,10 +27,8 @@ const initialState: CostState = {
   isOffline: false,
 };
 
-// Never expire the cost cache - we'll control refreshing explicitly
-const COSTS_NEVER_EXPIRE = 0;
+const COSTS_CACHE_EXPIRY = 5 * 60 * 1000;
 
-// Only modify the fetchCosts function in costSlice.ts
 export const fetchCosts = createAsyncThunk<
   { jobId: string; costs: Costs[]; isOffline: boolean },
   { userId: string; jobId: string; common_id: string },
@@ -40,29 +39,23 @@ export const fetchCosts = createAsyncThunk<
     { userId, jobId, common_id },
     { getState, rejectWithValue, dispatch }
   ) => {
-    const { items, lastFetched } = getState().cost;
-    const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
-
-    // Check if we've fetched this job's costs recently (within the last 30 seconds)
-    // This helps prevent excessive API calls
+    const { lastFetched, items } = getState().cost;
     const now = Date.now();
-    const lastFetchTime = lastFetched[jobId] || 0;
-    const shouldRefreshFromNetwork = now - lastFetchTime > 30000;
+    const fresh =
+      lastFetched[jobId] && now - lastFetched[jobId] < COSTS_CACHE_EXPIRY;
 
-    console.log(
-      `[fetchCosts] Fetching costs for jobId: ${jobId}, common_id: ${common_id}, shouldRefreshFromNetwork: ${shouldRefreshFromNetwork}`
-    );
+    if (fresh && items[jobId]) {
+      const online = await isOnline();
+      dispatch(setOfflineMode(!online));
+      return { jobId, costs: items[jobId], isOffline: !online };
+    }
 
-    // Check online status first
+    const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
     const online = await isOnline();
     dispatch(setOfflineMode(!online));
 
-    // If online and we need to refresh, fetch from API
-    if (online && shouldRefreshFromNetwork) {
+    if (online) {
       try {
-        console.log(
-          `[fetchCosts] Making API request for costs. jobId: ${jobId}, common_id: ${common_id}`
-        );
         const { data } = await axios.get(`${BASE_API_URL}/costs.php`, {
           params: { userid: userId, common_id },
           headers: { "Content-Type": "application/json" },
@@ -71,85 +64,32 @@ export const fetchCosts = createAsyncThunk<
 
         let payloadArray: any[] = [];
         if (data.status === 1 && data.payload) {
-          // Handle different payload structures from API
-          if (Array.isArray(data.payload)) {
-            payloadArray = data.payload;
-          } else if (
-            data.payload.payload &&
-            Array.isArray(data.payload.payload)
-          ) {
-            payloadArray = data.payload.payload;
-          } else if (typeof data.payload === "object") {
-            payloadArray = [data.payload];
-          }
-
-          console.log(
-            `[fetchCosts] Received ${payloadArray.length} costs from API`
-          );
+          payloadArray = Array.isArray(data.payload)
+            ? data.payload
+            : Array.isArray(data.payload.payload)
+            ? data.payload.payload
+            : [data.payload];
         }
 
-        // Always update the cache with fresh data (with no expiration)
-        await setCache(cacheKey, payloadArray, {
-          expiresIn: COSTS_NEVER_EXPIRE,
-        });
-
-        // More flexible filtering logic - job_id could be string or number
-        // Replace the existing filtering logic with this:
-        const filtered = payloadArray.filter((c) => {
-          // Use primarily common_id for matching, as it's the shared identifier
-          return String(c.common_id) === String(common_id);
-
-          // Alternatively, use an OR condition
-          // return String(c.job_id) === String(jobId) || String(c.common_id) === String(common_id);
-        });
-
-        console.log(
-          `[fetchCosts] Filtered ${filtered.length} costs for jobId: ${jobId}`
+        await setCache(cacheKey, payloadArray);
+        const filtered = payloadArray.filter(
+          (c) => c.job_id === jobId && c.common_id === common_id
         );
         return { jobId, costs: filtered, isOffline: false };
       } catch (error) {
         console.error("[fetchCosts] API error, falling back to cache", error);
-        // Fall back to cache on API error
       }
-    } else if (online) {
-      console.log(`[fetchCosts] Using cached data (recently fetched)`);
-    } else {
-      console.log(`[fetchCosts] Offline mode, using cached data`);
     }
 
-    // Use existing data in memory if available
-    if (items[jobId] && items[jobId].length > 0) {
-      console.log(`[fetchCosts] Using in-memory data for jobId: ${jobId}`);
-      return { jobId, costs: items[jobId], isOffline: !online };
-    }
-
-    // Offline mode or API error fallback - use cache
     try {
       const cacheEntry = await getCache(cacheKey);
-      let archived: any[] = [];
-
-      if (cacheEntry?.payload) {
-        if (Array.isArray(cacheEntry.payload)) {
-          archived = cacheEntry.payload;
-        } else if (
-          cacheEntry.payload.payload &&
-          Array.isArray(cacheEntry.payload.payload)
-        ) {
-          archived = cacheEntry.payload.payload;
-        }
-      }
-
-      // More flexible filtering logic
-      const filtered = archived.filter((c) => {
-        const matchesJob = String(c.job_id) === String(jobId);
-        const matchesCommonId = String(c.common_id) === String(common_id);
-        return matchesJob && matchesCommonId;
-      });
-
-      console.log(
-        `[fetchCosts] Found ${filtered.length} costs in cache for jobId: ${jobId}`
+      const archived =
+        cacheEntry && Array.isArray(cacheEntry.payload)
+          ? cacheEntry.payload
+          : cacheEntry?.payload?.payload || [];
+      const filtered = (archived as Costs[]).filter(
+        (c) => c.job_id === jobId && c.common_id === common_id
       );
-
       return { jobId, costs: filtered, isOffline: !online };
     } catch (error) {
       console.error("[fetchCosts] cache fallback error", error);
@@ -161,6 +101,7 @@ export const fetchCosts = createAsyncThunk<
     return { jobId, costs: [], isOffline: true };
   }
 );
+
 export const createCost = createAsyncThunk<
   void,
   {
@@ -183,7 +124,6 @@ export const createCost = createAsyncThunk<
       dispatch(setOfflineMode(!online));
 
       if (!online) {
-        // Offline mode - create cost locally
         const newCost = await createLocalCost({
           job_id: "",
           common_id: common_id,
@@ -197,30 +137,21 @@ export const createCost = createAsyncThunk<
 
         const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
         try {
-          // Update cache with the new offline cost
           const cacheEntry = await getCache(cacheKey);
           const existing: any[] =
             cacheEntry && Array.isArray(cacheEntry.payload)
               ? cacheEntry.payload
               : cacheEntry?.payload?.payload || [];
 
-          // Use expiresIn: 0 to ensure the cache never expires
-          await setCache(cacheKey, [...existing, newCost], {
-            expiresIn: COSTS_NEVER_EXPIRE,
-          });
+          await setCache(cacheKey, existing);
         } catch (cacheErr) {
           console.error("[createCost] cache write error", cacheErr);
-        }
-
-        if (jobId) {
-          dispatch(resetCostsForJob(jobId));
         }
 
         await dispatch(fetchCosts({ userId, jobId: jobId || "", common_id }));
         return;
       }
 
-      // Online mode - send to API
       const payload = {
         userid: userId,
         job_id: jobId || null,
@@ -242,14 +173,6 @@ export const createCost = createAsyncThunk<
         throw new Error(errorMsg);
       }
 
-      console.log("[createCost] Successfully created cost on server");
-
-      // After successful API call, refresh costs cache from the server
-      if (jobId) {
-        dispatch(resetCostsForJob(jobId));
-      }
-
-      // This will get the latest data from the API and update the cache
       await dispatch(fetchCosts({ userId, jobId: jobId || "", common_id }));
     } catch (err: any) {
       console.error("[createCost] error", err);
@@ -257,7 +180,6 @@ export const createCost = createAsyncThunk<
     }
   }
 );
-
 const costSlice = createSlice({
   name: "cost",
   initialState,
@@ -270,11 +192,8 @@ const costSlice = createSlice({
       state.isOffline = false;
     },
     resetCostsForJob: (state, action) => {
-      const jobId = action.payload;
-      if (jobId) {
-        delete state.items[jobId];
-        delete state.lastFetched[jobId];
-      }
+      delete state.items[action.payload];
+      delete state.lastFetched[action.payload];
     },
     setOfflineMode: (state, action) => {
       state.isOffline = action.payload;
@@ -327,12 +246,11 @@ export const selectCostsForJobWithNames = createSelector(
     return raw.map((c) => ({
       ...c,
       name:
-        contractors.find((ct) => String(ct.id) === String(c.contractor_id))
-          ?.name ?? "(No contractor)",
+        contractors.find((ct) => ct.id === c.contractor_id)?.name ??
+        "(No contractor)",
     }));
   }
 );
-
 export const selectCostsForJob = createSelector(
   [selectCostItems, (_: RootState, jobId: string) => jobId],
   (items, jobId) => items[jobId] ?? []

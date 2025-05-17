@@ -27,7 +27,7 @@ export const CACHE_CONFIG = {
     JOBS: 5 * 60 * 1000, // 5 minutes
     CATEGORIES: 30 * 60 * 1000, // 30 minutes
     FILES: 10 * 60 * 1000, // 10 minutes
-    COSTS: Number.MAX_SAFE_INTEGER, // Never expire based on time - we'll control refresh explicitly
+    COSTS: 10 * 60 * 1000, // 10 minutes
     CONTRACTORS: 24 * 60 * 60 * 1000, // 24 hours
   },
   // Initial delay before prefetching data

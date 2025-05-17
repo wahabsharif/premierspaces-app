@@ -1,5 +1,4 @@
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
-import axios from "axios";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 import { getCache, isOnline, setCache } from "../services/cacheService";
 
@@ -30,127 +29,36 @@ export const fetchContractors = createAsyncThunk<
   const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`;
   const online = await isOnline();
 
-  // Debug log to see what's happening
-  console.log("[fetchContractors] Starting fetch for user:", userId);
-
   if (!online) {
     try {
-      console.log("[fetchContractors] Offline, fetching from cache");
       const cached = await getCache(cacheKey);
-
-      // Handle various possible cache structures
-      let contractors = [];
-      if (cached?.payload) {
-        if (Array.isArray(cached.payload)) {
-          contractors = cached.payload;
-        } else if (
-          cached.payload.payload &&
-          Array.isArray(cached.payload.payload)
-        ) {
-          contractors = cached.payload.payload;
-        } else if (typeof cached.payload === "object") {
-          contractors = [cached.payload];
-        }
-      }
-
-      // Ensure all contractors have string IDs for consistent comparison
-      interface CachedContractor {
-        id: string | number;
-        [key: string]: any;
-      }
-
-      const normalized: Contractor[] = contractors.map(
-        (c: CachedContractor) => ({
-          ...c,
-          id: String(c.id),
-        })
-      );
-
-      console.log(
-        `[fetchContractors] Found ${normalized.length} contractors in cache`
-      );
-      return normalized;
-    } catch (err) {
-      console.error("[fetchContractors] Cache error:", err);
+      const arr = Array.isArray(cached?.payload?.payload)
+        ? cached.payload.payload
+        : [];
+      return arr;
+    } catch {
       return [];
     }
   }
 
   try {
-    console.log("[fetchContractors] Online, fetching from API");
-    // Using axios instead of fetch for consistency with your other code
-    const { data } = await axios.get(`${BASE_API_URL}/contractors.php`, {
-      params: { userid: userId },
-      headers: { "Content-Type": "application/json" },
-      timeout: 10000,
+    const res = await fetch(`${BASE_API_URL}/contractors.php?userid=${userId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const arr = Array.isArray(json.payload) ? json.payload : [];
+
+    await setCache(cacheKey, arr, {
+      expiresIn: 24 * 60 * 60 * 1000,
     });
-
-    let contractors = [];
-    if (data.status === 1 && data.payload) {
-      if (Array.isArray(data.payload)) {
-        contractors = data.payload;
-      } else if (data.payload.payload && Array.isArray(data.payload.payload)) {
-        contractors = data.payload.payload;
-      } else if (typeof data.payload === "object") {
-        contractors = [data.payload];
-      }
-    }
-
-    // Normalize contractor data to ensure consistent structure
-    interface ApiContractor {
-      id?: string | number;
-      contractor_id?: string | number;
-      name?: string;
-      contractor_name?: string;
-      [key: string]: any; // Allow additional properties
-    }
-
-    const normalized: Contractor[] = contractors.map((c: ApiContractor) => ({
-      id: String(c.id || c.contractor_id), // Handle possible field name variations
-      name: String(c.name || c.contractor_name || "Unknown"), // Handle possible field name variations
-    }));
-
-    console.log(
-      `[fetchContractors] Received ${normalized.length} contractors from API`
-    );
-
-    // Store the normalized array in cache with no expiration
-    await setCache(cacheKey, normalized, { expiresIn: 0 });
-
-    return normalized;
+    return arr;
   } catch (err: any) {
-    console.error("[fetchContractors] API error, trying cache fallback:", err);
     try {
       const cached = await getCache(cacheKey);
-      let contractors = [];
-      if (cached?.payload) {
-        if (Array.isArray(cached.payload)) {
-          contractors = cached.payload;
-        } else if (
-          cached.payload.payload &&
-          Array.isArray(cached.payload.payload)
-        ) {
-          contractors = cached.payload.payload;
-        } else if (typeof cached.payload === "object") {
-          contractors = [cached.payload];
-        }
-      }
-
-      interface CachedContractor {
-        id: string | number;
-        [key: string]: any;
-      }
-
-      const normalized: Contractor[] = contractors.map(
-        (c: CachedContractor) => ({
-          ...c,
-          id: String(c.id),
-        })
-      );
-
-      return normalized;
-    } catch (cacheErr) {
-      console.error("[fetchContractors] Cache fallback error:", cacheErr);
+      const arr = Array.isArray(cached?.payload?.payload)
+        ? cached.payload.payload
+        : [];
+      return arr;
+    } catch {
       return rejectWithValue(err.message || "Error fetching contractors");
     }
   }

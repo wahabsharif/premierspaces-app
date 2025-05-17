@@ -2,16 +2,14 @@ import { AntDesign, MaterialIcons } from "@expo/vector-icons";
 import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ResizeMode, Video } from "expo-av";
 import * as Camera from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import { useEvent } from "expo";
-import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Button as RNButton,
   Dimensions,
   FlatList,
   Image,
@@ -30,7 +28,6 @@ import { AppDispatch, RootState } from "../store";
 import { clearFiles, setFiles, uploadFiles } from "../store/uploaderSlice";
 import { MediaFile, UploadScreenProps } from "../types";
 const screenWidth = Dimensions.get("window").width;
-const screenHeight = Dimensions.get("window").height;
 const imageSize = screenWidth / 2 - 40;
 
 const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
@@ -376,24 +373,6 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     dispatch(clearFiles());
   };
 
-  // Always call hooks regardless of conditions
-  const videoUri =
-    selectedFile?.type === "video" && modalVisible ? selectedFile.uri : null;
-  const videoPlayer = useVideoPlayer(videoUri || "", (player) => {
-    if (videoUri) {
-      player.loop = true;
-      player.play();
-    }
-  });
-
-  // Always call useEvent hook with the videoPlayer
-  const { isPlaying } = useEvent(videoPlayer, "playingChange", {
-    isPlaying: false,
-  });
-
-  // Use the values conditionally when rendering
-  const shouldShowVideoControls = !!videoUri && !!videoPlayer;
-
   return (
     <View style={styles.screenContainer}>
       <Header />
@@ -408,14 +387,10 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
             <Text style={styles.extraSmallText}>{storedProperty.company}</Text>
           </View>
         )}
-        {(category?.category || (subCategory && subCategory.sub_category)) && (
-          <Text style={style.subHeading}>
-            {category?.category}
-            {subCategory && subCategory.sub_category
-              ? ` - ${subCategory.sub_category}`
-              : ""}
-          </Text>
-        )}
+        <Text style={style.subHeading}>
+          {category?.category}
+          {subCategory ? ` - ${subCategory.sub_category}` : ""}
+        </Text>
         <Text style={style.subHeading}>Choose File From</Text>
         <View
           style={{
@@ -555,76 +530,71 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
               >
                 <AntDesign name="close" size={30} color="white" />
               </TouchableOpacity>
-              <View style={internalStyle.mediaContentContainer}>
-                {selectedFile && selectedFile.type === "image" && (
-                  <Image
-                    source={{ uri: selectedFile.uri }}
-                    style={internalStyle.fullImage}
-                  />
-                )}
-                {selectedFile &&
-                  selectedFile.type === "video" &&
-                  shouldShowVideoControls && (
-                    <VideoView
-                      style={internalStyle.fullImage}
-                      player={videoPlayer}
-                      allowsFullscreen
-                      allowsPictureInPicture
-                    />
-                  )}
-                {selectedFile && selectedFile.type === "document" && (
-                  <View style={internalStyle.documentPreview}>
-                    <Feather name="file-text" size={80} color="gray" />
-                    <Text style={{ color: "white", marginTop: 10 }}>
-                      No preview available
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <View style={internalStyle.thumbnailContainerWrapper}>
-                <FlatList
-                  data={files}
-                  horizontal
-                  keyExtractor={(_, index) => index.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity onPress={() => setSelectedFile(item)}>
-                      {item.type === "image" ? (
-                        <Image
-                          source={{ uri: item.uri }}
-                          style={[
-                            internalStyle.thumbnail,
-                            selectedFile?.uri === item.uri &&
-                              internalStyle.selectedThumbnail,
-                          ]}
-                        />
-                      ) : item.type === "video" ? (
-                        <View
-                          style={[
-                            internalStyle.thumbnail,
-                            { justifyContent: "center", alignItems: "center" },
-                            selectedFile?.uri === item.uri &&
-                              internalStyle.selectedThumbnail,
-                          ]}
-                        >
-                          <Feather name="video" size={20} color="gray" />
-                        </View>
-                      ) : (
-                        <View
-                          style={[
-                            internalStyle.thumbnail,
-                            { justifyContent: "center", alignItems: "center" },
-                            selectedFile?.uri === item.uri &&
-                              internalStyle.selectedThumbnail,
-                          ]}
-                        >
-                          <Feather name="file-text" size={20} color="gray" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                  contentContainerStyle={internalStyle.thumbnailContainer}
+              {selectedFile && selectedFile.type === "image" && (
+                <Image
+                  source={{ uri: selectedFile.uri }}
+                  style={internalStyle.fullImage}
                 />
-              </View>
+              )}
+              {selectedFile && selectedFile.type === "video" && (
+                <Video
+                  source={{ uri: selectedFile.uri }}
+                  style={internalStyle.fullImage}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping
+                />
+              )}
+              {selectedFile && selectedFile.type === "document" && (
+                <View style={internalStyle.documentPreview}>
+                  <Feather name="file-text" size={80} color="gray" />
+                  <Text style={{ color: "white", marginTop: 10 }}>
+                    No preview available
+                  </Text>
+                </View>
+              )}
+              <FlatList
+                data={files}
+                horizontal
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity onPress={() => setSelectedFile(item)}>
+                    {item.type === "image" ? (
+                      <Image
+                        source={{ uri: item.uri }}
+                        style={[
+                          internalStyle.thumbnail,
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      />
+                    ) : item.type === "video" ? (
+                      <View
+                        style={[
+                          internalStyle.thumbnail,
+                          { justifyContent: "center", alignItems: "center" },
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      >
+                        <Feather name="video" size={20} color="gray" />
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          internalStyle.thumbnail,
+                          { justifyContent: "center", alignItems: "center" },
+                          selectedFile?.uri === item.uri &&
+                            internalStyle.selectedThumbnail,
+                        ]}
+                      >
+                        <Feather name="file-text" size={20} color="gray" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={internalStyle.thumbnailContainer}
+              />
             </View>
           </View>
         </Modal>
@@ -669,20 +639,7 @@ const internalStyle = StyleSheet.create({
   modalView: {
     alignItems: "center",
     width: "100%",
-    height: "100%",
     position: "relative",
-    justifyContent: "space-between",
-  },
-  mediaContentContainer: {
-    flex: 1,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  thumbnailContainerWrapper: {
-    width: "100%",
-    paddingBottom: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
   actionButton: {
     flex: 1,
@@ -759,20 +716,20 @@ const internalStyle = StyleSheet.create({
     fontWeight: "bold",
   },
   fullImage: {
-    width: "95%",
-    height: "90%",
+    width: "90%",
+    height: "70%",
     borderRadius: 10,
     resizeMode: "contain",
   },
   documentPreview: {
-    width: "95%",
-    height: "90%",
+    width: "90%",
+    height: "70%",
     justifyContent: "center",
     alignItems: "center",
   },
   thumbnailContainer: {
     flexDirection: "row",
-    paddingVertical: 10,
+    marginTop: 20,
     justifyContent: "center",
   },
   selectedThumbnail: {
