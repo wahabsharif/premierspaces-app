@@ -5,6 +5,7 @@ import axios from "axios";
 import * as FileSystem from "expo-file-system";
 import { BASE_API_URL } from "../Constants/env";
 import { getFileId } from "../helper";
+import { refreshCachesAfterPost } from "../services/cacheService";
 import {
   createLocalUpload,
   deleteUpload,
@@ -166,6 +167,10 @@ export const uploadFiles = createAsyncThunk(
         );
         dispatch(updateProgress({ uri: file.uri, progress: "Complete" }));
         dispatch(incrementSuccessCount());
+
+        // Refresh job cache after successful upload
+        await refreshCachesAfterPost(userName);
+
         return { success: true, data: response.data };
       } catch (error) {
         dispatch(updateProgress({ uri: file.uri, progress: "Failed" }));
@@ -307,6 +312,9 @@ export const syncOfflineUploads = createAsyncThunk(
           updateProgress({ uri: upload.uri || upload.id, progress: "Synced" })
         );
         dispatch(incrementSuccessCount());
+
+        // Refresh job cache after successful upload
+        await refreshCachesAfterPost(userName);
 
         // Delete the local upload after successful upload
         await deleteUpload(upload.id);
