@@ -21,6 +21,7 @@ import { Header } from "../components";
 import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
+import { getAllUploads } from "../services/uploadService";
 import { AppDispatch, RootState } from "../store";
 import { fetchContractors } from "../store/contractorSlice";
 import {
@@ -33,7 +34,6 @@ import { RootStackParamList } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
-// Skeleton components unchanged...
 const PropertySkeleton = () => (
   <View style={styles.screenBanner}>
     <SkeletonLoader.Line width="40%" height={14} style={{ marginBottom: 8 }} />
@@ -137,10 +137,18 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [forceReload, setForceReload] = useState(false);
   const [refreshTimestamp, setRefreshTimestamp] = useState(Date.now());
 
+  // Add state for offline file counts
+  const [offlineFileCounts, setOfflineFileCounts] = useState({
+    image: 0,
+    document: 0,
+    video: 0,
+  });
+
   // Add refs to prevent repeated fetches
   const dataFetchedRef = useRef(false);
   const isMounted = useRef(true);
   const initialLoadComplete = useRef(false);
+  const offlineCountsFetchedRef = useRef(false);
 
   // Redux selectors
   const { items: jobItems } = useSelector(selectJobsList);
@@ -214,10 +222,63 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, []);
 
+  // Fetch offline uploads
+  const fetchOfflineFileCounts = useCallback(async () => {
+    if (offlineCountsFetchedRef.current) return;
+
+    try {
+      // Get all offline uploads
+      const uploads = await getAllUploads();
+
+      // Filter by current job ID and count by file type
+      const jobUploads = uploads.filter((upload) => String(upload.common_id));
+
+      // Count by file type - we need to determine type from file_type or file extension
+      const counts = {
+        image: 0,
+        document: 0,
+        video: 0,
+      };
+
+      jobUploads.forEach((upload) => {
+        const fileType = upload.file_type?.toLowerCase() || "";
+        const fileName = upload.file_name?.toLowerCase() || "";
+
+        // Determine file category
+        if (
+          fileType.includes("image") ||
+          /\.(jpg|jpeg|png|gif|webp|heic|bmp)$/i.test(fileName)
+        ) {
+          counts.image++;
+        } else if (
+          fileType.includes("video") ||
+          /\.(mp4|mov|avi|wmv|flv|mkv|webm)$/i.test(fileName)
+        ) {
+          counts.video++;
+        } else {
+          // Default to document for other file types
+          counts.document++;
+        }
+      });
+
+      setOfflineFileCounts(counts);
+      offlineCountsFetchedRef.current = true;
+    } catch (error) {
+      console.error("Error fetching offline file counts:", error);
+    }
+  }, [jobId]);
+
   // Run once on component mount
   useEffect(() => {
     loadLocalData();
   }, []);
+
+  // Fetch offline counts whenever job detail changes
+  useEffect(() => {
+    if (jobId) {
+      fetchOfflineFileCounts();
+    }
+  }, [jobId, fetchOfflineFileCounts, refreshTimestamp]);
 
   // Primary data loading effect - fixed to prevent multiple calls
   useEffect(() => {
@@ -253,6 +314,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             `[JobDetailScreen] Cannot fetch costs - missing job or common_id`
           );
         }
+
+        // Step 4: Fetch offline file counts
+        await fetchOfflineFileCounts();
       } catch (err) {
         console.error("[JobDetailScreen] Error loading initial data:", err);
       } finally {
@@ -266,7 +330,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     loadInitialData();
-  }, [userId, jobId, dispatch]);
+  }, [userId, jobId, dispatch, fetchOfflineFileCounts]);
 
   // Separate effect for force reload
   useEffect(() => {
@@ -296,6 +360,10 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             })
           );
         }
+
+        // Step 4: Refresh offline file counts
+        offlineCountsFetchedRef.current = false;
+        await fetchOfflineFileCounts();
       } catch (err) {
         console.error("[JobDetailScreen] Error force reloading data:", err);
       } finally {
@@ -308,7 +376,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     reloadData();
-  }, [userId, jobId, dispatch, forceReload]);
+  }, [userId, jobId, dispatch, forceReload, fetchOfflineFileCounts]);
 
   // Handle refresh - completely separate from initial load
   const onRefresh = useCallback(async () => {
@@ -335,6 +403,10 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           })
         );
       }
+
+      // Refresh offline file counts
+      offlineCountsFetchedRef.current = false;
+      await fetchOfflineFileCounts();
     } catch (err) {
       console.error("[JobDetailScreen] Error refreshing:", err);
     } finally {
@@ -343,7 +415,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         dataFetchedRef.current = false;
       }
     }
-  }, [userId, jobId, dispatch, jobItems, refreshing]);
+  }, [userId, jobId, dispatch, jobItems, refreshing, fetchOfflineFileCounts]);
 
   // Tasks array
   const tasks = useMemo(() => {
@@ -372,6 +444,29 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const sc = parseFloat(String(jobDetail?.smart_care_amount || 0));
     return sum + mat + sc;
   }, [costs, jobDetail]);
+
+  // Calculate combined file counts (server + offline)
+  const combinedFileCounts = useMemo(() => {
+    if (!jobDetail) {
+      return {
+        image: offlineFileCounts.image,
+        document: offlineFileCounts.document,
+        video: offlineFileCounts.video,
+      };
+    }
+
+    return {
+      image:
+        (parseInt(String(jobDetail.image_file_count || 0)) || 0) +
+        offlineFileCounts.image,
+      document:
+        (parseInt(String(jobDetail.doc_file_count || 0)) || 0) +
+        offlineFileCounts.document,
+      video:
+        (parseInt(String(jobDetail.video_file_count || 0)) || 0) +
+        offlineFileCounts.video,
+    };
+  }, [jobDetail, offlineFileCounts]);
 
   const showContent = !isLoading && jobDetail;
   const showError = !isLoading && !jobDetail;
@@ -553,7 +648,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </View>
                   </View>
 
-                  {/* File counts */}
+                  {/* File counts with combined totals */}
                   <View style={innerStyles.countsContainer}>
                     <TouchableOpacity
                       style={innerStyles.countBlock}
@@ -571,7 +666,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                           color="#1f3759"
                         />
                         <Text style={innerStyles.countItem}>
-                          {jobDetail.image_file_count}
+                          {combinedFileCounts.image}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -592,7 +687,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                           color="#1f3759"
                         />
                         <Text style={innerStyles.countItem}>
-                          {jobDetail.doc_file_count}
+                          {combinedFileCounts.document}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -613,7 +708,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                           color="#1f3759"
                         />
                         <Text style={innerStyles.countItem}>
-                          {jobDetail.video_file_count}
+                          {combinedFileCounts.video}
                         </Text>
                       </View>
                     </TouchableOpacity>
