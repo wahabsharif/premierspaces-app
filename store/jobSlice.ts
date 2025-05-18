@@ -8,7 +8,7 @@ import {
   JOB_TYPES_CACHE_EXPIRY,
 } from "../Constants/env";
 import { generateCommonId } from "../helper";
-import { getCache } from "../services/cacheService";
+import { getCache, refreshCachesAfterPost } from "../services/cacheService";
 import {
   createJob as createOfflineJob,
   getAllJobs,
@@ -216,6 +216,9 @@ export const createJob = createAsyncThunk<
     if (netInfo.isConnected) {
       const postData = { userid: userId, payload: jobWithCommonId };
       const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
+
+      // Refresh caches after successful POST operation
+      await refreshCachesAfterPost(userId);
 
       // Force a job list refresh after creating a job
       dispatch(resetJobsList());

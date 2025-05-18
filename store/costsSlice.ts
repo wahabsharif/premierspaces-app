@@ -5,7 +5,11 @@ import {
 } from "@reduxjs/toolkit";
 import axios from "axios";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
-import { getCache, isOnline } from "../services/cacheService";
+import {
+  getCache,
+  isOnline,
+  refreshCachesAfterPost,
+} from "../services/cacheService";
 import { createLocalCost, getAllCosts } from "../services/costService";
 import { Costs } from "../types";
 import type { AppDispatch, RootState } from "./index";
@@ -264,13 +268,13 @@ export const createCost = createAsyncThunk<
         throw new Error(errorMsg);
       }
 
-      // After successful API call, refresh costs cache from the server
+      // After successful API call, refresh both caches from the server
+      await refreshCachesAfterPost(userId);
+
+      // Reset cost state for this job
       if (jobId) {
         dispatch(resetCostsForJob(jobId));
       }
-
-      // This will get the latest data from the API and update the cache
-      await dispatch(fetchCosts({ userId, jobId: jobId || "", common_id }));
     } catch (err: any) {
       console.error("[createCost] error", err);
       return rejectWithValue(err.message || "Error creating cost");

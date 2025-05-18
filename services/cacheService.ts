@@ -1,5 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import NetInfo from "@react-native-community/netinfo";
+import axios from "axios";
+import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 
 // Cache configuration
 const CONFIG = {
@@ -443,4 +445,37 @@ export function shutdown() {
     .catch((err) => {
       console.error("[cacheService] Error closing database:", err);
     });
+}
+
+/**
+ * Refreshes critical API data after POST operations and updates cache
+ * @param userId - The user ID for API requests
+ */
+export async function refreshCachesAfterPost(userId: string): Promise<void> {
+  const isConnected = await isOnline();
+  if (!isConnected) return; // Don't attempt refresh if offline
+
+  try {
+    // Fetch fresh jobs data
+    const jobsResponse = await axios.get(
+      `${BASE_API_URL}/getjobs.php?userid=${userId}`
+    );
+    if (jobsResponse.data.status === 1 && jobsResponse.data.payload) {
+      const jobsData = jobsResponse.data.payload;
+      const jobsCacheKey = `getJobsCache_${userId}`;
+      await setCache(jobsCacheKey, jobsData);
+    }
+
+    // Fetch fresh costs data
+    const costsResponse = await axios.get(
+      `${BASE_API_URL}/costs.php?userid=${userId}`
+    );
+    if (costsResponse.data.status === 1 && costsResponse.data.payload) {
+      const costsData = costsResponse.data.payload;
+      const costsCacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
+      await setCache(costsCacheKey, costsData, { expiresIn: 0 }); // Costs cache never expires
+    }
+  } catch (error) {
+    console.error("[refreshCachesAfterPost] Failed to refresh caches:", error);
+  }
 }
