@@ -3,6 +3,7 @@ import { View, Switch, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { color, fontSize } from "../Constants/theme";
 import styles from "../Constants/styles";
+import { Toast } from "toastify-react-native";
 
 interface AppLockToggleProps {
   onLockEnable?: () => void;
@@ -19,7 +20,7 @@ const AppLockToggle: React.FC<AppLockToggleProps> = ({ onLockEnable }) => {
           setIsAppLockEnabled(value === "true");
         }
       } catch (error) {
-        // // console.error("Error fetching app lock status:", error);
+        Toast.error("Error fetching app lock status:");
       }
     };
 
@@ -35,7 +36,7 @@ const AppLockToggle: React.FC<AppLockToggleProps> = ({ onLockEnable }) => {
         onLockEnable();
       }
     } catch (error) {
-      // // console.error("Error saving app lock status:", error);
+      Toast.error("Error saving app lock status");
     }
   };
 

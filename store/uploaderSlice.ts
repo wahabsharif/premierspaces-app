@@ -14,6 +14,7 @@ import {
 } from "../services/uploadService";
 import { MediaFile } from "../types";
 import { RootState } from "./index";
+import { Toast } from "toastify-react-native";
 
 interface UploaderState {
   files: MediaFile[];
@@ -107,7 +108,11 @@ export const uploadFiles = createAsyncThunk(
           );
           dispatch(incrementSuccessCount());
         } catch (error) {
-          console.error("Error storing file offline:", error);
+          Toast.error(
+            `Error storing file offline: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
           dispatch(
             updateProgress({ uri: file.uri, progress: "Failed Offline" })
           );

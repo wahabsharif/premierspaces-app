@@ -4,6 +4,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
 import { BASE_API_URL } from "../Constants/env";
 import { deleteCache, getCache, setCache } from "../services/cacheService";
+import { Toast } from "toastify-react-native";
 
 export interface SubCategory {
   id: number;
@@ -104,7 +105,7 @@ export const loadCategories = createAsyncThunk<
       }
       return rejectWithValue("No valid cached category data found");
     } catch (cacheErr: any) {
-      console.error("Cache retrieval error:", cacheErr);
+      Toast.error("Cache retrieval error:", cacheErr);
       return rejectWithValue(err.message || "Failed to load categories");
     }
   }

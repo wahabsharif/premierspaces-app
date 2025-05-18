@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
+import { Toast } from "toastify-react-native";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 import { getCache, isOnline, setCache } from "../services/cacheService";
 
@@ -71,7 +72,11 @@ export const fetchContractors = createAsyncThunk<
       );
       return normalized;
     } catch (err) {
-      console.error("[fetchContractors] Cache error:", err);
+      Toast.error(
+        `[fetchContractors] Cache error: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
       return [];
     }
   }
@@ -119,7 +124,7 @@ export const fetchContractors = createAsyncThunk<
 
     return normalized;
   } catch (err: any) {
-    console.error("[fetchContractors] API error, trying cache fallback:", err);
+    Toast.error("[fetchContractors] API error, trying cache fallback:", err);
     try {
       const cached = await getCache(cacheKey);
       let contractors = [];
@@ -150,7 +155,11 @@ export const fetchContractors = createAsyncThunk<
 
       return normalized;
     } catch (cacheErr) {
-      console.error("[fetchContractors] Cache fallback error:", cacheErr);
+      Toast.error(
+        `[fetchContractors] Cache fallback error: ${
+          cacheErr instanceof Error ? cacheErr.message : String(cacheErr)
+        }`
+      );
       return rejectWithValue(err.message || "Error fetching contractors");
     }
   }

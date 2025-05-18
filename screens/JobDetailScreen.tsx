@@ -31,6 +31,7 @@ import {
 } from "../store/costsSlice";
 import { fetchJobs, selectJobsList } from "../store/jobSlice";
 import { RootStackParamList } from "../types";
+import { Toast } from "toastify-react-native";
 
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
@@ -218,7 +219,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setProperty(JSON.parse(propJson));
       }
     } catch (e) {
-      console.error("Error loading local data", e);
+      Toast.error(
+        `Error loading local data: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
     }
   }, []);
 
@@ -264,7 +269,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       setOfflineFileCounts(counts);
       offlineCountsFetchedRef.current = true;
     } catch (error) {
-      console.error("Error fetching offline file counts:", error);
+      Toast.error(
+        `Error fetching offline file counts: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }, [jobId]);
 
@@ -318,7 +327,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         // Step 4: Fetch offline file counts
         await fetchOfflineFileCounts();
       } catch (err) {
-        console.error("[JobDetailScreen] Error loading initial data:", err);
+        Toast.error(
+          `[JobDetailScreen] Error loading initial data: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
       } finally {
         if (isMounted.current) {
           setForceReload(false);
@@ -365,7 +378,11 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         offlineCountsFetchedRef.current = false;
         await fetchOfflineFileCounts();
       } catch (err) {
-        console.error("[JobDetailScreen] Error force reloading data:", err);
+        Toast.error(
+          `Error force reloading data: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
       } finally {
         if (isMounted.current) {
           setForceReload(false);
@@ -408,7 +425,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       offlineCountsFetchedRef.current = false;
       await fetchOfflineFileCounts();
     } catch (err) {
-      console.error("[JobDetailScreen] Error refreshing:", err);
+      Toast.error(" Error refreshing:");
     } finally {
       if (isMounted.current) {
         setRefreshing(false);

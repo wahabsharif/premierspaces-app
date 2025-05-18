@@ -28,6 +28,7 @@ import {
   setCategoryMappings,
 } from "../store/filesSlice";
 import { GroupedFiles } from "../types";
+import { Toast } from "toastify-react-native";
 
 const STORAGE_KEYS = {
   USER: "userData",
@@ -70,7 +71,7 @@ export default function FilesScreen({ navigation }: { navigation: any }) {
         );
         if (storedProperty) setProperty(JSON.parse(storedProperty));
       } catch (error) {
-        console.error("Failed to load property:", error);
+        Toast.error("Failed to load property:");
       }
     };
 

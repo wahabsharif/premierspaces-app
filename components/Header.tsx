@@ -69,7 +69,7 @@ const Header = () => {
     if (__DEV__ && DevSettings.reload) {
       DevSettings.reload();
     } else {
-      console.error("Unable to reload programmatically.");
+      // console.error("Unable to reload programmatically.");
     }
   };
 

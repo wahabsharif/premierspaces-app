@@ -488,7 +488,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
         lastFetchTimes.current.costs = Date.now();
       }
     } catch (error) {
-      console.error("[prefetchActiveJobCosts] error:", error);
+      // console.error("[prefetchActiveJobCosts] error:", error);
     } finally {
       fetchInProgress.current.costs = false;
     }

@@ -207,7 +207,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       if (errors.length > 0) {
         errors.forEach((error, index) => {
           const rowNumber = index + 1;
-          console.error(
+          Toast.error(
             `Error creating cost for row ${rowNumber}:`,
             error.reason
           );
@@ -227,7 +227,6 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         });
       }
     } catch (e: any) {
-      console.error("Unexpected error submitting costs:", e);
       Toast.error(`Unexpected error: ${e.message || e}`);
     } finally {
       setIsSubmitting(false);

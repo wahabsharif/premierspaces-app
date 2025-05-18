@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 import { Job } from "../types";
+import { Toast } from "toastify-react-native";
 
 const initializeDatabase = async () => {
   const db = await SQLite.openDatabaseAsync("jobsDB");
@@ -139,7 +140,9 @@ export async function createJob(job: Job): Promise<string> {
     const result = await statement.executeAsync(params);
     return job.id;
   } catch (err) {
-    console.error("[createJob] ERROR:", err);
+    Toast.error(
+      `[createJob] ERROR: ${err instanceof Error ? err.message : String(err)}`
+    );
     throw err;
   } finally {
     await statement.finalizeAsync();
@@ -170,7 +173,11 @@ export async function getAllJobs(): Promise<Job[]> {
 
     return rows as Job[];
   } catch (error) {
-    console.error("[getAllJobs] Error:", error);
+    Toast.error(
+      `[getAllJobs] Error: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     throw error;
   }
 }

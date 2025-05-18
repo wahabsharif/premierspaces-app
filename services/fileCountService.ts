@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 import { Counts } from "../types";
+import { Toast } from "toastify-react-native";
 
 interface CountRow {
   id: string;
@@ -156,7 +157,11 @@ export async function getFileCountByIds(options: {
       video_file_count: row.video_file_count,
     }));
   } catch (error) {
-    console.error("Error in getCountByIds:", error);
+    Toast.error(
+      `Error in getCountByIds: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     return [];
   }
 }

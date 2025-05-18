@@ -6,7 +6,6 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Button,
   DeviceEventEmitter,
   Dimensions,
   FlatList,
@@ -20,7 +19,9 @@ import {
   View,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { Toast } from "toastify-react-native";
 import { Header } from "../components";
+import GetAllCache from "../components/GetAllCache";
 import { SYNC_EVENTS } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
@@ -32,7 +33,6 @@ import { AppDispatch, RootState } from "../store";
 import { selectPendingJobsCount, syncPendingJobs } from "../store/jobSlice";
 import { syncOfflineUploads } from "../store/uploaderSlice";
 import { Costs, Job } from "../types";
-import GetAllCache from "../components/GetAllCache";
 
 const { width } = Dimensions.get("window");
 
@@ -102,7 +102,11 @@ const PendingDataScreen = () => {
       const all = await getAllCosts();
       setCosts(all);
     } catch (err) {
-      console.error("[CostDataScreen] Error loading costs:", err);
+      Toast.error(
+        `[CostDataScreen] Error loading costs: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -160,7 +164,11 @@ const PendingDataScreen = () => {
       const allJobs = await getAllJobs();
       setJobs(allJobs);
     } catch (error) {
-      console.error("[PendingDataScreen] Error loading Pending Data:", error);
+      Toast.error(
+        `Error loading Pending Data: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -173,7 +181,11 @@ const PendingDataScreen = () => {
       const allUploads = await getAllUploads();
       setUploads(allUploads);
     } catch (err) {
-      console.error("[PendingDataScreen] Error loading uploads:", err);
+      Toast.error(
+        `[PendingDataScreen] Error loading uploads: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -238,7 +250,11 @@ const PendingDataScreen = () => {
       });
       setPreviewVisible(true);
     } catch (error) {
-      console.error("Error previewing media:", error);
+      Toast.error(
+        `Error previewing media: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
       Alert.alert("Preview Error", "Failed to load media preview");
     }
   };

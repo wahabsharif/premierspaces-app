@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import "react-native-get-random-values";
+import { Toast } from "toastify-react-native";
 import { v4 as uuidv4 } from "uuid";
 
 export interface UploadSegment {
@@ -123,7 +124,11 @@ const saveBinaryContent = async (
     );
     return filePath;
   } catch (error) {
-    console.error("Error saving file content:", error);
+    Toast.error(
+      `Error saving file content: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     return null;
   }
 };
@@ -158,7 +163,11 @@ const saveFileFromUri = async (
 
     return destinationPath;
   } catch (error) {
-    console.error("Error copying file:", error);
+    Toast.error(
+      `Error copying file: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     return null;
   }
 };
@@ -281,7 +290,11 @@ export async function deleteUpload(id: string): Promise<number> {
         await FileSystem.deleteAsync(upload.content_path);
       }
     } catch (error) {
-      console.error("Error deleting file:", error);
+      Toast.error(
+        `Error deleting file: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
@@ -306,7 +319,11 @@ export async function getFileContent(
     });
     return base64ToUint8Array(base64Content);
   } catch (error) {
-    console.error("Error reading file content:", error);
+    Toast.error(
+      `Error reading file content: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     return null;
   }
 }

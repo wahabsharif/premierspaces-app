@@ -55,7 +55,6 @@ const CategoryScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     AsyncStorage.getItem(STORAGE_KEYS.PROPERTY).then((json) => {
       if (json) setProperty(JSON.parse(json));
     });
-    // .catch(// console.error);
   }, []);
 
   const toggleExpand = useCallback((id: number) => {

@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Toast } from "toastify-react-native";
 import { Header } from "../components";
 import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
@@ -79,7 +80,11 @@ const SearchPropertyScreen: React.FC = () => {
         dispatch(loadCachedProperties());
       }
     } catch (error) {
-      console.error("Failed to initialize app data:", error);
+      Toast.error(
+        `Failed to initialize app data: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }, [dispatch]);
 
@@ -198,7 +203,11 @@ const SearchPropertyScreen: React.FC = () => {
           fromOfflineMode: !isConnected,
         });
       } catch (error) {
-        console.error("Error selecting property:", error);
+        Toast.error(
+          `Error selecting property: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
     },
     [navigation, isConnected]

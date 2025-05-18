@@ -17,6 +17,7 @@ import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
 import { createCost } from "./costsSlice";
 import { RootState } from "./index";
+import { Toast } from "toastify-react-native";
 
 export interface JobState {
   loading: boolean;
@@ -92,7 +93,11 @@ export const fetchJobs = createAsyncThunk<
       offlineJobs = await getAllJobs();
       dispatch(updatePendingCount(offlineJobs.length));
     } catch (err) {
-      console.error("Error fetching offline jobs:", err);
+      Toast.error(
+        `Error fetching offline jobs: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
 
     // Check network connectivity first
@@ -107,7 +112,11 @@ export const fetchJobs = createAsyncThunk<
         const entry = await getCache(cacheKey);
         cachedServerJobs = (entry?.payload?.payload as Job[]) || [];
       } catch (err) {
-        console.error("Error fetching cached jobs:", err);
+        Toast.error(
+          `Error fetching cached jobs: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
       }
 
       // Combine offline and cached server jobs

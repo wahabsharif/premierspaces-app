@@ -1,6 +1,7 @@
-import * as SQLite from "expo-sqlite";
 import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
+import * as SQLite from "expo-sqlite";
+import { Toast } from "toastify-react-native";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 
 // Cache configuration
@@ -135,7 +136,11 @@ export async function setCache(
       await stmt.finalizeAsync();
     }
   } catch (err) {
-    console.error("[cacheService][setCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][setCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -187,7 +192,11 @@ export async function setBatchCache(
       return totalChanges;
     });
   } catch (err) {
-    console.error("[cacheService][setBatchCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][setBatchCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -230,7 +239,11 @@ export async function getCache(
       expires_at: row.expires_at ?? 0,
     };
   } catch (err) {
-    console.error("[cacheService][getCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][getCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -259,7 +272,11 @@ export async function getAllCache(): Promise<CacheEntry[]> {
       expires_at: row.expires_at,
     }));
   } catch (err) {
-    console.error("[cacheService][getAllCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][getAllCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -290,7 +307,11 @@ export async function getCacheByPrefix(prefix: string): Promise<CacheEntry[]> {
       expires_at: row.expires_at,
     }));
   } catch (err) {
-    console.error("[cacheService][getCacheByPrefix] ERROR:", err);
+    Toast.error(
+      `[cacheService][getCacheByPrefix] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -310,7 +331,11 @@ export async function deleteCache(key: string): Promise<number> {
     await stmt.finalizeAsync();
     return res.changes;
   } catch (err) {
-    console.error("[cacheService][deleteCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][deleteCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -348,7 +373,11 @@ export async function deleteBatchCache(keys: string[]): Promise<number> {
       return totalDeleted;
     });
   } catch (err) {
-    console.error("[cacheService][deleteBatchCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][deleteBatchCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -368,7 +397,11 @@ export async function deleteCacheByPrefix(prefix: string): Promise<number> {
     // Then delete them all in a batch
     return await deleteBatchCache(keys);
   } catch (err) {
-    console.error("[cacheService][deleteCacheByPrefix] ERROR:", err);
+    Toast.error(
+      `[cacheService][deleteCacheByPrefix] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -382,7 +415,11 @@ export async function clearCache(): Promise<void> {
   try {
     await db.execAsync(SQL.CLEAR);
   } catch (err) {
-    console.error("[cacheService][clearCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][clearCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -405,7 +442,11 @@ export async function cleanExpiredCache(): Promise<number> {
     }
     return deletedCount;
   } catch (err) {
-    console.error("[cacheService][cleanExpiredCache] ERROR:", err);
+    Toast.error(
+      `[cacheService][cleanExpiredCache] ERROR: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
     throw err;
   }
 }
@@ -423,7 +464,11 @@ function startCleanupTimer() {
       try {
         await cleanExpiredCache();
       } catch (err) {
-        console.error("[cacheService] Cleanup timer error:", err);
+        Toast.error(
+          `[cacheService] Cleanup timer error: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
       }
     }
   }, CONFIG.CLEANUP_INTERVAL);
@@ -443,7 +488,11 @@ export function shutdown() {
       dbReady = false;
     })
     .catch((err) => {
-      console.error("[cacheService] Error closing database:", err);
+      Toast.error(
+        `[cacheService] Error closing database: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     });
 }
 
@@ -476,6 +525,10 @@ export async function refreshCachesAfterPost(userId: string): Promise<void> {
       await setCache(costsCacheKey, costsData, { expiresIn: 0 }); // Costs cache never expires
     }
   } catch (error) {
-    console.error("[refreshCachesAfterPost] Failed to refresh caches:", error);
+    Toast.error(
+      `[refreshCachesAfterPost] Failed to refresh caches: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }

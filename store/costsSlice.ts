@@ -13,6 +13,7 @@ import {
 import { createLocalCost, getAllCosts } from "../services/costService";
 import { Costs } from "../types";
 import type { AppDispatch, RootState } from "./index";
+import { Toast } from "toastify-react-native";
 
 export interface CostState {
   items: Record<string, Costs[]>;
@@ -99,7 +100,11 @@ export const fetchCosts = createAsyncThunk<
             String(cost.common_id) === String(common_id)
         );
       } catch (err) {
-        console.error("[fetchCosts] Error getting local costs:", err);
+        Toast.error(
+          `[fetchCosts] Error getting local costs: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
       }
 
       // If online and we need to refresh, fetch from API
@@ -153,7 +158,11 @@ export const fetchCosts = createAsyncThunk<
 
           return { jobId, costs: combinedCosts, isOffline: false };
         } catch (error) {
-          console.error("[fetchCosts] API error, falling back to cache", error);
+          Toast.error(
+            `[fetchCosts] API error, falling back to cache: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
           // Fall back to cache on API error
         }
       } else if (online) {
@@ -228,7 +237,11 @@ export const fetchCosts = createAsyncThunk<
 
         return { jobId, costs: combinedCosts, isOffline: !online };
       } catch (error) {
-        console.error("[fetchCosts] cache fallback error", error);
+        Toast.error(
+          `[fetchCosts] cache fallback error: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
 
       // If all else fails, just return local costs (which could be empty)
@@ -311,7 +324,7 @@ export const createCost = createAsyncThunk<
         dispatch(resetCostsForJob(jobId));
       }
     } catch (err: any) {
-      console.error("[createCost] error", err);
+      Toast.error("[createCost] error", err);
       return rejectWithValue(err.message || "Error creating cost");
     }
   }

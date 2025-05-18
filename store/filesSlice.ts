@@ -6,6 +6,7 @@ import { BASE_API_URL } from "../Constants/env";
 import { getCache, setCache } from "../services/cacheService";
 import { FileItem, FileTypeCount, GroupedFiles } from "../types";
 import { Category } from "./categorySlice";
+import { Toast } from "toastify-react-native";
 
 const STORAGE_KEYS = {
   USER: "userData",
@@ -244,7 +245,11 @@ export const createCategoryMappings = (categoriesData: any) => {
       }
     });
   } catch (error) {
-    console.error("[FilesSlice] Error creating category mappings:", error);
+    Toast.error(
+      `[FilesSlice] Error creating category mappings: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 
   return { categoryMap: catMap, subCategoryMap: subMap };
@@ -329,7 +334,7 @@ export const loadFiles = createAsyncThunk<
       }
       return rejectWithValue("No valid cached files found");
     } catch (cacheErr: any) {
-      console.error("[FilesSlice] Cache retrieval error:", cacheErr);
+      Toast.error("[FilesSlice] Cache retrieval error:", cacheErr);
       return rejectWithValue(err.message || "Failed to load files");
     }
   }

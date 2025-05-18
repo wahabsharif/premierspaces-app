@@ -50,7 +50,7 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
         uploads,
       });
     } catch (err) {
-      console.error("[DataSyncManager] Error fetching pending counts:", err);
+      // console.error("[DataSyncManager] Error fetching pending counts:", err);
     }
   };
 
