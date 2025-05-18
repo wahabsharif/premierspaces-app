@@ -2,16 +2,15 @@ import { AntDesign, MaterialIcons } from "@expo/vector-icons";
 import Entypo from "@expo/vector-icons/Entypo";
 import Feather from "@expo/vector-icons/Feather";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEvent } from "expo";
 import * as Camera from "expo-camera";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import { useEvent } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Button as RNButton,
   Dimensions,
   FlatList,
   Image,
@@ -39,6 +38,7 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     subCategory = {},
     common_id = "",
     job_id = "",
+    materialCost = "0",
   } = route.params || {};
   const dispatch = useDispatch<AppDispatch>();
   const files = useSelector((state: RootState) => state.uploader.files);
@@ -660,6 +660,8 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         successCount={successCount}
         failedCount={failedCount}
         totalCount={successCount + failedCount}
+        jobId={job_id}
+        materialCost={materialCost}
       />
     </View>
   );

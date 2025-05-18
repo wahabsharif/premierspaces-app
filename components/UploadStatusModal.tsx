@@ -1,9 +1,11 @@
-import React from "react";
-import { Modal, StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native"; // ← import this
-import { color, fontSize } from "../Constants/theme";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import React from "react";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import styles from "../Constants/styles";
+import { color, fontSize } from "../Constants/theme";
+import { RootStackParamList } from "../types";
 
 interface UploadStatusModalProps {
   visible: boolean;
@@ -11,7 +13,12 @@ interface UploadStatusModalProps {
   successCount: number;
   failedCount: number;
   totalCount: number;
+  jobId?: string;
+  materialCost?: string;
 }
+
+// Define the type for our navigation prop
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
   visible,
@@ -19,15 +26,26 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
   successCount,
   failedCount,
   totalCount,
+  jobId,
+  materialCost = "0",
 }) => {
-  const navigation = useNavigation(); // ← hook for navigation
+  // Properly type the navigation hook
+  const navigation = useNavigation<NavigationProp>();
   const allSuccess = failedCount === 0;
 
   const handleOkay = () => {
     onClose(); // hide the modal
-    navigation.goBack(); // go back to previous screen
-    // — OR —
-    // navigation.navigate('YourListScreen', { refresh: true });
+
+    // Navigate to JobDetailScreen with refresh parameter instead of going back
+    if (jobId) {
+      navigation.navigate("JobDetailScreen", {
+        id: jobId,
+        refresh: true,
+        materialCost: materialCost,
+      });
+    } else {
+      navigation.goBack();
+    }
   };
 
   return (

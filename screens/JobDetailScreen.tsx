@@ -5,8 +5,8 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useState,
   useRef,
+  useState,
 } from "react";
 import {
   RefreshControl,
@@ -124,7 +124,7 @@ const FileCountsSkeleton = () => (
 );
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { id: jobId, refresh } = route.params;
+  const { id: jobId, refresh, materialCost: routeMaterialCost } = route.params;
   const dispatch = useDispatch<AppDispatch>();
   const [userId, setUserId] = useState<string | null>(null);
   const [property, setProperty] = useState<{
@@ -182,11 +182,12 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   // Force a reload when refresh parameter changes
   useEffect(() => {
     if (refresh && userId) {
-      console.log(
-        "[JobDetailScreen] Refresh parameter changed, forcing reload"
-      );
       // Reset the cost data for this job to force a fresh fetch
       dispatch(resetCostsForJob(jobId));
+
+      // Force a fresh API fetch when refresh is true
+      dispatch(fetchJobs({ userId, force: true }));
+
       setForceReload(true);
       setRefreshTimestamp(Date.now());
     }
@@ -225,7 +226,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       return;
 
     const loadInitialData = async () => {
-      console.log("[JobDetailScreen] Starting initial data load");
       setIsLoading(true);
       dataFetchedRef.current = true;
 
@@ -241,9 +241,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         // Step 3: Only fetch costs if we have the job with common_id
         if (currentJob?.common_id && isMounted.current) {
-          console.log(
-            `[JobDetailScreen] Fetching costs with common_id: ${currentJob.common_id}`
-          );
           await dispatch(
             fetchCosts({
               userId,
@@ -276,7 +273,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     if (!userId || !forceReload || dataFetchedRef.current) return;
 
     const reloadData = async () => {
-      console.log("[JobDetailScreen] Force reloading data");
       setIsLoading(true);
       dataFetchedRef.current = true;
 
@@ -292,9 +288,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
         // Step 3: Only fetch costs if we have the job with common_id
         if (currentJob?.common_id && isMounted.current) {
-          console.log(
-            `[JobDetailScreen] Force reloading costs with common_id: ${currentJob.common_id}`
-          );
           await dispatch(
             fetchCosts({
               userId,
@@ -321,7 +314,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const onRefresh = useCallback(async () => {
     if (!userId || refreshing || dataFetchedRef.current) return;
 
-    console.log("[JobDetailScreen] Manual refresh requested");
     setRefreshing(true);
     dataFetchedRef.current = true; // Prevent other loads during refresh
 
@@ -329,18 +321,12 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       // Reset costs data to force a fresh fetch
       dispatch(resetCostsForJob(jobId));
 
-      // Fetch jobs and contractors first
-      await Promise.all([
-        dispatch(fetchContractors(userId)),
-        dispatch(fetchJobs({ userId })),
-      ]);
+      // Force a fresh API fetch on pull-to-refresh
+      await dispatch(fetchJobs({ userId, force: true }));
 
       // Then fetch costs with the latest job data
       const currentJob = jobItems.find((j) => j.id === jobId);
       if (currentJob?.common_id) {
-        console.log(
-          `[JobDetailScreen] Refreshing costs with common_id: ${currentJob.common_id}`
-        );
         await dispatch(
           fetchCosts({
             userId,
@@ -429,6 +415,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   navigation.navigate("UploadScreen", {
                     job_id: id,
                     common_id: jobDetail.common_id,
+                    materialCost: jobDetail.material_cost,
                   });
                 }}
               >
