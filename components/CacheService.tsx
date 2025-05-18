@@ -100,19 +100,32 @@ const CacheService: React.FC<CacheServiceProps> = ({
         signal: abortController.current.signal,
         timeout: 10000, // Add timeout to prevent hanging requests
       });
-      if (
-        response.data.status === 0 &&
-        response.data.message === "Session expired"
-      ) {
+
+      // Check for session expiration regardless of status code
+      if (response.data && response.data.message === "Session expired") {
         handleSessionExpired();
         return null;
       }
+
       return response.data;
     } catch (error) {
       if (axios.isCancel(error)) {
         console.log("Request canceled:", url);
       } else {
         console.warn(`API request failed for ${url}:`, error);
+
+        // Also check for session expired in error responses
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "response" in error &&
+          (error as any).response?.data?.message === "Session expired"
+        ) {
+          console.log("Session expired detected in error response");
+          handleSessionExpired();
+          return null;
+        }
+
         // Return a special value to indicate we should use cache
         return { useCache: true };
       }
@@ -394,7 +407,12 @@ const CacheService: React.FC<CacheServiceProps> = ({
     const key = `getJobsCache_${userId}`;
     if (fetchInProgress.current.jobs) return;
     fetchInProgress.current.jobs = true;
+
+    let retryCount = 0;
+    const maxRetries = 2;
+
     try {
+      // Check cache first
       const cacheEntry = await getCache(key);
       const now = Date.now();
       if (
@@ -405,32 +423,91 @@ const CacheService: React.FC<CacheServiceProps> = ({
         await store.dispatch(fetchJobsThunk({ userId }));
         return;
       }
-      const data = await fetchWithSessionCheck(
-        `${BASE_API_URL}/getjobs.php?userid=${userId}`
-      );
-      if (!data) return;
 
-      // Check if we need to use cache due to API failure
-      if (data.useCache) {
-        if (cacheEntry?.payload) {
-          // Use existing cache even if stale
-          await store.dispatch(fetchJobsThunk({ userId, useCache: true }));
-          lastFetchTimes.current.jobs = now; // Update timestamp to prevent repeated attempts
+      // Attempt to fetch with retries
+      while (retryCount <= maxRetries) {
+        try {
+          const data = await fetchWithSessionCheck(
+            `${BASE_API_URL}/getjobs.php?userid=${userId}`
+          );
+
+          // Handle no data case
+          if (!data) return;
+
+          // If API indicates we should use cache
+          if (data.useCache) {
+            if (cacheEntry?.payload) {
+              await store.dispatch(fetchJobsThunk({ userId, useCache: true }));
+              lastFetchTimes.current.jobs = now;
+            }
+            return;
+          }
+
+          // Validate response structure
+          if (!data.payload) {
+            console.warn(
+              "Jobs API returned no payload:",
+              JSON.stringify(data).substring(0, 100)
+            );
+            throw new Error("Jobs API missing payload");
+          }
+
+          // More detailed validation
+          if (!Array.isArray(data.payload)) {
+            console.warn(
+              "Jobs data is not an array:",
+              typeof data.payload,
+              JSON.stringify(data.payload).substring(0, 100)
+            );
+
+            // Special case - sometimes the API might return an object with a payload property
+            if (
+              data.payload &&
+              typeof data.payload === "object" &&
+              Array.isArray(data.payload.payload)
+            ) {
+              await setCache(key, data.payload.payload);
+              await store.dispatch(fetchJobsThunk({ userId }));
+              lastFetchTimes.current.jobs = now;
+              return;
+            }
+
+            throw new Error("Invalid jobs response format");
+          }
+
+          // Success path
+          await setCache(key, data.payload);
+          await store.dispatch(fetchJobsThunk({ userId }));
+          lastFetchTimes.current.jobs = now;
+          return;
+        } catch (fetchError) {
+          retryCount++;
+          if (retryCount <= maxRetries) {
+            console.log(`Retrying jobs fetch (${retryCount}/${maxRetries})...`);
+            await new Promise((r) => setTimeout(r, 1000 * retryCount)); // Exponential backoff
+          } else {
+            throw fetchError; // Retries exhausted, propagate error
+          }
         }
-        return;
       }
-
-      if (!Array.isArray(data.payload))
-        throw new Error("Invalid jobs response");
-      await setCache(key, data.payload);
-      await store.dispatch(fetchJobsThunk({ userId }));
-      lastFetchTimes.current.jobs = now;
     } catch (error) {
       console.error("Error in prefetchJobs:", error);
-      // Try to use cache as fallback
+
+      // Log detailed diagnostics
+      if (error instanceof Error) {
+        console.error(`Jobs fetch failed: ${error.message}`);
+      } else {
+        console.error("Jobs fetch failed with non-Error:", error);
+      }
+
+      // Fallback to cache if available
       const cacheEntry = await getCache(key);
       if (cacheEntry?.payload) {
+        console.log("Using cached jobs data as fallback");
         await store.dispatch(fetchJobsThunk({ userId, useCache: true }));
+        lastFetchTimes.current.jobs = Date.now(); // Update to prevent immediate retry
+      } else {
+        console.warn("No jobs cache available for fallback");
       }
     } finally {
       fetchInProgress.current.jobs = false;
