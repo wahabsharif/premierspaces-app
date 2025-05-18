@@ -6,7 +6,7 @@ import {
 import axios from "axios";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
 import { getCache, isOnline } from "../services/cacheService";
-import { createLocalCost } from "../services/costService";
+import { createLocalCost, getAllCosts } from "../services/costService";
 import { Costs } from "../types";
 import type { AppDispatch, RootState } from "./index";
 
@@ -53,6 +53,20 @@ export const fetchCosts = createAsyncThunk<
     const online = await isOnline();
     dispatch(setOfflineMode(!online));
 
+    // Get local SQLite costs first (these are costs created while offline)
+    let localCosts: Costs[] = [];
+    try {
+      const allLocalCosts = await getAllCosts();
+      // Filter costs for this job based on both job_id and common_id
+      localCosts = allLocalCosts.filter(
+        (cost) =>
+          String(cost.job_id) === String(jobId) ||
+          String(cost.common_id) === String(common_id)
+      );
+    } catch (err) {
+      console.error("[fetchCosts] Error getting local costs:", err);
+    }
+
     // If online and we need to refresh, fetch from API
     if (online && shouldRefreshFromNetwork) {
       try {
@@ -78,16 +92,31 @@ export const fetchCosts = createAsyncThunk<
         }
 
         // More flexible filtering logic - job_id could be string or number
-        // Replace the existing filtering logic with this:
         const filtered = payloadArray.filter((c) => {
           // Use primarily common_id for matching, as it's the shared identifier
           return String(c.common_id) === String(common_id);
-
-          // Alternatively, use an OR condition
-          // return String(c.job_id) === String(jobId) || String(c.common_id) === String(common_id);
         });
 
-        return { jobId, costs: filtered, isOffline: false };
+        // Combine API costs with local costs, avoiding duplicates
+        const combinedCosts = [...filtered];
+
+        // Add local costs that aren't in the API response
+        localCosts.forEach((localCost) => {
+          // Check if this local cost already exists in the API response
+          const exists = combinedCosts.some(
+            (apiCost) =>
+              apiCost.id === localCost.id ||
+              (apiCost.contractor_id === localCost.contractor_id &&
+                apiCost.amount === localCost.amount &&
+                apiCost.material_cost === localCost.material_cost)
+          );
+
+          if (!exists) {
+            combinedCosts.push(localCost);
+          }
+        });
+
+        return { jobId, costs: combinedCosts, isOffline: false };
       } catch (error) {
         console.error("[fetchCosts] API error, falling back to cache", error);
         // Fall back to cache on API error
@@ -98,12 +127,30 @@ export const fetchCosts = createAsyncThunk<
       console.log(`[fetchCosts] Offline mode, using cached data`);
     }
 
-    // Use existing data in memory if available
+    // Use existing data in memory if available and combine with local costs
     if (items[jobId] && items[jobId].length > 0) {
-      return { jobId, costs: items[jobId], isOffline: !online };
+      const cachedCosts = items[jobId];
+      const combinedCosts = [...cachedCosts];
+
+      // Add local costs that aren't in the cached costs
+      localCosts.forEach((localCost) => {
+        const exists = combinedCosts.some(
+          (cachedCost) =>
+            cachedCost.id === localCost.id ||
+            (cachedCost.contractor_id === localCost.contractor_id &&
+              cachedCost.amount === localCost.amount &&
+              cachedCost.material_cost === localCost.material_cost)
+        );
+
+        if (!exists) {
+          combinedCosts.push(localCost);
+        }
+      });
+
+      return { jobId, costs: combinedCosts, isOffline: !online };
     }
 
-    // Offline mode or API error fallback - use cache
+    // Offline mode or API error fallback - use cache + local costs
     try {
       const cacheEntry = await getCache(cacheKey);
       let archived: any[] = [];
@@ -123,17 +170,34 @@ export const fetchCosts = createAsyncThunk<
       const filtered = archived.filter((c) => {
         const matchesJob = String(c.job_id) === String(jobId);
         const matchesCommonId = String(c.common_id) === String(common_id);
-        return matchesJob && matchesCommonId;
+        return matchesJob || matchesCommonId; // Changed to OR to be more inclusive
       });
-      return { jobId, costs: filtered, isOffline: !online };
+
+      // Combine cached costs with local costs
+      const combinedCosts = [...filtered];
+
+      // Add local costs that aren't in the cached costs
+      localCosts.forEach((localCost) => {
+        const exists = combinedCosts.some(
+          (cachedCost) =>
+            cachedCost.id === localCost.id ||
+            (cachedCost.contractor_id === localCost.contractor_id &&
+              cachedCost.amount === localCost.amount &&
+              cachedCost.material_cost === localCost.material_cost)
+        );
+
+        if (!exists) {
+          combinedCosts.push(localCost);
+        }
+      });
+
+      return { jobId, costs: combinedCosts, isOffline: !online };
     } catch (error) {
       console.error("[fetchCosts] cache fallback error", error);
     }
 
-    if (online) {
-      return rejectWithValue("Unable to load costs data.");
-    }
-    return { jobId, costs: [], isOffline: true };
+    // If all else fails, just return local costs (which could be empty)
+    return { jobId, costs: localCosts, isOffline: true };
   }
 );
 export const createCost = createAsyncThunk<
