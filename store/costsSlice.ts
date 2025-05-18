@@ -49,10 +49,6 @@ export const fetchCosts = createAsyncThunk<
     const lastFetchTime = lastFetched[jobId] || 0;
     const shouldRefreshFromNetwork = now - lastFetchTime > 30000;
 
-    console.log(
-      `[fetchCosts] Fetching costs for jobId: ${jobId}, common_id: ${common_id}, shouldRefreshFromNetwork: ${shouldRefreshFromNetwork}`
-    );
-
     // Check online status first
     const online = await isOnline();
     dispatch(setOfflineMode(!online));
@@ -60,9 +56,6 @@ export const fetchCosts = createAsyncThunk<
     // If online and we need to refresh, fetch from API
     if (online && shouldRefreshFromNetwork) {
       try {
-        console.log(
-          `[fetchCosts] Making API request for costs. jobId: ${jobId}, common_id: ${common_id}`
-        );
         const { data } = await axios.get(`${BASE_API_URL}/costs.php`, {
           params: { userid: userId, common_id },
           headers: { "Content-Type": "application/json" },
@@ -82,10 +75,6 @@ export const fetchCosts = createAsyncThunk<
           } else if (typeof data.payload === "object") {
             payloadArray = [data.payload];
           }
-
-          console.log(
-            `[fetchCosts] Received ${payloadArray.length} costs from API`
-          );
         }
 
         // Always update the cache with fresh data (with no expiration)
@@ -103,9 +92,6 @@ export const fetchCosts = createAsyncThunk<
           // return String(c.job_id) === String(jobId) || String(c.common_id) === String(common_id);
         });
 
-        console.log(
-          `[fetchCosts] Filtered ${filtered.length} costs for jobId: ${jobId}`
-        );
         return { jobId, costs: filtered, isOffline: false };
       } catch (error) {
         console.error("[fetchCosts] API error, falling back to cache", error);
@@ -119,7 +105,6 @@ export const fetchCosts = createAsyncThunk<
 
     // Use existing data in memory if available
     if (items[jobId] && items[jobId].length > 0) {
-      console.log(`[fetchCosts] Using in-memory data for jobId: ${jobId}`);
       return { jobId, costs: items[jobId], isOffline: !online };
     }
 
@@ -145,11 +130,6 @@ export const fetchCosts = createAsyncThunk<
         const matchesCommonId = String(c.common_id) === String(common_id);
         return matchesJob && matchesCommonId;
       });
-
-      console.log(
-        `[fetchCosts] Found ${filtered.length} costs in cache for jobId: ${jobId}`
-      );
-
       return { jobId, costs: filtered, isOffline: !online };
     } catch (error) {
       console.error("[fetchCosts] cache fallback error", error);
@@ -241,8 +221,6 @@ export const createCost = createAsyncThunk<
           "Failed to create cost on server";
         throw new Error(errorMsg);
       }
-
-      console.log("[createCost] Successfully created cost on server");
 
       // After successful API call, refresh costs cache from the server
       if (jobId) {
