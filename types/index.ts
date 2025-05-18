@@ -165,3 +165,12 @@ export interface Costs {
   smart_care_amount?: string;
   material_cost?: string | number | null;
 }
+
+export interface Counts {
+  id: string;
+  property_id: string | null;
+  common_id: string | null;
+  image_file_count: number | null;
+  doc_file_count: number | null;
+  video_file_count: number | null;
+}
