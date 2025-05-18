@@ -779,6 +779,13 @@
     deepmerge "^3.2.0"
     hoist-non-react-statics "^3.3.0"
 
+"@egjs/hammerjs@^2.0.17":
+  version "2.0.17"
+  resolved "https://registry.yarnpkg.com/@egjs/hammerjs/-/hammerjs-2.0.17.tgz#5dc02af75a6a06e4c2db0202cae38c9263895124"
+  integrity sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==
+  dependencies:
+    "@types/hammerjs" "^2.0.36"
+
 "@expo/cli@0.24.13":
   version "0.24.13"
   resolved "https://registry.yarnpkg.com/@expo/cli/-/cli-0.24.13.tgz#0066e038982b7143f966d688e76e02d935f0dc8b"
@@ -1504,6 +1511,11 @@
   dependencies:
     "@types/node" "*"
 
+"@types/hammerjs@^2.0.36":
+  version "2.0.46"
+  resolved "https://registry.yarnpkg.com/@types/hammerjs/-/hammerjs-2.0.46.tgz#381daaca1360ff8a7c8dff63f32e69745b9fb1e1"
+  integrity sha512-ynRvcq6wvqexJ9brDMS4BnBLzmr0e14d6ZJTEShTBWKymQiHwlAyGu0ZPEFI2Fh1U53F7tN9ufClWM5KvqkKOw==
+
 "@types/istanbul-lib-coverage@*", "@types/istanbul-lib-coverage@^2.0.0":
   version "2.0.6"
   resolved "https://registry.yarnpkg.com/@types/istanbul-lib-coverage/-/istanbul-lib-coverage-2.0.6.tgz#7739c232a1fee9b4d3ce8985f314c0c6d33549d7"
@@ -1544,13 +1556,6 @@
   integrity sha512-c6WbyCgWTBgKKMESj/8b4w+zWcZSsCforson7UdXtXMecG3MxCinYi6ihhrHVPyUrVzORsvEzK8zg32z4pK6Sg==
   dependencies:
     "@types/react" "*"
-
-"@types/react-native@^0.73.0":
-  version "0.73.0"
-  resolved "https://registry.yarnpkg.com/@types/react-native/-/react-native-0.73.0.tgz#b316be230745779814caa533360262140b0f5984"
-  integrity sha512-6ZRPQrYM72qYKGWidEttRe6M5DZBEV5F+MHMHqd4TTYx0tfkcdrUFGdef6CCxY0jXU7wldvd/zA/b0A/kTeJmA==
-  dependencies:
-    react-native "*"
 
 "@types/react@*":
   version "19.1.4"
@@ -4177,6 +4182,15 @@ react-native-edge-to-edge@1.6.0:
   resolved "https://registry.yarnpkg.com/react-native-edge-to-edge/-/react-native-edge-to-edge-1.6.0.tgz#2ba63b941704a7f713e298185c26cde4d9e4b973"
   integrity sha512-2WCNdE3Qd6Fwg9+4BpbATUxCLcouF6YRY7K+J36KJ4l3y+tWN6XCqAC4DuoGblAAbb2sLkhEDp4FOlbOIot2Og==
 
+react-native-gesture-handler@^2.14.0:
+  version "2.25.0"
+  resolved "https://registry.yarnpkg.com/react-native-gesture-handler/-/react-native-gesture-handler-2.25.0.tgz#3a5a8912ea4f5e68ab211a9fa5a191c08ad50883"
+  integrity sha512-NPjJi6mislXxvjxQPU9IYwBjb1Uejp8GvAbE1Lhh+xMIMEvmgAvVIp5cz1P+xAbV6uYcRRArm278+tEInGOqWg==
+  dependencies:
+    "@egjs/hammerjs" "^2.0.17"
+    hoist-non-react-statics "^3.3.0"
+    invariant "^2.2.4"
+
 react-native-get-random-values@^1.11.0:
   version "1.11.0"
   resolved "https://registry.yarnpkg.com/react-native-get-random-values/-/react-native-get-random-values-1.11.0.tgz#1ca70d1271f4b08af92958803b89dccbda78728d"
@@ -4244,7 +4258,7 @@ react-native-vector-icons@*:
     prop-types "^15.7.2"
     yargs "^16.1.1"
 
-react-native@*, react-native@0.79.2:
+react-native@0.79.2:
   version "0.79.2"
   resolved "https://registry.yarnpkg.com/react-native/-/react-native-0.79.2.tgz#f1a53099701c1736d09e441eb79f97cfc90dd202"
   integrity sha512-AnGzb56JvU5YCL7cAwg10+ewDquzvmgrMddiBM0GAWLwQM/6DJfGd2ZKrMuKKehHerpDDZgG+EY64gk3x3dEkw==
@@ -5149,11 +5163,6 @@ yargs@^17.6.2:
     string-width "^4.2.3"
     y18n "^5.0.5"
     yargs-parser "^21.1.1"
-
-yarn@^1.22.22:
-  version "1.22.22"
-  resolved "https://registry.yarnpkg.com/yarn/-/yarn-1.22.22.tgz#ac34549e6aa8e7ead463a7407e1c7390f61a6610"
-  integrity sha512-prL3kGtyG7o9Z9Sv8IPfBNrWTDmXB4Qbes8A9rEzt6wkJV8mUvoirjU0Mp3GGAU06Y0XQyA3/2/RQFVuK7MTfg==
 
 yocto-queue@^0.1.0:
   version "0.1.0"
