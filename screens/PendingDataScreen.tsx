@@ -32,6 +32,7 @@ import { AppDispatch, RootState } from "../store";
 import { selectPendingJobsCount, syncPendingJobs } from "../store/jobSlice";
 import { syncOfflineUploads } from "../store/uploaderSlice";
 import { Costs, Job } from "../types";
+import GetAllCache from "../components/GetAllCache";
 
 const { width } = Dimensions.get("window");
 
@@ -610,7 +611,7 @@ const PendingDataScreen = () => {
           )}
         </ScrollView>
       )}
-
+      <GetAllCache />
       {/* Media Preview Modal */}
       {renderMediaPreview()}
     </View>
