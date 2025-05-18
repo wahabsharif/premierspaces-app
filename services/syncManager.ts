@@ -100,6 +100,18 @@ export class SyncManager {
     let uploadSynced = 0,
       uploadFailed = 0;
 
+    // Track last sync time to prevent too frequent syncs
+    const lastSyncTime = await AsyncStorage.getItem("lastSyncTime");
+    const now = Date.now();
+    if (lastSyncTime) {
+      const timeSinceLastSync = now - Number(lastSyncTime);
+      // If synced in the last 30 seconds, don't sync again
+      if (timeSinceLastSync < 30000) {
+        this.isSyncing = false;
+        return;
+      }
+    }
+
     try {
       // get user ID from storage
       const userStr = await AsyncStorage.getItem("userData");
@@ -271,6 +283,8 @@ export class SyncManager {
       this.notify({ status: "error", message: msg });
       Toast.error(msg);
     } finally {
+      // Store the sync time
+      await AsyncStorage.setItem("lastSyncTime", now.toString());
       this.isSyncing = false;
     }
   }

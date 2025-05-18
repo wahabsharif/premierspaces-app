@@ -452,21 +452,32 @@ const CacheService: React.FC<CacheServiceProps> = ({
     try {
       const online = await isOnline();
       if (online) {
-        const data = await fetchWithSessionCheck(
-          `${BASE_API_URL}/costs.php?userid=${userId}`
-        );
+        // Check if we've fetched costs recently (within the last 2 minutes)
+        const now = Date.now();
+        const lastCostFetchTime = lastFetchTimes.current.costs || 0;
+        const shouldRefreshCosts = now - lastCostFetchTime > 120000;
 
-        if (!data) return;
+        if (shouldRefreshCosts) {
+          const data = await fetchWithSessionCheck(
+            `${BASE_API_URL}/costs.php?userid=${userId}`
+          );
 
-        let costs: any[] = Array.isArray(data.payload)
-          ? data.payload
-          : Array.isArray(data.payload.payload)
-          ? data.payload.payload
-          : [data.payload];
+          if (!data) return;
 
-        // Store costs in cache with no expiration (expiresIn: 0)
-        await setCache(key, costs, { expiresIn: 0 });
-        lastFetchTimes.current.costs = Date.now();
+          let costs: any[] = Array.isArray(data.payload)
+            ? data.payload
+            : Array.isArray(data.payload.payload)
+            ? data.payload.payload
+            : [data.payload];
+
+          // Store costs in cache with no expiration (expiresIn: 0)
+          await setCache(key, costs, { expiresIn: 0 });
+          lastFetchTimes.current.costs = now;
+        } else {
+          console.log(
+            "[prefetchActiveJobCosts] Skipping refresh, fetched recently"
+          );
+        }
         return;
       }
 
