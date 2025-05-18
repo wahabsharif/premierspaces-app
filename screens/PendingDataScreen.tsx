@@ -491,9 +491,11 @@ const PendingDataScreen = () => {
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
+          paddingHorizontal: 20,
+          paddingBottom: 10,
         }}
       >
-        <Text style={{ ...styles.heading, paddingHorizontal: 15 }}>
+        <Text style={{ ...styles.heading, marginBottom: 3 }}>
           Pending Data ({jobs.length + costs.length + uploads.length})
         </Text>
         {hasAnyData && (
