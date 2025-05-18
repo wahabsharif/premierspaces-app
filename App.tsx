@@ -29,6 +29,7 @@ import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
 import LoginScreen from "./screens/LoginScreen";
 import { store } from "./store";
+import { loadFonts } from "./utils/fontLoader";
 
 LogBox.ignoreLogs(["useInsertionEffect must not schedule updates"]);
 
@@ -37,6 +38,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const insets = useSafeAreaInsets();
 
   // Track current route name
@@ -44,6 +46,22 @@ export default function App() {
   const [currentRouteName, setCurrentRouteName] = useState<string | undefined>(
     undefined
   );
+
+  // Load fonts first
+  useEffect(() => {
+    const loadAppFonts = async () => {
+      try {
+        await loadFonts();
+        setFontsLoaded(true);
+      } catch (error) {
+        console.error("Error loading fonts:", error);
+        // Still set as loaded to not block the app completely
+        setFontsLoaded(true);
+      }
+    };
+
+    loadAppFonts();
+  }, []);
 
   // Initialization: check login, lock, version
   useEffect(() => {
@@ -94,7 +112,7 @@ export default function App() {
     return () => sub.remove();
   }, [isPickingImage]);
 
-  if (isLoading) {
+  if (isLoading || !fontsLoaded) {
     return (
       <SafeAreaView style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#347ab8" />

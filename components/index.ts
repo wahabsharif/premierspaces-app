@@ -7,3 +7,4 @@ export { default as PinInput } from "./PinInput";
 export { default as ProgressBar } from "./ProgressBar";
 export { default as UploadStatusModal } from "./UploadStatusModal";
 export { default as VideoThumbnail } from "./VideoThumbnail";
+export { default as SkeletonLoader } from "./SkeletonLoader";
