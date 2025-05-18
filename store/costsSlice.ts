@@ -5,7 +5,7 @@ import {
 } from "@reduxjs/toolkit";
 import axios from "axios";
 import { BASE_API_URL, CACHE_CONFIG } from "../Constants/env";
-import { getCache, isOnline, setCache } from "../services/cacheService";
+import { getCache, isOnline } from "../services/cacheService";
 import { createLocalCost } from "../services/costService";
 import { Costs } from "../types";
 import type { AppDispatch, RootState } from "./index";
@@ -76,11 +76,6 @@ export const fetchCosts = createAsyncThunk<
             payloadArray = [data.payload];
           }
         }
-
-        // Always update the cache with fresh data (with no expiration)
-        await setCache(cacheKey, payloadArray, {
-          expiresIn: COSTS_NEVER_EXPIRE,
-        });
 
         // More flexible filtering logic - job_id could be string or number
         // Replace the existing filtering logic with this:
@@ -174,23 +169,6 @@ export const createCost = createAsyncThunk<
               ? parseFloat(materialCost || "0").toFixed(2)
               : null,
         });
-
-        const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
-        try {
-          // Update cache with the new offline cost
-          const cacheEntry = await getCache(cacheKey);
-          const existing: any[] =
-            cacheEntry && Array.isArray(cacheEntry.payload)
-              ? cacheEntry.payload
-              : cacheEntry?.payload?.payload || [];
-
-          // Use expiresIn: 0 to ensure the cache never expires
-          await setCache(cacheKey, [...existing, newCost], {
-            expiresIn: COSTS_NEVER_EXPIRE,
-          });
-        } catch (cacheErr) {
-          console.error("[createCost] cache write error", cacheErr);
-        }
 
         if (jobId) {
           dispatch(resetCostsForJob(jobId));

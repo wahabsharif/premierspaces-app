@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import axios from "axios";
@@ -6,17 +7,16 @@ import {
   CACHE_CONFIG,
   JOB_TYPES_CACHE_EXPIRY,
 } from "../Constants/env";
-import { getCache, setCache } from "../services/cacheService";
+import { generateCommonId } from "../helper";
+import { getCache } from "../services/cacheService";
 import {
   createJob as createOfflineJob,
   getAllJobs,
 } from "../services/jobService";
 import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
-import { RootState } from "./index";
 import { createCost } from "./costsSlice";
-import { generateCommonId } from "../helper";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { RootState } from "./index";
 
 export interface JobState {
   loading: boolean;
@@ -61,9 +61,6 @@ export const fetchJobTypes = createAsyncThunk<
     );
 
     const jobTypes = resp.data.payload as Job[];
-
-    // Store in SQLite cache
-    await setCache(cacheKey, jobTypes);
 
     return jobTypes;
   } catch (err: any) {
@@ -130,7 +127,6 @@ export const fetchJobs = createAsyncThunk<
         serverJobs = resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
 
         // Always update the cache with latest server data
-        await setCache(cacheKey, serverJobs);
       } else {
         const entry = await getCache(cacheKey);
         serverJobs = (entry?.payload?.payload as Job[]) || [];
