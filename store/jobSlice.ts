@@ -43,47 +43,97 @@ export interface JobsListState {
 
 export const fetchJobTypes = createAsyncThunk<
   Job[],
-  { userId: string },
+  { userId: string; useCache?: boolean },
   { rejectValue: string; state: RootState }
->("jobTypes/fetch", async ({ userId }, { rejectWithValue, getState }) => {
-  const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
+>(
+  "jobTypes/fetch",
+  async ({ userId, useCache = false }, { rejectWithValue, getState }) => {
+    const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
 
-  const { lastFetched, items } = getState().job.jobTypes;
-  const isFresh =
-    lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
+    const { lastFetched, items } = getState().job.jobTypes;
+    const isFresh =
+      lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
 
-  if (isFresh && items.length > 0) {
-    return items;
-  }
-
-  try {
-    const resp = await axios.get(
-      `${BASE_API_URL}/jobtypes.php?userid=${userId}`
-    );
-
-    const jobTypes = resp.data.payload as Job[];
-
-    return jobTypes;
-  } catch (err: any) {
-    console.warn("[Slice] Remote fetch failed, falling back to cache:", err);
-
-    // Get from SQLite cache
-    const cachedEntry = await getCache(cacheKey);
-    if (cachedEntry?.payload?.payload) {
-      return cachedEntry.payload.payload as Job[];
+    // If data is fresh and available, return it immediately
+    if (isFresh && items.length > 0) {
+      return items;
     }
 
-    return rejectWithValue(err.response?.data?.message || err.message);
+    // If useCache flag is set, prefer cache even if stale
+    if (useCache) {
+      try {
+        const cachedEntry = await getCache(cacheKey);
+        if (cachedEntry?.payload?.payload) {
+          console.log(
+            "[fetchJobTypes] Using cached job types due to useCache flag"
+          );
+          return cachedEntry.payload.payload as Job[];
+        }
+      } catch (err) {
+        console.warn("[fetchJobTypes] Error accessing cache:", err);
+      }
+    }
+
+    try {
+      // Only attempt network request if not explicitly using cache
+      if (!useCache) {
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+          const resp = await axios.get(
+            `${BASE_API_URL}/jobtypes.php?userid=${userId}`,
+            { timeout: 10000 } // Add timeout to prevent hanging requests
+          );
+
+          if (resp.data && resp.data.payload) {
+            const jobTypes = resp.data.payload as Job[];
+            return jobTypes;
+          }
+        }
+      }
+
+      // If we get here, either network request failed or we're offline
+      // Fall back to cache
+      console.warn(
+        "[fetchJobTypes] Network unavailable, falling back to cache"
+      );
+      const cachedEntry = await getCache(cacheKey);
+      if (cachedEntry?.payload?.payload) {
+        return cachedEntry.payload.payload as Job[];
+      }
+
+      // If no cached data, throw error
+      throw new Error("No cached job types available");
+    } catch (err: any) {
+      console.warn("[fetchJobTypes] Error:", err);
+
+      // Final attempt to get from cache if we haven't already
+      if (!useCache) {
+        try {
+          const cachedEntry = await getCache(cacheKey);
+          if (cachedEntry?.payload?.payload) {
+            console.log("[fetchJobTypes] Using cached job types after error");
+            return cachedEntry.payload.payload as Job[];
+          }
+        } catch (cacheErr) {
+          console.warn("[fetchJobTypes] Cache access error:", cacheErr);
+        }
+      }
+
+      return rejectWithValue(err.response?.data?.message || err.message);
+    }
   }
-});
+);
 
 export const fetchJobs = createAsyncThunk<
   Job[],
-  { userId: string; propertyId?: string; force?: boolean },
+  { userId: string; propertyId?: string; force?: boolean; useCache?: boolean },
   { rejectValue: string; state: RootState }
 >(
   "jobs/fetch",
-  async ({ userId, propertyId, force = false }, { getState, dispatch }) => {
+  async (
+    { userId, propertyId, force = false, useCache = false },
+    { getState, dispatch }
+  ) => {
     const cacheKey = `getJobsCache_${userId}`;
     const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}`;
 
@@ -104,8 +154,11 @@ export const fetchJobs = createAsyncThunk<
     const net = await NetInfo.fetch();
     const isOnline = net.isConnected;
 
-    // 2) If we're offline, combine SQLite jobs with cached server jobs
-    if (!isOnline) {
+    // 2) If we're offline or useCache flag is set, combine SQLite jobs with cached server jobs
+    if (!isOnline || useCache) {
+      console.log(
+        `[fetchJobs] Using cached data: offline=${!isOnline}, useCache=${useCache}`
+      );
       // Get cached server jobs
       let cachedServerJobs: Job[] = [];
       try {
@@ -167,7 +220,9 @@ export const fetchJobs = createAsyncThunk<
 
     // 4) Online and needs fresh data: fetch from server
     try {
-      const resp = await axios.get(ENDPOINT);
+      const resp = await axios.get(ENDPOINT, {
+        timeout: 15000, // Add timeout to prevent hanging requests
+      });
       const serverJobs =
         resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
       const merged = [...serverJobs];
@@ -188,6 +243,9 @@ export const fetchJobs = createAsyncThunk<
         : merged;
     } catch (err: any) {
       console.warn("[fetchJobs] Server fetch failed, using cached data:", err);
+
+      // Show user-friendly toast message
+      Toast.info("Using cached data - server unavailable");
 
       // 5) Error fallback: merge cached + offline
       const entry = await getCache(cacheKey);

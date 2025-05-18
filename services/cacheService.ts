@@ -506,29 +506,103 @@ export async function refreshCachesAfterPost(userId: string): Promise<void> {
 
   try {
     // Fetch fresh jobs data
-    const jobsResponse = await axios.get(
-      `${BASE_API_URL}/getjobs.php?userid=${userId}`
-    );
-    if (jobsResponse.data.status === 1 && jobsResponse.data.payload) {
+    const jobsResponse = await axios
+      .get(
+        `${BASE_API_URL}/getjobs.php?userid=${userId}`,
+        { timeout: 10000 } // Add timeout to prevent hanging requests
+      )
+      .catch((error) => {
+        console.warn("Failed to fetch jobs for refreshCachesAfterPost:", error);
+        return { data: null };
+      });
+
+    if (jobsResponse.data?.status === 1 && jobsResponse.data.payload) {
       const jobsData = jobsResponse.data.payload;
       const jobsCacheKey = `getJobsCache_${userId}`;
       await setCache(jobsCacheKey, jobsData);
     }
 
     // Fetch fresh costs data
-    const costsResponse = await axios.get(
-      `${BASE_API_URL}/costs.php?userid=${userId}`
-    );
-    if (costsResponse.data.status === 1 && costsResponse.data.payload) {
+    const costsResponse = await axios
+      .get(
+        `${BASE_API_URL}/costs.php?userid=${userId}`,
+        { timeout: 10000 } // Add timeout to prevent hanging requests
+      )
+      .catch((error) => {
+        console.warn(
+          "Failed to fetch costs for refreshCachesAfterPost:",
+          error
+        );
+        return { data: null };
+      });
+
+    if (costsResponse.data?.status === 1 && costsResponse.data.payload) {
       const costsData = costsResponse.data.payload;
       const costsCacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
       await setCache(costsCacheKey, costsData, { expiresIn: 0 }); // Costs cache never expires
     }
   } catch (error) {
+    console.error("refreshCachesAfterPost error:", error);
     Toast.error(
       `[refreshCachesAfterPost] Failed to refresh caches: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
+  }
+}
+
+/**
+ * Safely attempts to fetch data from an API endpoint with fallback to cache
+ * @param url - API endpoint URL to fetch
+ * @param cacheKey - Key to retrieve cached data if API fails
+ * @param options - Request options
+ * @returns The data from API or cache
+ */
+export async function fetchWithCacheFallback<T>(
+  url: string,
+  cacheKey: string,
+  options: { timeout?: number } = {}
+): Promise<{ data: T | null; fromCache: boolean }> {
+  try {
+    // Check network first
+    const isConnected = await isOnline();
+    if (!isConnected) {
+      // Get from cache if offline
+      const cached = await getCache(cacheKey);
+      return {
+        data: cached?.payload?.payload || null,
+        fromCache: true,
+      };
+    }
+
+    // Try API request
+    const response = await axios.get(url, {
+      timeout: options.timeout || 10000,
+    });
+
+    // If successful, update cache and return data
+    if (response.data && response.data.status === 1) {
+      await setCache(cacheKey, response.data.payload);
+      return { data: response.data.payload, fromCache: false };
+    }
+
+    throw new Error("Invalid API response");
+  } catch (error) {
+    console.warn(`[fetchWithCacheFallback] API error for ${url}:`, error);
+
+    // Fall back to cache
+    try {
+      const cached = await getCache(cacheKey);
+      if (cached?.payload) {
+        return {
+          data: cached.payload.payload || null,
+          fromCache: true,
+        };
+      }
+    } catch (cacheError) {
+      console.error("[fetchWithCacheFallback] Cache access error:", cacheError);
+    }
+
+    return { data: null, fromCache: true };
   }
 }

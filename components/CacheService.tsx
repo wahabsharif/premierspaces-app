@@ -98,6 +98,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
     try {
       const response = await axios.get(url, {
         signal: abortController.current.signal,
+        timeout: 10000, // Add timeout to prevent hanging requests
       });
       if (
         response.data.status === 0 &&
@@ -109,7 +110,11 @@ const CacheService: React.FC<CacheServiceProps> = ({
       return response.data;
     } catch (error) {
       if (axios.isCancel(error)) {
+        console.log("Request canceled:", url);
       } else {
+        console.warn(`API request failed for ${url}:`, error);
+        // Return a special value to indicate we should use cache
+        return { useCache: true };
       }
       return null;
     }
@@ -255,11 +260,29 @@ const CacheService: React.FC<CacheServiceProps> = ({
         `${BASE_API_URL}/contractors.php?userid=${userId}`
       );
       if (!data) return;
+
+      // Check if we need to use cache due to API failure
+      if (data.useCache) {
+        if (cacheEntry?.payload) {
+          // Use existing cache even if stale
+          const now = Date.now();
+          lastFetchTimes.current.contractors = now; // Update timestamp to prevent repeated attempts
+        }
+        return;
+      }
+
       if (!Array.isArray(data.payload))
         throw new Error("Invalid contractors data");
       await setCache(key, data.payload);
       lastFetchTimes.current.contractors = now;
     } catch (error) {
+      console.error("Error in prefetchContractors:", error);
+      // Try to use cache as fallback
+      const cacheEntry = await getCache(key);
+      if (cacheEntry?.payload) {
+        const now = Date.now();
+        lastFetchTimes.current.contractors = now; // Update timestamp to prevent repeated attempts
+      }
     } finally {
       fetchInProgress.current.contractors = false;
     }
@@ -339,12 +362,29 @@ const CacheService: React.FC<CacheServiceProps> = ({
         `${BASE_API_URL}/jobtypes.php?userid=${userId}`
       );
       if (!data) return;
+
+      // Check if we need to use cache due to API failure
+      if (data.useCache) {
+        if (cacheEntry?.payload) {
+          // Use existing cache even if stale
+          store.dispatch(fetchJobTypes({ userId, useCache: true }));
+          lastFetchTimes.current.jobTypes = now; // Update timestamp to prevent repeated attempts
+        }
+        return;
+      }
+
       if (!Array.isArray(data.payload))
         throw new Error("Invalid job types data");
       await setCache(key, data.payload);
       store.dispatch(fetchJobTypes({ userId }));
       lastFetchTimes.current.jobTypes = now;
     } catch (error) {
+      console.error("Error in prefetchJobTypes:", error);
+      // Try to use cache as fallback
+      const cacheEntry = await getCache(key);
+      if (cacheEntry?.payload) {
+        store.dispatch(fetchJobTypes({ userId, useCache: true }));
+      }
     } finally {
       fetchInProgress.current.jobTypes = false;
     }
@@ -369,12 +409,29 @@ const CacheService: React.FC<CacheServiceProps> = ({
         `${BASE_API_URL}/getjobs.php?userid=${userId}`
       );
       if (!data) return;
+
+      // Check if we need to use cache due to API failure
+      if (data.useCache) {
+        if (cacheEntry?.payload) {
+          // Use existing cache even if stale
+          await store.dispatch(fetchJobsThunk({ userId, useCache: true }));
+          lastFetchTimes.current.jobs = now; // Update timestamp to prevent repeated attempts
+        }
+        return;
+      }
+
       if (!Array.isArray(data.payload))
         throw new Error("Invalid jobs response");
       await setCache(key, data.payload);
       await store.dispatch(fetchJobsThunk({ userId }));
       lastFetchTimes.current.jobs = now;
     } catch (error) {
+      console.error("Error in prefetchJobs:", error);
+      // Try to use cache as fallback
+      const cacheEntry = await getCache(key);
+      if (cacheEntry?.payload) {
+        await store.dispatch(fetchJobsThunk({ userId, useCache: true }));
+      }
     } finally {
       fetchInProgress.current.jobs = false;
     }
@@ -402,7 +459,24 @@ const CacheService: React.FC<CacheServiceProps> = ({
         const data = await fetchWithSessionCheck(
           `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`
         );
-        if (!data) return;
+
+        // If API failed, use cached data if available
+        if (!data || data.useCache) {
+          if (cacheEntry?.payload) {
+            const list: any[] = Array.isArray(cacheEntry.payload)
+              ? cacheEntry.payload
+              : cacheEntry.payload.payload;
+            store.dispatch(setCategories(list));
+            const { categoryMap, subCategoryMap } =
+              createCategoryMappings(list);
+            store.dispatch(
+              setCategoryMappings({ categoryMap, subCategoryMap })
+            );
+            lastFetchTimes.current.categories = now; // Update to prevent repeated attempts
+          }
+          return;
+        }
+
         await setCache(key, data.payload);
         store.dispatch(loadCategories());
         const { categoryMap, subCategoryMap } = createCategoryMappings(
@@ -410,6 +484,18 @@ const CacheService: React.FC<CacheServiceProps> = ({
         );
         store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
         lastFetchTimes.current.categories = now;
+      }
+    } catch (error) {
+      console.error("Error in prefetchCategories:", error);
+      // Try to use cache as fallback
+      const cacheEntry = await getCache(key);
+      if (cacheEntry?.payload) {
+        const list: any[] = Array.isArray(cacheEntry.payload)
+          ? cacheEntry.payload
+          : cacheEntry.payload.payload;
+        store.dispatch(setCategories(list));
+        const { categoryMap, subCategoryMap } = createCategoryMappings(list);
+        store.dispatch(setCategoryMappings({ categoryMap, subCategoryMap }));
       }
     } finally {
       fetchInProgress.current.categories = false;
@@ -433,12 +519,21 @@ const CacheService: React.FC<CacheServiceProps> = ({
       const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/get-files.php?userid=${userId}`
       );
-      if (!data) return;
+
+      // If API failed, use cached data if available
+      if (!data || data.useCache) {
+        if (cacheEntry?.payload) {
+          lastFetchTimes.current.files = now; // Update to prevent repeated attempts
+        }
+        return;
+      }
+
       if (!Array.isArray(data.payload))
         throw new Error("Invalid files data structure");
       await setCache(key, data.payload);
       lastFetchTimes.current.files = now;
     } catch (error) {
+      console.error("Error in prefetchFiles:", error);
     } finally {
       fetchInProgress.current.files = false;
     }
@@ -462,7 +557,14 @@ const CacheService: React.FC<CacheServiceProps> = ({
             `${BASE_API_URL}/costs.php?userid=${userId}`
           );
 
-          if (!data) return;
+          // If API failed, use cached data if available
+          if (!data || data.useCache) {
+            const cacheEntry = await getCache(key);
+            if (cacheEntry?.payload) {
+              lastFetchTimes.current.costs = now; // Update to prevent repeated attempts
+            }
+            return;
+          }
 
           let costs: any[] = Array.isArray(data.payload)
             ? data.payload
@@ -488,7 +590,12 @@ const CacheService: React.FC<CacheServiceProps> = ({
         lastFetchTimes.current.costs = Date.now();
       }
     } catch (error) {
-      // console.error("[prefetchActiveJobCosts] error:", error);
+      console.error("[prefetchActiveJobCosts] error:", error);
+      // Try to use cache as fallback
+      const cacheEntry = await getCache(key);
+      if (cacheEntry?.payload) {
+        lastFetchTimes.current.costs = Date.now();
+      }
     } finally {
       fetchInProgress.current.costs = false;
     }
