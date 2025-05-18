@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -23,6 +24,7 @@ import {
   fetchJobTypes,
   selectJobsList,
   selectJobTypes,
+  syncPendingJobs,
 } from "../store/jobSlice";
 import { Job, RootStackParamList } from "../types";
 
@@ -163,6 +165,7 @@ const JobsScreen = ({
   const [refreshing, setRefreshing] = useState(false);
   const [showSkeletons, setShowSkeletons] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
 
   const jobTypeMap = useMemo(
     () =>
@@ -228,6 +231,20 @@ const JobsScreen = ({
     };
   }, [loading, initialLoad]);
 
+  // Check for network connectivity
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOffline(!state.isConnected);
+    });
+
+    // Initial check
+    NetInfo.fetch().then((state) => {
+      setIsOffline(!state.isConnected);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // Fetch jobs on screen focus
   useFocusEffect(
     useCallback(() => {
@@ -248,10 +265,21 @@ const JobsScreen = ({
     if (!userData || !propertyData) return;
     setRefreshing(true);
     const uid = userData.payload?.userid ?? userData.userid;
-    dispatch(fetchJobs({ userId: uid, force: true }) as any).finally(() => {
-      setRefreshing(false);
-    });
-  }, [userData, propertyData, dispatch]);
+
+    if (isOffline) {
+      // In offline mode, just refresh from local sources
+      dispatch(fetchJobs({ userId: uid }) as any).finally(() => {
+        setRefreshing(false);
+      });
+    } else {
+      // When online, try to sync pending jobs first, then refresh
+      dispatch(syncPendingJobs() as any)
+        .then(() => dispatch(fetchJobs({ userId: uid, force: true }) as any))
+        .finally(() => {
+          setRefreshing(false);
+        });
+    }
+  }, [userData, propertyData, dispatch, isOffline]);
 
   const handleJobPress = useCallback(
     async (item: Job) => {
@@ -277,7 +305,6 @@ const JobsScreen = ({
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Jobs List</Text>
         </View>
-
         {showSkeletons ? (
           <>
             <PropertyBannerSkeleton />
