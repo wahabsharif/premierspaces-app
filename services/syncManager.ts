@@ -16,8 +16,9 @@ import { deleteUpload, getAllUploads } from "./uploadService";
 // Define the background task name
 const BACKGROUND_SYNC_TASK = "background-sync";
 
-// Determine if running in Expo Go
+// Determine if running in Expo Go and improve detection
 const isExpoGo = Constants.appOwnership === "expo";
+const isNotificationsSupported = !(isExpoGo && Platform.OS === "android");
 
 export interface SyncState {
   status: "idle" | "syncing" | "in_progress" | "complete" | "error";
@@ -27,14 +28,17 @@ export interface SyncState {
   failedCount?: number;
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Only set notification handler if not in Expo Go on Android
+if (isNotificationsSupported) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export class SyncManager {
   private static instance: SyncManager;
@@ -56,15 +60,25 @@ export class SyncManager {
 
   public async initialize() {
     if (isExpoGo) {
-      console.warn(
-        "Limited notification functionality in Expo Go. For full functionality, use a development build."
+      console.log(
+        "Running in Expo Go environment with limited notification support"
       );
+      if (Platform.OS === "android") {
+        console.warn(
+          "Notifications functionality removed from Expo Go on Android since SDK 53. Use a development build for full functionality."
+        );
+      }
     }
 
-    await this.requestNotificationPermissions();
+    // Only try notifications if supported
+    if (isNotificationsSupported) {
+      await this.requestNotificationPermissions();
+    }
+
     await this.defineBackgroundTask();
 
-    if (!(isExpoGo && Platform.OS === "android")) {
+    // Skip background task registration in Expo Go on Android
+    if (!isExpoGo || Platform.OS !== "android") {
       await this.registerBackgroundTask();
     } else {
       console.warn(
@@ -109,10 +123,9 @@ export class SyncManager {
 
   private async requestNotificationPermissions(): Promise<boolean> {
     try {
-      if (isExpoGo && Platform.OS === "android") {
-        console.warn("Notification permissions limited in Expo Go on Android");
-        Toast.success(
-          "Sync Manager initialized (notification limitations in Expo Go)"
+      if (!isNotificationsSupported) {
+        console.log(
+          "Skipping notification permissions in unsupported environment"
         );
         return false;
       }
@@ -136,7 +149,9 @@ export class SyncManager {
   private async registerBackgroundTask(): Promise<void> {
     try {
       if (isExpoGo) {
-        console.warn("Background task registration not supported in Expo Go");
+        console.warn(
+          "Background task registration not fully supported in Expo Go"
+        );
         return;
       }
 
@@ -160,7 +175,14 @@ export class SyncManager {
 
   private async notify(state: SyncState) {
     this.listeners.forEach((l) => l(state));
-    await this.updateSyncNotification(state);
+
+    // Always show Toast notifications as a reliable fallback
+    this.showToastForState(state);
+
+    // Only try to show system notifications if supported
+    if (isNotificationsSupported) {
+      await this.updateSyncNotification(state);
+    }
 
     switch (state.status) {
       case "syncing":
@@ -180,27 +202,31 @@ export class SyncManager {
     }
   }
 
+  // New method to consistently show Toasts
+  private showToastForState(state: SyncState) {
+    switch (state.status) {
+      case "syncing":
+        Toast.info("Starting sync...");
+        break;
+      case "in_progress":
+        if (state.progress && Math.round(state.progress * 100) % 20 === 0) {
+          // Limit toast frequency to avoid flooding
+          Toast.info(`${state.message} (${Math.round(state.progress * 100)}%)`);
+        }
+        break;
+      case "complete":
+        Toast.success(state.message);
+        break;
+      case "error":
+        Toast.error(state.message);
+        break;
+    }
+  }
+
   private async updateSyncNotification(state: SyncState) {
     try {
-      if (isExpoGo && Platform.OS === "android") {
-        switch (state.status) {
-          case "syncing":
-            Toast.info("Starting sync...");
-            break;
-          case "in_progress":
-            if (state.progress) {
-              Toast.info(
-                `${state.message} (${Math.round(state.progress * 100)}%)`
-              );
-            }
-            break;
-          case "complete":
-            Toast.success(state.message);
-            break;
-          case "error":
-            Toast.error(state.message);
-            break;
-        }
+      // Skip if notifications not supported
+      if (!isNotificationsSupported) {
         return;
       }
 
@@ -609,7 +635,13 @@ export class SyncManager {
   }
 
   public async cleanup() {
-    await Notifications.dismissAllNotificationsAsync();
+    if (isNotificationsSupported) {
+      try {
+        await Notifications.dismissAllNotificationsAsync();
+      } catch (error) {
+        console.error("Failed to dismiss notifications:", error);
+      }
+    }
   }
 }
 
