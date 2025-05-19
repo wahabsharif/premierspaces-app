@@ -21,6 +21,9 @@ export class SyncManager {
   private static instance: SyncManager;
   private isSyncing = false;
   private listeners: ((state: SyncState) => void)[] = [];
+  private previousNetworkState: boolean | null = null;
+  private syncInProgress = new Set<string>(); // Track items being synced
+  private lastSyncAttempt = 0; // Track last sync attempt timestamp
 
   private constructor() {}
 
@@ -32,12 +35,24 @@ export class SyncManager {
   }
 
   public initialize() {
-    NetInfo.addEventListener((state) => {
-      if (state.isConnected) {
-        this.checkAndSync();
-      }
+    // Initialize with current network state
+    NetInfo.fetch().then((state) => {
+      this.previousNetworkState = state.isConnected;
     });
-    // initial check
+
+    // Add listener for network changes
+    NetInfo.addEventListener((state) => {
+      const isNowConnected = state.isConnected === true;
+      const wasOffline = this.previousNetworkState === false;
+
+      // Only trigger sync when transitioning from offline to online
+      if (isNowConnected && wasOffline) {
+        this.checkAndSync(true); // Force immediate sync on network recovery
+      }
+      this.previousNetworkState = isNowConnected;
+    });
+
+    // Initial check
     this.checkAndSync();
   }
 
@@ -68,8 +83,17 @@ export class SyncManager {
     }
   }
 
-  private async checkAndSync() {
-    if (this.isSyncing) return;
+  private async checkAndSync(forceSync = false) {
+    if (this.isSyncing) {
+      return;
+    }
+
+    // Add time-based throttling - prevent multiple rapid sync attempts
+    const now = Date.now();
+    if (!forceSync && now - this.lastSyncAttempt < 5000) {
+      return;
+    }
+    this.lastSyncAttempt = now;
 
     try {
       const [jobs, costs, uploads] = await Promise.all([
@@ -77,20 +101,55 @@ export class SyncManager {
         getAllCosts(),
         getAllUploads(),
       ]);
+
+      // Update pending counts in the event system
+      DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
+        jobsCount: jobs.length,
+        costsCount: costs.length,
+        uploadsCount: uploads.length,
+        jobs,
+        costs,
+        uploads,
+      });
+
       const anyPending =
         jobs.length > 0 || costs.length > 0 || uploads.length > 0;
       const net = await NetInfo.fetch();
+
       if (anyPending && net.isConnected) {
-        this.syncAll();
+        // If we have pending data and we're online
+        if (forceSync) {
+          this.syncAll(true);
+        } else {
+          // Wait a moment before syncing to allow UI to stabilize
+          setTimeout(() => this.syncAll(), 1000);
+        }
       }
     } catch (error) {
       Toast.error("[SyncManager] checkAndSync error:");
     }
   }
 
-  public async syncAll() {
-    if (this.isSyncing) return;
+  public async syncAll(skipTimeCheck = false) {
+    if (this.isSyncing) {
+      return;
+    }
+
+    // Track last sync time to prevent too frequent syncs
+    if (!skipTimeCheck) {
+      const lastSyncTime = await AsyncStorage.getItem("lastSyncTime");
+      const now = Date.now();
+      if (lastSyncTime) {
+        const timeSinceLastSync = now - Number(lastSyncTime);
+        // If synced in the last 30 seconds, don't sync again
+        if (timeSinceLastSync < 30000) {
+          return;
+        }
+      }
+    }
+
     this.isSyncing = true;
+    this.syncInProgress.clear(); // Reset the tracking set
     this.notify({ status: "syncing", message: "Syncing all data..." });
 
     let jobSynced = 0,
@@ -99,18 +158,6 @@ export class SyncManager {
       costFailed = 0;
     let uploadSynced = 0,
       uploadFailed = 0;
-
-    // Track last sync time to prevent too frequent syncs
-    const lastSyncTime = await AsyncStorage.getItem("lastSyncTime");
-    const now = Date.now();
-    if (lastSyncTime) {
-      const timeSinceLastSync = now - Number(lastSyncTime);
-      // If synced in the last 30 seconds, don't sync again
-      if (timeSinceLastSync < 30000) {
-        this.isSyncing = false;
-        return;
-      }
-    }
 
     try {
       // get user ID from storage
@@ -121,7 +168,16 @@ export class SyncManager {
 
       // 1. Sync Jobs
       const jobs = await getAllJobs();
+
       for (const job of jobs) {
+        // Skip if already syncing this item
+        const itemKey = `job_${job.id}`;
+        if (this.syncInProgress.has(itemKey)) {
+          continue;
+        }
+
+        this.syncInProgress.add(itemKey);
+
         try {
           const jobData = {
             userid: userId,
@@ -133,6 +189,8 @@ export class SyncManager {
             { timeout: 10000, validateStatus: (s) => s < 500 }
           );
           if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
+
+          // Remove from DB only after successful sync
           await deleteJob(job.id);
           jobSynced++;
           this.notify({
@@ -143,14 +201,24 @@ export class SyncManager {
             failedCount: jobFailed + costFailed + uploadFailed,
           });
         } catch (err) {
+          console.error(`[SyncManager] Job sync failed:`, err);
           Toast.error(`Job sync failed (${job.id}):`);
           jobFailed++;
+        } finally {
+          this.syncInProgress.delete(itemKey);
         }
       }
 
       // 2. Sync Costs
       const costs = await getAllCosts();
       for (const cost of costs) {
+        const itemKey = `cost_${cost.id}`;
+        if (this.syncInProgress.has(itemKey)) {
+          continue;
+        }
+
+        this.syncInProgress.add(itemKey);
+
         try {
           const costData = {
             userid: userId,
@@ -176,6 +244,7 @@ export class SyncManager {
             failedCount: jobFailed + costFailed + uploadFailed,
           });
         } catch (err) {
+          this.syncInProgress.delete(itemKey);
           Toast.error(`Cost sync failed (${cost.id}):`);
           costFailed++;
         }
@@ -284,8 +353,9 @@ export class SyncManager {
       Toast.error(msg);
     } finally {
       // Store the sync time
-      await AsyncStorage.setItem("lastSyncTime", now.toString());
+      await AsyncStorage.setItem("lastSyncTime", Date.now().toString());
       this.isSyncing = false;
+      this.syncInProgress.clear();
     }
   }
 

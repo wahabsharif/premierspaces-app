@@ -113,7 +113,6 @@ const OpenNewJobScreen = ({
 
           if (isStale) {
             dispatch(fetchJobTypes({ userId: uid }));
-          } else {
           }
         }
 

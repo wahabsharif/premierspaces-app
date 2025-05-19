@@ -1,7 +1,5 @@
-// components/DataSyncManager.tsx
-
 import NetInfo from "@react-native-community/netinfo";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { Toast } from "toastify-react-native";
@@ -28,6 +26,11 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
   const [pendingUploads, setPendingUploads] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Keep track of previous network state with ref to avoid re-renders
+  const prevNetworkState = useRef<boolean | null>(null);
+  // Add a ref to track network change handling
+  const networkChangeHandlingRef = useRef<boolean>(false);
+
   /** Refresh counts of jobs, costs, and uploads */
   const refreshPendingCounts = async () => {
     try {
@@ -49,8 +52,19 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
         costs,
         uploads,
       });
+
+      return {
+        jobs: jobs.length,
+        costs: costs.length,
+        uploads: uploads.length,
+      };
     } catch (err) {
-      // console.error("[DataSyncManager] Error fetching pending counts:", err);
+      console.error("[DataSyncManager] Error fetching pending counts:", err);
+      return {
+        jobs: pendingJobs,
+        costs: pendingCosts,
+        uploads: pendingUploads,
+      };
     }
   };
 
@@ -83,19 +97,58 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
     return () => clearInterval(id);
   }, [dispatch]);
 
-  /** Auto‑trigger sync when network returns and any queue is non‑empty */
+  /** Enhanced network change handler with explicit offline-to-online detection */
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(({ isConnected }) => {
-      if (
-        isConnected &&
-        !isSyncing &&
-        (pendingJobs > 0 || pendingCosts > 0 || pendingUploads > 0)
-      ) {
-        syncManager.syncAll();
-      }
+    // Initialize the previous state
+    NetInfo.fetch().then((state) => {
+      prevNetworkState.current = state.isConnected;
     });
+
+    const handleNetStateChange = async (state: {
+      isConnected: boolean | null;
+    }) => {
+      // Prevent concurrent handling of network changes
+      if (networkChangeHandlingRef.current) {
+        return;
+      }
+
+      networkChangeHandlingRef.current = true;
+
+      try {
+        const isNowConnected = state.isConnected === true;
+        const wasOffline = prevNetworkState.current === false;
+
+        // Only handle the offline-to-online transition
+        if (isNowConnected && wasOffline) {
+          // Refresh counts to get the latest data
+          const counts = await refreshPendingCounts();
+          const hasPendingData =
+            counts.jobs > 0 || counts.costs > 0 || counts.uploads > 0;
+
+          if (hasPendingData && !isSyncing) {
+            // Let syncManager handle the sync - avoid direct trigger
+            // Wait a moment to allow system to stabilize after network change
+            setTimeout(() => {
+              if (!isSyncing) {
+                syncManager.manualSync();
+              }
+            }, 2000);
+          }
+        }
+
+        // Update the previous state reference
+        prevNetworkState.current = isNowConnected;
+      } finally {
+        // Reset the handling flag
+        setTimeout(() => {
+          networkChangeHandlingRef.current = false;
+        }, 3000); // Prevent handling another network change for 3 seconds
+      }
+    };
+
+    const unsubscribe = NetInfo.addEventListener(handleNetStateChange);
     return unsubscribe;
-  }, [pendingJobs, pendingCosts, pendingUploads, isSyncing]);
+  }, [isSyncing]); // Only depend on isSyncing to avoid unnecessary re-subscriptions
 
   /** Initialize SyncManager and register listeners */
   useEffect(() => {
@@ -125,12 +178,29 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
       () => syncManager.manualSync()
     );
 
+    // Listen for pending count updates from SyncManager
+    const pendingUpdateSub = DeviceEventEmitter.addListener(
+      SYNC_EVENTS.PENDING_COUNT_UPDATED,
+      (data) => {
+        if (data.jobsCount !== undefined) {
+          dispatch(updatePendingJobsCount(data.jobsCount));
+        }
+        if (data.costsCount !== undefined) {
+          setPendingCosts(data.costsCount);
+        }
+        if (data.uploadsCount !== undefined) {
+          setPendingUploads(data.uploadsCount);
+        }
+      }
+    );
+
     return () => {
       removeListener();
       startSub.remove();
       completeSub.remove();
       failSub.remove();
       manualSub.remove();
+      pendingUpdateSub.remove();
     };
   }, [dispatch]);
 
