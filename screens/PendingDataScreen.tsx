@@ -21,7 +21,6 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { Toast } from "toastify-react-native";
 import { Header } from "../components";
-import GetAllCache from "../components/GetAllCache";
 import { SYNC_EVENTS } from "../Constants/env";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
@@ -629,7 +628,6 @@ const PendingDataScreen = () => {
           )}
         </ScrollView>
       )}
-      <GetAllCache />
       {/* Media Preview Modal */}
       {renderMediaPreview()}
     </View>

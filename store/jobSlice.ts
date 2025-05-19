@@ -50,7 +50,7 @@ export const fetchJobTypes = createAsyncThunk<
   async ({ userId, useCache = false }, { rejectWithValue, getState }) => {
     const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
 
-    const { lastFetched, items } = getState().job.jobTypes;
+    const { lastFetched, items } = (getState() as RootState).job.jobTypes;
     const isFresh =
       lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
 
