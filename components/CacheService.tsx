@@ -488,10 +488,25 @@ const CacheService: React.FC<CacheServiceProps> = ({
         return;
       }
 
-      if (!Array.isArray(data.payload)) {
-        throw new Error("Invalid jobs response");
+      // Handle different possible response structures
+      let jobsData;
+      if (Array.isArray(data.payload)) {
+        jobsData = data.payload;
+      } else if (data.payload && Array.isArray(data.payload.payload)) {
+        jobsData = data.payload.payload;
+      } else if (data.payload) {
+        // If payload exists but isn't in expected format, wrap in array
+        jobsData = [data.payload];
+      } else {
+        // Empty array as fallback
+        jobsData = [];
+        console.warn(
+          "[prefetchJobs] Unexpected payload structure:",
+          JSON.stringify(data).substring(0, 200)
+        );
       }
-      await setCache(key, data.payload);
+
+      await setCache(key, jobsData);
       await store.dispatch(fetchJobsThunk({ userId }));
       lastFetchTimes.current.jobs = now;
     } catch (error) {
