@@ -273,12 +273,24 @@ export const createJob = createAsyncThunk<
   try {
     // Generate common_id for the job
     const common_id = generateCommonId();
-    await AsyncStorage.setItem(`${common_id}`, JSON.stringify(jobData));
-    const jobWithCommonId = { ...jobData, common_id };
+
+    // Ensure material_cost is formatted as an integer
+    const formattedJobData = {
+      ...jobData,
+      material_cost: jobData.material_cost
+        ? String(Math.round(parseFloat(jobData.material_cost)))
+        : "0",
+      common_id,
+    };
+
+    await AsyncStorage.setItem(
+      `${common_id}`,
+      JSON.stringify(formattedJobData)
+    );
     const netInfo = await NetInfo.fetch();
 
     if (netInfo.isConnected) {
-      const postData = { userid: userId, payload: jobWithCommonId };
+      const postData = { userid: userId, payload: formattedJobData };
       const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
 
       // Refresh caches after successful POST operation
@@ -290,7 +302,7 @@ export const createJob = createAsyncThunk<
       return response.data;
     } else {
       // Save job locally and note that it's pending sync
-      const offlineId = await createOfflineJob(jobWithCommonId);
+      const offlineId = await createOfflineJob(formattedJobData);
 
       // Force a job list refresh after creating a job
       dispatch(resetJobsList());

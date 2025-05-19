@@ -55,10 +55,11 @@ const SQL = {
 
 const safeString = (v: any): string | null =>
   v == null || v === "" ? null : String(v);
-const safeNumber = (v: any): number | null => {
+const safeNumber = (v: any, shouldRound = false): number | null => {
   if (v == null || v === "") return null;
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
-  return isNaN(n) ? null : n;
+  if (isNaN(n)) return null;
+  return shouldRound ? Math.round(n) : n;
 };
 
 export async function createLocalCost(cost: Costs): Promise<Costs> {
@@ -69,11 +70,12 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
     const now = Math.floor(Date.now() / 1000);
     const params: (string | number | null)[] = [
       id,
-      safeString(cost.job_id) ?? "",
-      safeString(cost.common_id) ?? "",
+      safeString(cost.job_id), // Removed the ?? "" to allow null values
+      safeString(cost.common_id), // Also removed here for consistency
       safeString(cost.contractor_id),
       safeNumber(cost.amount) ?? 0,
-      safeNumber(cost.material_cost),
+      // Round material_cost to ensure it's an integer (decimal(10,0))
+      safeNumber(cost.material_cost, true),
       now,
     ];
     await stmt.executeAsync(params);
@@ -84,7 +86,8 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
       common_id: cost.common_id ?? null,
       contractor_id: cost.contractor_id ?? null,
       amount: Number(cost.amount),
-      material_cost: safeNumber(cost.material_cost),
+      // Round material_cost to ensure it's an integer
+      material_cost: safeNumber(cost.material_cost, true),
     };
   } finally {
     try {

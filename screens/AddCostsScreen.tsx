@@ -162,6 +162,11 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
       // Reset costs for this job to ensure we get fresh data
       dispatch(resetCostsForJob(jobId));
 
+      // Format material cost as integer by rounding to nearest whole number
+      const formattedMaterialCost = materialChanged
+        ? String(Math.round(parseFloat(materialCost || "0")))
+        : undefined;
+
       const validRows = costRows.filter(
         (row) => row.contractorId.trim() && row.amount.trim()
       );
@@ -173,7 +178,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
             jobId,
             common_id,
             amount: row.amount,
-            materialCost: materialChanged ? materialCost : undefined,
+            materialCost: formattedMaterialCost,
             contractorId: row.contractorId,
           })
         ).unwrap()
@@ -187,7 +192,7 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
               jobId,
               common_id,
               amount: "0",
-              materialCost,
+              materialCost: formattedMaterialCost,
             })
           ).unwrap()
         );
@@ -233,6 +238,13 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  // Update input handling to only allow integer values
+  const handleMaterialCostChange = (text: string) => {
+    // Allow only numbers
+    const numericValue = text.replace(/[^0-9]/g, "");
+    setMaterialCost(numericValue);
+  };
+
   return (
     <View style={styles.screenContainer}>
       <Header />
@@ -246,9 +258,9 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
             <TextInput
               style={styles.input}
               placeholder="Material Cost"
-              keyboardType="decimal-pad"
+              keyboardType="number-pad" // Changed from decimal-pad to number-pad
               value={materialCost}
-              onChangeText={setMaterialCost}
+              onChangeText={handleMaterialCostChange}
             />
           </View>
 

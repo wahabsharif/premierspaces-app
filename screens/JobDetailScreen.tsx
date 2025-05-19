@@ -125,7 +125,12 @@ const FileCountsSkeleton = () => (
 );
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { id: jobId, refresh, materialCost: routeMaterialCost } = route.params;
+  const {
+    id: jobId,
+    common_id: routeCommonId,
+    refresh,
+    materialCost: routeMaterialCost,
+  } = route.params;
   const dispatch = useDispatch<AppDispatch>();
   const [userId, setUserId] = useState<string | null>(null);
   const [property, setProperty] = useState<{
@@ -306,21 +311,28 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           dispatch(fetchJobs({ userId })),
         ]);
 
-        // Step 2: Now that we have job data, get the job details before fetching costs
-        const currentJob = jobItems.find((j) => j.id === jobId);
-
-        // Step 3: Only fetch costs if we have the job with common_id
-        if (currentJob?.common_id && isMounted.current) {
+        // Step 2: Use the common_id from route params directly when available
+        if (routeCommonId && isMounted.current) {
+          console.log(
+            `[JobDetailScreen] Fetching costs with job_id: ${jobId} and common_id: ${routeCommonId}`
+          );
           await dispatch(
             fetchCosts({
               userId,
               jobId,
-              common_id: currentJob.common_id,
+              common_id: routeCommonId,
             })
           );
         } else {
+          // If no common_id available, fetch by job_id only
           console.log(
-            `[JobDetailScreen] Cannot fetch costs - missing job or common_id`
+            `[JobDetailScreen] Fetching costs with job_id only: ${jobId}`
+          );
+          await dispatch(
+            fetchCosts({
+              userId,
+              jobId,
+            })
           );
         }
 
@@ -343,9 +355,16 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     loadInitialData();
-  }, [userId, jobId, dispatch, fetchOfflineFileCounts]);
+  }, [
+    userId,
+    jobId,
+    routeCommonId,
+    dispatch,
+    fetchOfflineFileCounts,
+    jobItems,
+  ]);
 
-  // Separate effect for force reload
+  // Separate effect for force reload - update similarly
   useEffect(() => {
     if (!userId || !forceReload || dataFetchedRef.current) return;
 
@@ -360,16 +379,27 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           dispatch(fetchJobs({ userId })),
         ]);
 
-        // Step 2: Now that we have job data, get the job details before fetching costs
-        const currentJob = jobItems.find((j) => j.id === jobId);
-
-        // Step 3: Only fetch costs if we have the job with common_id
-        if (currentJob?.common_id && isMounted.current) {
+        // Step 2: Use the common_id from route params directly when available
+        if (routeCommonId && isMounted.current) {
+          console.log(
+            `[JobDetailScreen] Fetching costs with job_id: ${jobId} and common_id: ${routeCommonId}`
+          );
           await dispatch(
             fetchCosts({
               userId,
               jobId,
-              common_id: currentJob.common_id,
+              common_id: routeCommonId,
+            })
+          );
+        } else {
+          // If no common_id available, fetch by job_id only
+          console.log(
+            `[JobDetailScreen] Fetching costs with job_id only: ${jobId}`
+          );
+          await dispatch(
+            fetchCosts({
+              userId,
+              jobId,
             })
           );
         }
@@ -393,7 +423,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     reloadData();
-  }, [userId, jobId, dispatch, forceReload, fetchOfflineFileCounts]);
+  }, [
+    userId,
+    jobId,
+    routeCommonId,
+    dispatch,
+    forceReload,
+    fetchOfflineFileCounts,
+    jobItems,
+  ]);
 
   // Handle refresh - completely separate from initial load
   const onRefresh = useCallback(async () => {
@@ -409,14 +447,26 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       // Force a fresh API fetch on pull-to-refresh
       await dispatch(fetchJobs({ userId, force: true }));
 
-      // Then fetch costs with the latest job data
-      const currentJob = jobItems.find((j) => j.id === jobId);
-      if (currentJob?.common_id) {
+      // Use common_id from route params if available
+      if (routeCommonId) {
+        console.log(
+          `[JobDetailScreen] Fetching costs with job_id: ${jobId} and common_id: ${routeCommonId}`
+        );
         await dispatch(
           fetchCosts({
             userId,
             jobId,
-            common_id: currentJob.common_id,
+            common_id: routeCommonId,
+          })
+        );
+      } else {
+        console.log(
+          `[JobDetailScreen] Fetching costs with job_id only: ${jobId}`
+        );
+        await dispatch(
+          fetchCosts({
+            userId,
+            jobId,
           })
         );
       }
@@ -432,7 +482,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         dataFetchedRef.current = false;
       }
     }
-  }, [userId, jobId, dispatch, jobItems, refreshing, fetchOfflineFileCounts]);
+  }, [
+    userId,
+    jobId,
+    routeCommonId,
+    dispatch,
+    jobItems,
+    refreshing,
+    fetchOfflineFileCounts,
+  ]);
 
   // Tasks array
   const tasks = useMemo(() => {

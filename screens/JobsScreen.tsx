@@ -317,11 +317,14 @@ const JobsScreen = ({
 
   const handleJobPress = useCallback(
     async (item: Job) => {
+      console.log("Job item pressed:", item);
       await AsyncStorage.setItem("jobData", JSON.stringify(item));
+      const jobId = item.id || "";
       navigation.navigate("JobDetailScreen", {
-        id: item.id,
+        id: jobId,
+        common_id: item.common_id || "", // Pass common_id as empty string if null
         refresh: true,
-        materialCost: "",
+        materialCost: item.material_cost || "",
       });
     },
     [navigation]
