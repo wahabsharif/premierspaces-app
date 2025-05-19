@@ -1,6 +1,6 @@
-export const BASE_API_URL = "http://easyhomz.co.uk/mapp";
+// export const BASE_API_URL = "http://easyhomz.co.uk/mapp";
 
-// export const BASE_API_URL = "http://192.168.1.19:8000/api/mapp";
+export const BASE_API_URL = "http://192.168.18.133:8000/api/mapp";
 
 export const JOB_TYPES_CACHE_EXPIRY = 3600000; // 1 hour in milliseconds
 
@@ -31,7 +31,7 @@ export const CACHE_CONFIG = {
     CONTRACTORS: 24 * 60 * 60 * 1000, // 24 hours
   },
   // Initial delay before prefetching data
-  INITIAL_PREFETCH_DELAY: 500, // 500ms
+  INITIAL_PREFETCH_DELAY: 1000, // Increase to 1 second
   // Minimum time between prefetch attempts
-  THROTTLE_INTERVAL: 60 * 1000, // 1 minute
+  THROTTLE_INTERVAL: 15 * 60 * 1000, // Increase to 15 minutes
 };

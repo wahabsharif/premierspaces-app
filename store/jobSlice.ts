@@ -134,7 +134,7 @@ export const fetchJobs = createAsyncThunk<
     { userId, propertyId, force = false, useCache = false },
     { getState, dispatch }
   ) => {
-    const cacheKey = `getJobsCache_${userId}`;
+    const cacheKey = `jobsCache_${userId}`;
     const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}`;
 
     // 1) Always grab local (offline) jobs first
