@@ -162,6 +162,9 @@ export async function getJobById(id: string): Promise<Job | null> {
   }
 }
 
+// Track jobs that are currently being processed
+const jobsBeingProcessed = new Set<string>();
+
 export async function getAllJobs(): Promise<Job[]> {
   const db = await dbPromise;
 
@@ -170,7 +173,6 @@ export async function getAllJobs(): Promise<Job[]> {
     const result = await statement.executeAsync([]);
 
     const rows = await result.getAllAsync();
-
     return rows as Job[];
   } catch (error) {
     Toast.error(
@@ -199,13 +201,32 @@ export async function updateJob(job: Job): Promise<number> {
 }
 
 export async function deleteJob(id: string): Promise<number> {
-  const db = await dbPromise;
-  const statement = await db.prepareAsync(SQL.DELETE);
+  // Prevent race conditions by checking if this job is already being processed
+  if (jobsBeingProcessed.has(id)) {
+    return 0;
+  }
+
+  jobsBeingProcessed.add(id);
+  let statement;
+
   try {
+    const db = await dbPromise;
+    statement = await db.prepareAsync(SQL.DELETE);
+
     const result = await statement.executeAsync([id]);
 
     return result.changes;
   } finally {
-    await statement.finalizeAsync();
+    // Remove from tracking set when done
+    jobsBeingProcessed.delete(id);
+    if (statement) {
+      await statement.finalizeAsync();
+    }
   }
+}
+
+// Add this function to check if there are any pending jobs
+export async function hasPendingJobs(): Promise<boolean> {
+  const jobs = await getAllJobs();
+  return jobs.length > 0;
 }

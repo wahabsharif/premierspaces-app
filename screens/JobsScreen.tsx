@@ -167,25 +167,23 @@ const JobsScreen = ({
   const [initialLoad, setInitialLoad] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
 
-  const jobTypeMap = useMemo(
-    () =>
-      jobTypes.reduce(
-        (map, jt) => ({
-          ...map,
-          [String(jt.id)]: jt.job_type || jt.label || "",
-        }),
-        {} as Record<string, string>
-      ),
-    [jobTypes]
-  );
+  const jobTypeMap = useMemo(() => {
+    const map = jobTypes.reduce(
+      (map, jt) => ({
+        ...map,
+        [String(jt.id)]: jt.job_type || jt.label || "",
+      }),
+      {} as Record<string, string>
+    );
+    return map;
+  }, [jobTypes]);
 
-  const jobs = useMemo(
-    () =>
-      propertyData
-        ? allJobs.filter((j) => j.property_id === propertyData.id)
-        : [],
-    [allJobs, propertyData]
-  );
+  const jobs = useMemo(() => {
+    const filtered = propertyData
+      ? allJobs.filter((j) => j.property_id === propertyData.id)
+      : [];
+    return filtered;
+  }, [allJobs, propertyData]);
 
   // Load stored property & user
   useEffect(() => {
@@ -196,8 +194,17 @@ const JobsScreen = ({
         AsyncStorage.getItem("userData"),
       ]);
       if (!mounted) return;
-      prop && setPropertyData(JSON.parse(prop));
-      user && setUserData(JSON.parse(user));
+      if (prop) {
+        const parsed = JSON.parse(prop);
+        setPropertyData(parsed);
+      }
+
+      if (user) {
+        const parsed = JSON.parse(user);
+        const uid = parsed.payload?.userid ?? parsed.userid;
+        setUserData(parsed);
+      }
+
       setInitialLoad(false);
     })();
     return () => {
@@ -234,12 +241,14 @@ const JobsScreen = ({
   // Check for network connectivity
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOffline(!state.isConnected);
+      const offline = !state.isConnected;
+      setIsOffline(offline);
     });
 
     // Initial check
     NetInfo.fetch().then((state) => {
-      setIsOffline(!state.isConnected);
+      const offline = !state.isConnected;
+      setIsOffline(offline);
     });
 
     return () => unsubscribe();
@@ -248,10 +257,14 @@ const JobsScreen = ({
   // Fetch jobs on screen focus
   useFocusEffect(
     useCallback(() => {
-      if (!userData || !propertyData) return;
+      if (!userData || !propertyData) {
+        return;
+      }
 
       const CACHE_TIME = 5 * 60 * 1000; // 5 minutes cache validity
-      if (lastFetched && Date.now() - lastFetched < CACHE_TIME) return;
+      if (lastFetched && Date.now() - lastFetched < CACHE_TIME) {
+        return;
+      }
 
       setRefreshing(true);
       const uid = userData.payload?.userid ?? userData.userid;
@@ -262,7 +275,9 @@ const JobsScreen = ({
   );
 
   const onRefresh = useCallback(() => {
-    if (!userData || !propertyData) return;
+    if (!userData || !propertyData) {
+      return;
+    }
     setRefreshing(true);
     const uid = userData.payload?.userid ?? userData.userid;
 
@@ -273,8 +288,27 @@ const JobsScreen = ({
       });
     } else {
       // When online, try to sync pending jobs first, then refresh
+      // Define interfaces for type safety
+      interface SyncPendingJobsResult {
+        success?: boolean;
+        synced?: number;
+        [key: string]: any; // For any additional properties in the result
+      }
+
+      type SyncError =
+        | Error
+        | {
+            message: string;
+            [key: string]: any;
+          };
+
       dispatch(syncPendingJobs() as any)
-        .then(() => dispatch(fetchJobs({ userId: uid, force: true }) as any))
+        .then((result: SyncPendingJobsResult) => {
+          return dispatch(fetchJobs({ userId: uid, force: true }) as any);
+        })
+        .catch((err: SyncError) => {
+          return dispatch(fetchJobs({ userId: uid, force: true }) as any);
+        })
         .finally(() => {
           setRefreshing(false);
         });
@@ -283,17 +317,22 @@ const JobsScreen = ({
 
   const handleJobPress = useCallback(
     async (item: Job) => {
+      console.log("Job item pressed:", item);
       await AsyncStorage.setItem("jobData", JSON.stringify(item));
+      const jobId = item.id || "";
       navigation.navigate("JobDetailScreen", {
-        id: item.id,
+        id: jobId,
+        common_id: item.common_id || "", // Pass common_id as empty string if null
         refresh: true,
-        materialCost: "",
+        materialCost: item.material_cost || "",
       });
     },
     [navigation]
   );
 
-  const handleOpenNewJob = () => navigation.navigate("OpenNewJobScreen");
+  const handleOpenNewJob = () => {
+    navigation.navigate("OpenNewJobScreen");
+  };
 
   // We separate initial loading from refresh loading
   const shouldShowContent = !initialLoad && propertyData && !showSkeletons;

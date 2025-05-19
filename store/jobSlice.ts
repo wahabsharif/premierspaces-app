@@ -64,13 +64,10 @@ export const fetchJobTypes = createAsyncThunk<
       try {
         const cachedEntry = await getCache(cacheKey);
         if (cachedEntry?.payload?.payload) {
-          console.log(
-            "[fetchJobTypes] Using cached job types due to useCache flag"
-          );
           return cachedEntry.payload.payload as Job[];
         }
       } catch (err) {
-        console.warn("[fetchJobTypes] Error accessing cache:", err);
+        // Continue to next strategy
       }
     }
 
@@ -93,9 +90,6 @@ export const fetchJobTypes = createAsyncThunk<
 
       // If we get here, either network request failed or we're offline
       // Fall back to cache
-      console.warn(
-        "[fetchJobTypes] Network unavailable, falling back to cache"
-      );
       const cachedEntry = await getCache(cacheKey);
       if (cachedEntry?.payload?.payload) {
         return cachedEntry.payload.payload as Job[];
@@ -104,18 +98,15 @@ export const fetchJobTypes = createAsyncThunk<
       // If no cached data, throw error
       throw new Error("No cached job types available");
     } catch (err: any) {
-      console.warn("[fetchJobTypes] Error:", err);
-
       // Final attempt to get from cache if we haven't already
       if (!useCache) {
         try {
           const cachedEntry = await getCache(cacheKey);
           if (cachedEntry?.payload?.payload) {
-            console.log("[fetchJobTypes] Using cached job types after error");
             return cachedEntry.payload.payload as Job[];
           }
         } catch (cacheErr) {
-          console.warn("[fetchJobTypes] Cache access error:", cacheErr);
+          // Last cache attempt failed
         }
       }
 
@@ -134,7 +125,7 @@ export const fetchJobs = createAsyncThunk<
     { userId, propertyId, force = false, useCache = false },
     { getState, dispatch }
   ) => {
-    const cacheKey = `getJobsCache_${userId}`;
+    const cacheKey = `jobsCache_${userId}`;
     const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}`;
 
     // 1) Always grab local (offline) jobs first
@@ -156,9 +147,6 @@ export const fetchJobs = createAsyncThunk<
 
     // 2) If we're offline or useCache flag is set, combine SQLite jobs with cached server jobs
     if (!isOnline || useCache) {
-      console.log(
-        `[fetchJobs] Using cached data: offline=${!isOnline}, useCache=${useCache}`
-      );
       // Get cached server jobs
       let cachedServerJobs: Job[] = [];
       try {
@@ -189,9 +177,10 @@ export const fetchJobs = createAsyncThunk<
       );
 
       // Apply property filter if specified
-      return propertyId
+      const result = propertyId
         ? combinedJobs.filter((j) => j.property_id === propertyId)
         : combinedJobs;
+      return result;
     }
 
     // 3) Fast-path for online but not forcing refresh: use in-memory data if fresh
@@ -203,7 +192,9 @@ export const fetchJobs = createAsyncThunk<
       // merge offline + in‐memory
       const mergedFast = [...items];
       offlineJobs.forEach((o) => {
-        if (!mergedFast.some((j) => j.id === o.id)) mergedFast.push(o);
+        if (!mergedFast.some((j) => j.id === o.id)) {
+          mergedFast.push(o);
+        }
       });
 
       // Sort and filter
@@ -213,9 +204,10 @@ export const fetchJobs = createAsyncThunk<
           new Date(a.date_created).getTime()
       );
 
-      return propertyId
+      const result = propertyId
         ? mergedFast.filter((j) => j.property_id === propertyId)
         : mergedFast;
+      return result;
     }
 
     // 4) Online and needs fresh data: fetch from server
@@ -227,7 +219,9 @@ export const fetchJobs = createAsyncThunk<
         resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
       const merged = [...serverJobs];
       offlineJobs.forEach((o) => {
-        if (!merged.some((j) => j.id === o.id)) merged.push(o);
+        if (!merged.some((j) => j.id === o.id)) {
+          merged.push(o);
+        }
       });
 
       // Sort by date_created desc
@@ -238,12 +232,11 @@ export const fetchJobs = createAsyncThunk<
       );
 
       // Apply property filter if specified
-      return propertyId
+      const result = propertyId
         ? merged.filter((j) => j.property_id === propertyId)
         : merged;
+      return result;
     } catch (err: any) {
-      console.warn("[fetchJobs] Server fetch failed, using cached data:", err);
-
       // Show user-friendly toast message
       Toast.info("Using cached data - server unavailable");
 
@@ -252,7 +245,9 @@ export const fetchJobs = createAsyncThunk<
       const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
       const fallback = [...cached];
       offlineJobs.forEach((o) => {
-        if (!fallback.some((j) => j.id === o.id)) fallback.push(o);
+        if (!fallback.some((j) => j.id === o.id)) {
+          fallback.push(o);
+        }
       });
 
       fallback.sort(
@@ -262,9 +257,10 @@ export const fetchJobs = createAsyncThunk<
       );
 
       // Apply property filter if specified
-      return propertyId
+      const result = propertyId
         ? fallback.filter((j) => j.property_id === propertyId)
         : fallback;
+      return result;
     }
   }
 );
@@ -277,11 +273,24 @@ export const createJob = createAsyncThunk<
   try {
     // Generate common_id for the job
     const common_id = generateCommonId();
-    await AsyncStorage.setItem(`${common_id}`, JSON.stringify(jobData));
-    const jobWithCommonId = { ...jobData, common_id };
+
+    // Ensure material_cost is formatted as an integer
+    const formattedJobData = {
+      ...jobData,
+      material_cost: jobData.material_cost
+        ? String(Math.round(parseFloat(jobData.material_cost)))
+        : "0",
+      common_id,
+    };
+
+    await AsyncStorage.setItem(
+      `${common_id}`,
+      JSON.stringify(formattedJobData)
+    );
     const netInfo = await NetInfo.fetch();
+
     if (netInfo.isConnected) {
-      const postData = { userid: userId, payload: jobWithCommonId };
+      const postData = { userid: userId, payload: formattedJobData };
       const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
 
       // Refresh caches after successful POST operation
@@ -293,7 +302,7 @@ export const createJob = createAsyncThunk<
       return response.data;
     } else {
       // Save job locally and note that it's pending sync
-      const offlineId = await createOfflineJob(jobWithCommonId);
+      const offlineId = await createOfflineJob(formattedJobData);
 
       // Force a job list refresh after creating a job
       dispatch(resetJobsList());

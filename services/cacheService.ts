@@ -518,7 +518,7 @@ export async function refreshCachesAfterPost(userId: string): Promise<void> {
 
     if (jobsResponse.data?.status === 1 && jobsResponse.data.payload) {
       const jobsData = jobsResponse.data.payload;
-      const jobsCacheKey = `getJobsCache_${userId}`;
+      const jobsCacheKey = `jobsCache_${userId}`;
       await setCache(jobsCacheKey, jobsData);
     }
 

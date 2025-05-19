@@ -39,7 +39,7 @@ const MIN_FETCH_INTERVAL = 30000;
 // Only modify the fetchCosts function in costSlice.ts
 export const fetchCosts = createAsyncThunk<
   { jobId: string; costs: Costs[]; isOffline: boolean },
-  { userId: string; jobId: string; common_id: string; forceRefresh?: boolean },
+  { userId: string; jobId: string; common_id?: string; forceRefresh?: boolean },
   { state: RootState; dispatch: AppDispatch; rejectValue: string }
 >(
   "costs/fetch",
@@ -50,10 +50,10 @@ export const fetchCosts = createAsyncThunk<
     const { items, lastFetched, fetchInProgress } = getState().cost;
     const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
 
-    // ADDED: Create a unique key for this job/common_id combination
-    const fetchKey = `${jobId}_${common_id}`;
+    // Generate a unique fetch key based on what we have
+    const fetchKey = common_id ? `${jobId}_${common_id}` : `${jobId}`;
 
-    // ADDED: Prevent concurrent fetches for the same job
+    // Prevent concurrent fetches for the same job
     if (fetchInProgress[fetchKey]) {
       // Return existing data if available, or an empty array
       return {
@@ -93,12 +93,17 @@ export const fetchCosts = createAsyncThunk<
       let localCosts: Costs[] = [];
       try {
         const allLocalCosts = await getAllCosts();
-        // Filter costs for this job based on both job_id and common_id
-        localCosts = allLocalCosts.filter(
-          (cost) =>
-            String(cost.job_id) === String(jobId) ||
-            String(cost.common_id) === String(common_id)
-        );
+        // Filter costs for this job based on both job_id and common_id (if available)
+        localCosts = allLocalCosts.filter((cost) => {
+          // Match by job_id always
+          if (String(cost.job_id) === String(jobId)) return true;
+
+          // Also match by common_id if it exists
+          if (common_id && String(cost.common_id) === String(common_id))
+            return true;
+
+          return false;
+        });
       } catch (err) {
         Toast.error(
           `[fetchCosts] Error getting local costs: ${
@@ -110,8 +115,19 @@ export const fetchCosts = createAsyncThunk<
       // If online and we need to refresh, fetch from API
       if (online && shouldRefreshFromNetwork) {
         try {
+          // Build API parameters based on what we have
+          const params: any = { userid: userId };
+
+          // Always include job_id
+          params.job_id = jobId;
+
+          // Also include common_id if it exists
+          if (common_id) {
+            params.common_id = common_id;
+          }
+
           const { data } = await axios.get(`${BASE_API_URL}/costs.php`, {
-            params: { userid: userId, common_id },
+            params,
             headers: { "Content-Type": "application/json" },
             timeout: 10000,
           });
@@ -131,10 +147,16 @@ export const fetchCosts = createAsyncThunk<
             }
           }
 
-          // More flexible filtering logic - job_id could be string or number
+          // More flexible filtering logic - match by job_id or common_id
           const filtered = payloadArray.filter((c) => {
-            // Use primarily common_id for matching, as it's the shared identifier
-            return String(c.common_id) === String(common_id);
+            // Match by job_id
+            const matchesJob = String(c.job_id) === String(jobId);
+
+            // Match by common_id if it exists
+            const matchesCommonId =
+              common_id && String(c.common_id) === String(common_id);
+
+            return matchesJob || matchesCommonId;
           });
 
           // Combine API costs with local costs, avoiding duplicates
@@ -257,7 +279,7 @@ export const createCost = createAsyncThunk<
   {
     userId: string;
     jobId?: string;
-    common_id: string;
+    common_id?: string;
     amount: string;
     materialCost?: string;
     contractorId?: string;
@@ -273,17 +295,23 @@ export const createCost = createAsyncThunk<
       const online = await isOnline();
       dispatch(setOfflineMode(!online));
 
+      // Format materialCost as an integer if provided
+      const formattedMaterialCost =
+        materialCost !== undefined
+          ? String(Math.round(parseFloat(materialCost || "0")))
+          : undefined;
+
       if (!online) {
         // Offline mode - create cost locally
         const newCost = await createLocalCost({
-          job_id: "",
-          common_id: common_id,
-          contractor_id: contractorId || null,
+          job_id: undefined,
+          common_id: common_id || undefined,
+          contractor_id: contractorId || undefined,
           amount: parseFloat(amount || "0").toFixed(2),
           material_cost:
-            materialCost !== undefined
-              ? parseFloat(materialCost || "0").toFixed(2)
-              : null,
+            formattedMaterialCost !== undefined
+              ? parseInt(formattedMaterialCost) // Ensure it's stored as an integer
+              : undefined,
         });
 
         if (jobId) {
@@ -295,14 +323,22 @@ export const createCost = createAsyncThunk<
       }
 
       // Online mode - send to API
-      const payload = {
+      const payload: any = {
         userid: userId,
-        job_id: jobId || null,
-        common_id,
         amount: amount,
-        material_cost: materialCost,
+        material_cost: formattedMaterialCost, // Now using the integer formatted value
         contractor_id: contractorId,
       };
+
+      // Add either job_id or common_id or both as available
+      if (jobId) {
+        payload.job_id = jobId;
+      }
+
+      if (common_id) {
+        payload.common_id = common_id;
+      }
+
       const { data } = await axios.post(`${BASE_API_URL}/costs.php`, payload, {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
