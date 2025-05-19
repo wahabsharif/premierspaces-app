@@ -1,13 +1,23 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import axios from "axios";
+import * as BackgroundTask from "expo-background-task";
 import * as FileSystem from "expo-file-system";
-import { DeviceEventEmitter } from "react-native";
+import * as Notifications from "expo-notifications";
+import * as TaskManager from "expo-task-manager";
+import Constants from "expo-constants";
+import { DeviceEventEmitter, Platform } from "react-native";
 import { Toast } from "toastify-react-native";
 import { BASE_API_URL, SYNC_EVENTS } from "../Constants/env";
 import { deleteCost, getAllCosts } from "./costService";
 import { deleteJob, getAllJobs } from "./jobService";
 import { deleteUpload, getAllUploads } from "./uploadService";
+
+// Define the background task name
+const BACKGROUND_SYNC_TASK = "background-sync";
+
+// Determine if running in Expo Go
+const isExpoGo = Constants.appOwnership === "expo";
 
 export interface SyncState {
   status: "idle" | "syncing" | "in_progress" | "complete" | "error";
@@ -17,13 +27,23 @@ export interface SyncState {
   failedCount?: number;
 }
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
 export class SyncManager {
   private static instance: SyncManager;
   private isSyncing = false;
   private listeners: ((state: SyncState) => void)[] = [];
   private previousNetworkState: boolean | null = null;
-  private syncInProgress = new Set<string>(); // Track items being synced
-  private lastSyncAttempt = 0; // Track last sync attempt timestamp
+  private syncInProgress = new Set<string>();
+  private lastSyncAttempt = 0;
+  private syncNotificationId: string | null = null;
 
   private constructor() {}
 
@@ -34,37 +54,114 @@ export class SyncManager {
     return SyncManager.instance;
   }
 
-  public initialize() {
-    // Initialize with current network state
+  public async initialize() {
+    if (isExpoGo) {
+      console.warn(
+        "Limited notification functionality in Expo Go. For full functionality, use a development build."
+      );
+    }
+
+    await this.requestNotificationPermissions();
+    await this.defineBackgroundTask();
+
+    if (!(isExpoGo && Platform.OS === "android")) {
+      await this.registerBackgroundTask();
+    } else {
+      console.warn(
+        "Background task registration skipped in Expo Go on Android"
+      );
+    }
+
     NetInfo.fetch().then((state) => {
       this.previousNetworkState = state.isConnected;
     });
 
-    // Add listener for network changes
     NetInfo.addEventListener((state) => {
       const isNowConnected = state.isConnected === true;
       const wasOffline = this.previousNetworkState === false;
 
-      // Only trigger sync when transitioning from offline to online
       if (isNowConnected && wasOffline) {
-        this.checkAndSync(true); // Force immediate sync on network recovery
+        this.checkAndSync(true);
       }
       this.previousNetworkState = isNowConnected;
     });
 
-    // Initial check
     this.checkAndSync();
   }
 
-  public addSyncListener(listener: (state: SyncState) => void): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
+  private async defineBackgroundTask(): Promise<void> {
+    try {
+      await TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
+        try {
+          const syncManager = SyncManager.getInstance();
+          await syncManager.backgroundSync();
+          return { success: true };
+        } catch (error) {
+          console.error("Background sync failed:", error);
+          return { success: false };
+        }
+      });
+      console.log("Background sync task defined successfully");
+    } catch (error) {
+      console.warn("Failed to define background sync task:", error);
+    }
   }
 
-  private notify(state: SyncState) {
+  private async requestNotificationPermissions(): Promise<boolean> {
+    try {
+      if (isExpoGo && Platform.OS === "android") {
+        console.warn("Notification permissions limited in Expo Go on Android");
+        Toast.success(
+          "Sync Manager initialized (notification limitations in Expo Go)"
+        );
+        return false;
+      }
+
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      return finalStatus === "granted";
+    } catch (error) {
+      console.error("Failed to get notification permissions:", error);
+      return false;
+    }
+  }
+
+  private async registerBackgroundTask(): Promise<void> {
+    try {
+      if (isExpoGo) {
+        console.warn("Background task registration not supported in Expo Go");
+        return;
+      }
+
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(
+        BACKGROUND_SYNC_TASK
+      );
+
+      if (!isRegistered) {
+        console.log("Background sync task is not registered yet.");
+        await BackgroundTask.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+          minimumInterval: 60,
+        });
+        console.log("Background sync task registered successfully");
+      } else {
+        console.log("Background sync task is already registered.");
+      }
+    } catch (error) {
+      console.error("Failed to register background task:", error);
+    }
+  }
+
+  private async notify(state: SyncState) {
     this.listeners.forEach((l) => l(state));
+    await this.updateSyncNotification(state);
+
     switch (state.status) {
       case "syncing":
         DeviceEventEmitter.emit(SYNC_EVENTS.SYNC_STARTED);
@@ -83,16 +180,107 @@ export class SyncManager {
     }
   }
 
-  private async checkAndSync(forceSync = false) {
-    if (this.isSyncing) {
-      return;
-    }
+  private async updateSyncNotification(state: SyncState) {
+    try {
+      if (isExpoGo && Platform.OS === "android") {
+        switch (state.status) {
+          case "syncing":
+            Toast.info("Starting sync...");
+            break;
+          case "in_progress":
+            if (state.progress) {
+              Toast.info(
+                `${state.message} (${Math.round(state.progress * 100)}%)`
+              );
+            }
+            break;
+          case "complete":
+            Toast.success(state.message);
+            break;
+          case "error":
+            Toast.error(state.message);
+            break;
+        }
+        return;
+      }
 
-    // Add time-based throttling - prevent multiple rapid sync attempts
-    const now = Date.now();
-    if (!forceSync && now - this.lastSyncAttempt < 5000) {
-      return;
+      const hasPermission = await this.requestNotificationPermissions();
+      if (!hasPermission) return;
+
+      const baseNotification = { title: "Data Sync", sound: false };
+
+      if (this.syncNotificationId) {
+        await Notifications.dismissNotificationAsync(this.syncNotificationId);
+      }
+
+      switch (state.status) {
+        case "syncing":
+          this.syncNotificationId =
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                ...baseNotification,
+                body: `Starting sync...`,
+                data: { type: "sync_progress" },
+              },
+              trigger: null,
+            });
+          break;
+        case "in_progress":
+          const progressText = state.progress
+            ? ` (${Math.round(state.progress * 100)}%)`
+            : "";
+          this.syncNotificationId =
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                ...baseNotification,
+                body: `${state.message}${progressText} - Synced: ${
+                  state.syncedCount || 0
+                }, Failed: ${state.failedCount || 0}`,
+                data: {
+                  type: "sync_progress",
+                  progress: state.progress || 0,
+                  syncedCount: state.syncedCount || 0,
+                  failedCount: state.failedCount || 0,
+                },
+              },
+              trigger: null,
+            });
+          break;
+        case "complete":
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              ...baseNotification,
+              title: "Sync Complete ✅",
+              body: state.message,
+              data: { type: "sync_complete" },
+            },
+            trigger: null,
+          });
+          setTimeout(async () => {
+            await Notifications.dismissAllNotificationsAsync();
+          }, 3000);
+          break;
+        case "error":
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              ...baseNotification,
+              title: "Sync Error ❌",
+              body: state.message,
+              data: { type: "sync_error" },
+            },
+            trigger: null,
+          });
+          break;
+      }
+    } catch (error) {
+      console.error("Failed to update sync notification:", error);
     }
+  }
+
+  private async checkAndSync(forceSync = false) {
+    if (this.isSyncing) return;
+    const now = Date.now();
+    if (!forceSync && now - this.lastSyncAttempt < 5000) return;
     this.lastSyncAttempt = now;
 
     try {
@@ -101,8 +289,6 @@ export class SyncManager {
         getAllCosts(),
         getAllUploads(),
       ]);
-
-      // Update pending counts in the event system
       DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_COUNT_UPDATED, {
         jobsCount: jobs.length,
         costsCount: costs.length,
@@ -117,40 +303,25 @@ export class SyncManager {
       const net = await NetInfo.fetch();
 
       if (anyPending && net.isConnected) {
-        // If we have pending data and we're online
-        if (forceSync) {
-          this.syncAll(true);
-        } else {
-          // Wait a moment before syncing to allow UI to stabilize
-          setTimeout(() => this.syncAll(), 1000);
-        }
+        if (forceSync) this.syncAll(true);
+        else setTimeout(() => this.syncAll(), 1000);
       }
     } catch (error) {
-      Toast.error("[SyncManager] checkAndSync error:");
+      console.error("[SyncManager] checkAndSync error:", error);
     }
   }
 
   public async syncAll(skipTimeCheck = false) {
-    if (this.isSyncing) {
-      return;
-    }
-
-    // Track last sync time to prevent too frequent syncs
+    if (this.isSyncing) return;
     if (!skipTimeCheck) {
       const lastSyncTime = await AsyncStorage.getItem("lastSyncTime");
       const now = Date.now();
-      if (lastSyncTime) {
-        const timeSinceLastSync = now - Number(lastSyncTime);
-        // If synced in the last 30 seconds, don't sync again
-        if (timeSinceLastSync < 30000) {
-          return;
-        }
-      }
+      if (lastSyncTime && now - Number(lastSyncTime) < 30000) return;
     }
 
     this.isSyncing = true;
-    this.syncInProgress.clear(); // Reset the tracking set
-    this.notify({ status: "syncing", message: "Syncing all data..." });
+    this.syncInProgress.clear();
+    await this.notify({ status: "syncing", message: "Syncing all data..." });
 
     let jobSynced = 0,
       jobFailed = 0;
@@ -160,13 +331,12 @@ export class SyncManager {
       uploadFailed = 0;
 
     try {
-      // get user ID from storage
       const userStr = await AsyncStorage.getItem("userData");
       const userData = userStr ? JSON.parse(userStr) : null;
       const userId = userData?.payload?.userid || userData?.userid;
       if (!userId) throw new Error("No user ID in AsyncStorage");
 
-      // 1. Sync Jobs
+      // Sync Jobs
       const jobs = await getAllJobs();
 
       for (const job of jobs) {
@@ -347,15 +517,41 @@ export class SyncManager {
         });
       }
     } catch (err: any) {
-      Toast.error("[SyncManager] syncAll error:", err);
+      console.error("[SyncManager] syncAll error:", err);
       const msg = err.message || "Sync failed; will retry when online.";
-      this.notify({ status: "error", message: msg });
-      Toast.error(msg);
+      await this.notify({ status: "error", message: msg });
     } finally {
-      // Store the sync time
       await AsyncStorage.setItem("lastSyncTime", Date.now().toString());
       this.isSyncing = false;
       this.syncInProgress.clear();
+      this.syncNotificationId = null;
+    }
+  }
+
+  public async backgroundSync() {
+    console.log("Starting background sync...");
+    try {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        console.log("No network connection for background sync");
+        return;
+      }
+      const [jobs, costs, uploads] = await Promise.all([
+        getAllJobs(),
+        getAllCosts(),
+        getAllUploads(),
+      ]);
+      const hasPendingData =
+        jobs.length > 0 || costs.length > 0 || uploads.length > 0;
+      if (hasPendingData) {
+        await this.syncAll(true);
+        console.log("Background sync completed");
+      } else {
+        console.log("No pending data for background sync");
+      }
+    } catch (error) {
+      console.error("Background sync error:", error);
+      await this.notify({ status: "error", message: "Background sync failed" });
     }
   }
 
@@ -380,9 +576,40 @@ export class SyncManager {
         uploads: uploads.length,
       };
     } catch (err) {
-      Toast.error("[SyncManager] hasPendingData error:");
+      console.error("[SyncManager] hasPendingData error:", err);
       return { jobs: 0, costs: 0, uploads: 0 };
     }
+  }
+
+  public addSyncListener(listener: (state: SyncState) => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.removeSyncListener(listener);
+    };
+  }
+
+  public removeSyncListener(listener: (state: SyncState) => void): void {
+    const index = this.listeners.indexOf(listener);
+    if (index > -1) this.listeners.splice(index, 1);
+  }
+
+  public getSyncStatus(): { isSyncing: boolean; syncInProgress: string[] } {
+    return {
+      isSyncing: this.isSyncing,
+      syncInProgress: Array.from(this.syncInProgress),
+    };
+  }
+
+  public cancelSync(): void {
+    if (this.isSyncing) {
+      this.isSyncing = false;
+      this.syncInProgress.clear();
+      this.notify({ status: "error", message: "Sync cancelled by user" });
+    }
+  }
+
+  public async cleanup() {
+    await Notifications.dismissAllNotificationsAsync();
   }
 }
 
