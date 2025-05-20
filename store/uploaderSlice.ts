@@ -28,7 +28,8 @@ interface UploaderState {
   progress: { [uri: string]: string };
   successCount: number;
   failedCount: number;
-  common_id: string; // Added common_id field
+  common_id: string;
+  fileStatus: { [uri: string]: "success" | "failed" | "pending" }; // Track status of each file
 }
 
 const initialState: UploaderState = {
@@ -39,12 +40,9 @@ const initialState: UploaderState = {
   progress: {},
   successCount: 0,
   failedCount: 0,
-  common_id: "", // Initialize common_id with empty string
+  common_id: "",
+  fileStatus: {}, // Initialize file status tracking
 };
-
-// Size threshold for chunked uploads (5MB)
-const CHUNK_THRESHOLD = 5 * 1024 * 1024;
-const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
 
 // Network quality assessment
 const assessNetworkQuality = async () => {
@@ -189,37 +187,13 @@ export const uploadFiles = createAsyncThunk(
       `Network quality: ${networkQuality}, Using concurrency: ${concurrencyLimit}`
     );
 
-    // Enhanced file upload function with chunking for large files
     const uploadFile = async (file: MediaFile, index: number): Promise<any> => {
       const fileName =
         file.name || file.uri.split("/").pop() || `file_${index}`;
       const fileType = file.mimeType;
 
       try {
-        // Get file info to check size
-        const fileInfo = await FileSystem.getInfoAsync(file.uri);
-        const fileSize =
-          fileInfo.exists && typeof fileInfo.size === "number"
-            ? fileInfo.size
-            : 0;
-
-        // For large files, use chunked upload
-        if (fileSize > CHUNK_THRESHOLD) {
-          return await uploadLargeFile(file, index, fileSize, {
-            mainCategoryId,
-            subCategoryId,
-            propertyId,
-            job_id,
-            userName,
-            common_id,
-            fileId,
-            totalFiles,
-            fileName,
-            fileType,
-          });
-        }
-
-        // For smaller files, use regular upload with optimized FormData
+        // Regular upload with optimized FormData
         const formData = new FormData();
         formData.append("id", fileId || "");
         formData.append("total_segments", totalFiles.toString());
@@ -269,6 +243,8 @@ export const uploadFiles = createAsyncThunk(
         clearTimeout(timeoutId);
         dispatch(updateProgress({ uri: file.uri, progress: "Complete" }));
         dispatch(incrementSuccessCount());
+        // Track successful file status
+        dispatch(updateFileStatus({ uri: file.uri, status: "success" }));
 
         // Refresh job cache after successful upload
         await refreshCachesAfterPost(userName);
@@ -277,121 +253,14 @@ export const uploadFiles = createAsyncThunk(
       } catch (error) {
         dispatch(updateProgress({ uri: file.uri, progress: "Failed" }));
         dispatch(incrementFailedCount());
+        // Track failed file status
+        dispatch(updateFileStatus({ uri: file.uri, status: "failed" }));
 
         // Add automatic retry for transient errors
         if (axios.isCancel(error)) {
           return { success: false, error: "Upload timed out" };
         }
 
-        return { success: false, error };
-      }
-    };
-
-    // Upload large files in chunks for better reliability
-    const uploadLargeFile = async (
-      file: MediaFile,
-      index: number,
-      fileSize: number,
-      params: any
-    ): Promise<any> => {
-      try {
-        const { fileId, totalFiles, fileName, fileType } = params;
-        const chunks = Math.ceil(fileSize / CHUNK_SIZE);
-
-        dispatch(
-          updateProgress({
-            uri: file.uri,
-            progress: `Preparing ${chunks} chunks`,
-          })
-        );
-
-        // First notify the server about the incoming chunked upload
-        const initFormData = new FormData();
-        initFormData.append("id", fileId || "");
-        initFormData.append("file_name", fileName);
-        initFormData.append("file_type", fileType);
-        initFormData.append("file_size", String(fileSize));
-        initFormData.append("chunk_count", String(chunks));
-        initFormData.append("total_segments", totalFiles.toString());
-        initFormData.append("segment_number", (index + 1).toString());
-        initFormData.append("main_category", params.mainCategoryId);
-        initFormData.append("category_level_1", params.subCategoryId);
-        initFormData.append("property_id", params.propertyId);
-        initFormData.append("job_id", params.job_id);
-        initFormData.append("user_name", params.userName);
-        initFormData.append("common_id", params.common_id);
-        initFormData.append("chunked", "true");
-
-        // Send initialization request
-        const initResponse = await axios.post(
-          `${BASE_API_URL}/media-uploader.php`,
-          initFormData,
-          { headers: { "Content-Type": "multipart/form-data" } }
-        );
-
-        const chunkToken = initResponse.data?.chunk_token || fileId;
-
-        // Upload each chunk sequentially
-        let totalUploaded = 0;
-
-        for (let chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
-          const start = chunkIndex * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, fileSize);
-          const chunkSize = end - start;
-
-          // Read chunk from file
-          const chunkData = await FileSystem.readAsStringAsync(file.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-            position: start,
-            length: chunkSize,
-          });
-
-          // Create form data for chunk
-          const chunkFormData = new FormData();
-          chunkFormData.append("chunk_token", chunkToken);
-          chunkFormData.append("chunk_index", String(chunkIndex));
-          chunkFormData.append("chunk_count", String(chunks));
-          chunkFormData.append("chunk_data", chunkData);
-
-          // Upload chunk
-          await axios.post(
-            `${BASE_API_URL}/media-uploader-chunk.php`,
-            chunkFormData,
-            { headers: { "Content-Type": "multipart/form-data" } }
-          );
-
-          totalUploaded += chunkSize;
-          const percentCompleted = Math.round((totalUploaded * 100) / fileSize);
-
-          dispatch(
-            updateProgress({
-              uri: file.uri,
-              progress: `${percentCompleted}%`,
-            })
-          );
-        }
-
-        // Finalize the upload
-        const finalizeFormData = new FormData();
-        finalizeFormData.append("chunk_token", chunkToken);
-        finalizeFormData.append("total_chunks", String(chunks));
-
-        const finalizeResponse = await axios.post(
-          `${BASE_API_URL}/media-uploader-finalize.php`,
-          finalizeFormData,
-          { headers: { "Content-Type": "multipart/form-data" } }
-        );
-
-        dispatch(updateProgress({ uri: file.uri, progress: "Complete" }));
-        dispatch(incrementSuccessCount());
-
-        // Refresh job cache after successful upload
-        await refreshCachesAfterPost(params.userName);
-
-        return { success: true, data: finalizeResponse.data };
-      } catch (error) {
-        dispatch(updateProgress({ uri: file.uri, progress: "Failed" }));
-        dispatch(incrementFailedCount());
         return { success: false, error };
       }
     };
@@ -612,6 +481,68 @@ export const syncOfflineUploads = createAsyncThunk(
   }
 );
 
+// Thunk to retry failed uploads
+export const retryFailedUploads = createAsyncThunk(
+  "uploader/retryFailedUploads",
+  async (
+    {
+      mainCategoryId,
+      subCategoryId,
+      propertyId,
+      job_id,
+      userName,
+      common_id,
+    }: {
+      mainCategoryId: string;
+      subCategoryId: string;
+      propertyId: string;
+      job_id: string;
+      userName: string;
+      common_id: string;
+    },
+    { getState, dispatch }
+  ) => {
+    const state = getState() as RootState;
+    const files = state.uploader.files;
+    const fileStatus = state.uploader.fileStatus;
+
+    // Filter to get only failed files
+    const failedFiles = files.filter(
+      (file) => fileStatus[file.uri] === "failed"
+    );
+
+    if (!failedFiles || failedFiles.length === 0) {
+      return [];
+    }
+
+    // Reset counters for retry operation
+    dispatch(resetRetryCounters());
+
+    // Use the existing upload mechanism but only for failed files
+    const oldFiles = state.uploader.files;
+
+    // Temporarily set only failed files for upload
+    dispatch(setFiles(failedFiles));
+
+    // Use the existing upload files thunk
+    const results = await dispatch(
+      uploadFiles({
+        mainCategoryId,
+        subCategoryId,
+        propertyId,
+        job_id,
+        userName,
+        common_id,
+      })
+    ).unwrap();
+
+    // Restore the original files list
+    dispatch(setFiles(oldFiles));
+
+    return results;
+  }
+);
+
 const uploaderSlice = createSlice({
   name: "uploader",
   initialState,
@@ -639,6 +570,15 @@ const uploaderSlice = createSlice({
       // Added reducer for setting common_id
       state.common_id = action.payload;
     },
+    updateFileStatus: (state, action) => {
+      const { uri, status } = action.payload;
+      state.fileStatus[uri] = status;
+    },
+    resetRetryCounters: (state) => {
+      // Reset counters specifically for retry operation
+      state.successCount = 0;
+      state.failedCount = 0;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -662,6 +602,15 @@ const uploaderSlice = createSlice({
       })
       .addCase(syncOfflineUploads.rejected, (state) => {
         state.syncingOfflineUploads = false;
+      })
+      .addCase(retryFailedUploads.pending, (state) => {
+        state.uploading = true;
+      })
+      .addCase(retryFailedUploads.fulfilled, (state) => {
+        state.uploading = false;
+      })
+      .addCase(retryFailedUploads.rejected, (state) => {
+        state.uploading = false;
       });
   },
 });
@@ -672,7 +621,9 @@ export const {
   updateProgress,
   incrementSuccessCount,
   incrementFailedCount,
-  setCommonId, // Export the new action
+  setCommonId,
+  updateFileStatus, // Export the new action
+  resetRetryCounters, // Export the reset counters action
 } = uploaderSlice.actions;
 
 export const selectFiles = (state: RootState) => state.uploader.files;
@@ -684,6 +635,16 @@ export const selectUploadCounts = createSelector(
     (state: RootState) => state.uploader.failedCount,
   ],
   (successCount, failedCount) => ({ successCount, failedCount })
+);
+
+// Add a selector to get failed files
+export const selectFailedFiles = createSelector(
+  [
+    (state: RootState) => state.uploader.files,
+    (state: RootState) => state.uploader.fileStatus,
+  ],
+  (files, fileStatus) =>
+    files.filter((file) => fileStatus[file.uri] === "failed")
 );
 
 export default uploaderSlice.reducer;
