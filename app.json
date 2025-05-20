@@ -7,7 +7,6 @@
     "icon": "./assets/touch-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "excludeFromNewArchitectureLibraries": ["react-native-push-notification"],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -83,8 +82,7 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "edgeToEdgeEnabled": true,
-      "enableJetifier": true
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "favicon": "./assets/logo.png"
