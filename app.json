@@ -83,7 +83,8 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "enableJetifier": true
     },
     "web": {
       "favicon": "./assets/logo.png"
