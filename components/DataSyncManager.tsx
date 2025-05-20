@@ -72,6 +72,7 @@ const DataSyncManager: React.FC<DataSyncManagerProps> = ({ children }) => {
   const handleSyncStateChange = (state: SyncState) => {
     if (state.status === "syncing") {
       setIsSyncing(true);
+      Toast.info("Starting sync in sequence: Jobs → Costs → Uploads");
       return;
     }
 

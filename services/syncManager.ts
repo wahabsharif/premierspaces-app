@@ -380,7 +380,7 @@ export class SyncManager {
     }, delay);
   }
 
-  // Enhanced syncAll with better performance
+  // Enhanced syncAll with sequential API calls
   public async syncAll(skipTimeCheck = false) {
     if (this.isSyncing) return;
 
@@ -414,291 +414,278 @@ export class SyncManager {
 
       // Get network quality to optimize sync strategy
       const networkQuality = await this.assessNetworkQuality();
+      
+      // Maximum number of retries for failed requests
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY = 3000; // 3 seconds between retries
 
-      // Adjust concurrency based on network quality
-      const getConcurrency = () => {
-        switch (networkQuality) {
-          case "high":
-            return 3;
-          case "medium":
-            return 2;
-          case "low":
-            return 1;
-          default:
-            return 1;
+      const retryWithDelay = async (fn: () => Promise<any>, retries: number): Promise<any> => {
+        try {
+          return await fn();
+        } catch (error) {
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            return retryWithDelay(fn, retries - 1);
+          }
+          throw error;
         }
       };
 
-      const concurrency = getConcurrency();
-      console.log(
-        `Network quality: ${networkQuality}, concurrency: ${concurrency}`
-      );
-
-      // Sync Jobs with optimized batching
+      // 1. STEP ONE: Sync Jobs first
       const jobs = await getAllJobs();
-
+      let allJobsSuccessful = true;
+      
       if (jobs.length > 0) {
-        const processBatchJobs = async (
-          startIdx: number,
-          batchSize: number
-        ) => {
-          const endIdx = Math.min(startIdx + batchSize, jobs.length);
-          const batch = jobs.slice(startIdx, endIdx);
+        this.notify({
+          status: "in_progress",
+          message: `Syncing jobs (${jobs.length})...`,
+          syncedCount: 0,
+          failedCount: 0,
+        });
+        
+        for (const job of jobs) {
+          const itemKey = `job_${job.id}`;
+          if (this.syncInProgress.has(itemKey)) continue;
 
-          // Use Promise.all with concurrency control
-          const executing: Promise<any>[] = [];
+          this.syncInProgress.add(itemKey);
+          
+          try {
+            await retryWithDelay(async () => {
+              const jobData = {
+                userid: userId,
+                payload: { ...job, id: undefined },
+              };
 
-          for (const job of batch) {
-            // Skip if already syncing
-            const itemKey = `job_${job.id}`;
-            if (this.syncInProgress.has(itemKey)) continue;
+              // Create abort controller for this request
+              const controller = new AbortController();
+              this.abortControllers.set(itemKey, controller);
 
-            this.syncInProgress.add(itemKey);
+              const resp = await axios.post(
+                `${BASE_API_URL}/newjob.php?userid=${userId}`,
+                jobData,
+                {
+                  timeout: 15000,
+                  signal: controller.signal,
+                  validateStatus: (s) => s < 500,
+                }
+              );
 
-            const syncJob = (async () => {
-              try {
-                const jobData = {
-                  userid: userId,
-                  payload: { ...job, id: undefined },
-                };
+              this.abortControllers.delete(itemKey);
 
-                // Create abort controller for this request
-                const controller = new AbortController();
-                this.abortControllers.set(itemKey, controller);
+              if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
 
-                const resp = await axios.post(
-                  `${BASE_API_URL}/newjob.php?userid=${userId}`,
-                  jobData,
-                  {
-                    timeout: 15000,
-                    signal: controller.signal,
-                    validateStatus: (s) => s < 500,
-                  }
-                );
+              // Remove from DB only after successful sync
+              await deleteJob(job.id);
+              jobSynced++;
 
-                this.abortControllers.delete(itemKey);
-
-                if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
-
-                // Remove from DB only after successful sync
-                await deleteJob(job.id);
-                jobSynced++;
-
-                this.notify({
-                  status: "in_progress",
-                  message: `Jobs ${jobSynced}/${jobs.length}`,
-                  progress: jobs.length ? jobSynced / jobs.length : 1,
-                  syncedCount: jobSynced + costSynced + uploadSynced,
-                  failedCount: jobFailed + costFailed + uploadFailed,
-                });
-              } catch (err) {
-                console.error(`[SyncManager] Job sync failed:`, err);
-                Toast.error(`Job sync failed (${job.id}):`);
-                jobFailed++;
-              } finally {
-                this.syncInProgress.delete(itemKey);
-              }
-            })();
-
-            const wrappedPromise = syncJob.then(() => {
-              executing.splice(executing.indexOf(wrappedPromise), 1);
-            });
-
-            executing.push(wrappedPromise);
-
-            if (executing.length >= concurrency) {
-              await Promise.race(executing);
-            }
+              this.notify({
+                status: "in_progress",
+                message: `Jobs ${jobSynced}/${jobs.length}`,
+                progress: jobs.length ? jobSynced / jobs.length : 1,
+                syncedCount: jobSynced,
+                failedCount: jobFailed,
+              });
+              
+            }, MAX_RETRIES);
+          } catch (err) {
+            console.error(`[SyncManager] Job sync failed after retries:`, err);
+            Toast.error(`Job sync failed (${job.id}) after ${MAX_RETRIES} retries`);
+            jobFailed++;
+            allJobsSuccessful = false;
+            this.syncInProgress.delete(itemKey);
           }
-
-          // Wait for all executing jobs to complete
-          await Promise.all(executing);
-
-          // Continue with next batch if needed
-          if (endIdx < jobs.length) {
-            await processBatchJobs(endIdx, batchSize);
-          }
-        };
-
-        // Start processing jobs in batches
-        const jobBatchSize = Math.min(
-          10,
-          Math.max(5, Math.ceil(jobs.length / 2))
-        );
-        await processBatchJobs(0, jobBatchSize);
+        }
+        
+        // If any job failed, don't proceed to costs
+        if (!allJobsSuccessful) {
+          throw new Error(`Failed to sync ${jobFailed} jobs. Stopping sync process.`);
+        }
+        
+        this.notify({
+          status: "in_progress",
+          message: `All jobs synced successfully (${jobSynced})`,
+          syncedCount: jobSynced,
+          failedCount: 0,
+        });
       }
 
-      // 2. Sync Costs
+      // 2. STEP TWO: Sync Costs ONLY if all jobs were successful
       const costs = await getAllCosts();
-      for (const cost of costs) {
-        const itemKey = `cost_${cost.id}`;
-        if (this.syncInProgress.has(itemKey)) {
-          continue;
-        }
+      let allCostsSuccessful = true;
+      
+      if (costs.length > 0) {
+        this.notify({
+          status: "in_progress",
+          message: `Syncing costs (${costs.length})...`,
+          syncedCount: jobSynced,
+          failedCount: 0,
+        });
+        
+        for (const cost of costs) {
+          const itemKey = `cost_${cost.id}`;
+          if (this.syncInProgress.has(itemKey)) continue;
 
-        this.syncInProgress.add(itemKey);
-
-        try {
-          const costData = {
-            userid: userId,
-            job_id: cost.job_id,
-            common_id: cost.common_id,
-            contractor_id: cost.contractor_id,
-            amount: cost.amount,
-            material_cost: cost.material_cost,
-          };
-          const resp = await axios.post(
-            `${BASE_API_URL}/costs.php?userid=${userId}`,
-            costData,
-            { timeout: 10000, validateStatus: (s) => s < 500 }
-          );
-          if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
-          await deleteCost(String(cost.id));
-          costSynced++;
-          this.notify({
-            status: "in_progress",
-            message: `Costs ${costSynced}/${costs.length}`,
-            progress: costs.length ? costSynced / costs.length : 1,
-            syncedCount: jobSynced + costSynced + uploadSynced,
-            failedCount: jobFailed + costFailed + uploadFailed,
-          });
-        } catch (err) {
-          this.syncInProgress.delete(itemKey);
-          Toast.error(`Cost sync failed (${cost.id}):`);
-          costFailed++;
+          this.syncInProgress.add(itemKey);
+          
+          try {
+            await retryWithDelay(async () => {
+              const costData = {
+                userid: userId,
+                job_id: cost.job_id,
+                common_id: cost.common_id,
+                contractor_id: cost.contractor_id,
+                amount: cost.amount,
+                material_cost: cost.material_cost,
+              };
+              
+              const resp = await axios.post(
+                `${BASE_API_URL}/costs.php?userid=${userId}`,
+                costData,
+                { timeout: 10000, validateStatus: (s) => s < 500 }
+              );
+              
+              if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
+              
+              await deleteCost(String(cost.id));
+              costSynced++;
+              
+              this.notify({
+                status: "in_progress",
+                message: `Costs ${costSynced}/${costs.length}`,
+                progress: costs.length ? costSynced / costs.length : 1,
+                syncedCount: jobSynced + costSynced,
+                failedCount: costFailed,
+              });
+            }, MAX_RETRIES);
+          } catch (err) {
+            console.error(`[SyncManager] Cost sync failed after retries:`, err);
+            Toast.error(`Cost sync failed (${cost.id}) after ${MAX_RETRIES} retries`);
+            costFailed++;
+            allCostsSuccessful = false;
+            this.syncInProgress.delete(itemKey);
+          }
         }
+        
+        // If any cost failed, don't proceed to uploads
+        if (!allCostsSuccessful) {
+          throw new Error(`Failed to sync ${costFailed} costs. Stopping sync process.`);
+        }
+        
+        this.notify({
+          status: "in_progress",
+          message: `All costs synced successfully (${costSynced})`,
+          syncedCount: jobSynced + costSynced,
+          failedCount: 0,
+        });
       }
 
-      // 3. Sync Media Uploads
+      // 3. STEP THREE: Sync Media Uploads ONLY if all costs were successful
       const uploads = await getAllUploads();
-
+      
       if (uploads.length > 0) {
-        const uploadBatchSize = Math.min(5, uploads.length);
+        this.notify({
+          status: "in_progress",
+          message: `Syncing media uploads (${uploads.length})...`,
+          syncedCount: jobSynced + costSynced,
+          failedCount: 0,
+        });
+        
+        for (const upload of uploads) {
+          const uploadKey = `upload_${upload.id}`;
+          if (this.syncInProgress.has(uploadKey)) continue;
+          
+          this.syncInProgress.add(uploadKey);
+          
+          try {
+            await retryWithDelay(async () => {
+              const fileInfo = await FileSystem.getInfoAsync(
+                upload.content_path ?? upload.uri ?? ""
+              );
 
-        for (let i = 0; i < uploads.length; i += uploadBatchSize) {
-          const batchUploads = uploads.slice(i, i + uploadBatchSize);
-          const executing: Promise<any>[] = [];
+              const contentUri = fileInfo.exists
+                ? upload.content_path!
+                : upload.uri!;
 
-          for (const upload of batchUploads) {
-            const uploadKey = `upload_${upload.id}`;
-
-            if (this.syncInProgress.has(uploadKey)) continue;
-            this.syncInProgress.add(uploadKey);
-
-            const uploadPromise = (async () => {
-              try {
-                const fileInfo = await FileSystem.getInfoAsync(
-                  upload.content_path ?? upload.uri ?? ""
-                );
-
-                const contentUri = fileInfo.exists
-                  ? upload.content_path!
-                  : upload.uri!;
-
-                // For large files, consider chunking
-                const fileSize =
-                  fileInfo.exists && "size" in fileInfo ? fileInfo.size : 0;
-
-                if (fileSize > 5 * 1024 * 1024 && networkQuality !== "high") {
-                  // Large file on non-high quality network - consider chunking
-                  // This would require API support for chunked uploads
-                  // ...chunked upload implementation if API supports...
-                }
-
-                // Standard upload
-                const formData = new FormData();
-                formData.append("id", upload.id.toString());
-                formData.append(
-                  "total_segments",
-                  String(upload.total_segments)
-                );
-                formData.append(
-                  "segment_number",
-                  String(upload.segment_number)
-                );
-                formData.append("main_category", String(upload.main_category));
-                formData.append(
-                  "category_level_1",
-                  String(upload.category_level_1)
-                );
-                formData.append("property_id", String(upload.property_id));
-                formData.append("job_id", String(upload.job_id));
-                formData.append("file_name", upload.file_name || "");
-                if (upload.file_type) {
-                  formData.append("file_type", upload.file_type);
-                }
-                formData.append("user_name", userData?.payload?.username || "");
-                formData.append("common_id", upload.common_id || "");
-
-                formData.append("content", {
-                  uri: contentUri,
-                  type: upload.file_type || "application/octet-stream",
-                  name: upload.file_name,
-                } as any);
-
-                const controller = new AbortController();
-                this.abortControllers.set(uploadKey, controller);
-
-                const resp = await axios.post(
-                  `${BASE_API_URL}/media-uploader.php`,
-                  formData,
-                  {
-                    headers: { "Content-Type": "multipart/form-data" },
-                    timeout: 60000, // Longer timeout for uploads
-                    signal: controller.signal,
-                    onUploadProgress: (evt) => {
-                      const pct = evt.total
-                        ? Math.round((evt.loaded * 100) / evt.total)
-                        : null;
-                      this.notify({
-                        status: "in_progress",
-                        message:
-                          pct !== null
-                            ? `Uploading media ${pct}%`
-                            : "Uploading media...",
-                        syncedCount: jobSynced + costSynced + uploadSynced,
-                        failedCount: jobFailed + costFailed + uploadFailed,
-                      });
-                    },
-                    validateStatus: (s) => s < 500,
-                  }
-                );
-
-                this.abortControllers.delete(uploadKey);
-
-                if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
-
-                await deleteUpload(upload.id);
-                uploadSynced++;
-
-                this.notify({
-                  status: "in_progress",
-                  message: `Media ${uploadSynced}/${uploads.length}`,
-                  progress: uploads.length ? uploadSynced / uploads.length : 1,
-                  syncedCount: jobSynced + costSynced + uploadSynced,
-                  failedCount: jobFailed + costFailed + uploadFailed,
-                });
-              } catch (err) {
-                Toast.error(`Upload sync failed (${upload.id}):`);
-                uploadFailed++;
-              } finally {
-                this.syncInProgress.delete(uploadKey);
+              // Standard upload
+              const formData = new FormData();
+              formData.append("id", upload.id.toString());
+              formData.append(
+                "total_segments",
+                String(upload.total_segments)
+              );
+              formData.append(
+                "segment_number",
+                String(upload.segment_number)
+              );
+              formData.append("main_category", String(upload.main_category));
+              formData.append(
+                "category_level_1",
+                String(upload.category_level_1)
+              );
+              formData.append("property_id", String(upload.property_id));
+              formData.append("job_id", String(upload.job_id));
+              formData.append("file_name", upload.file_name || "");
+              if (upload.file_type) {
+                formData.append("file_type", upload.file_type);
               }
-            })();
+              formData.append("user_name", userData?.payload?.username || "");
+              formData.append("common_id", upload.common_id || "");
 
-            const wrappedPromise = uploadPromise.then(() => {
-              executing.splice(executing.indexOf(wrappedPromise), 1);
-            });
+              formData.append("content", {
+                uri: contentUri,
+                type: upload.file_type || "application/octet-stream",
+                name: upload.file_name,
+              } as any);
 
-            executing.push(wrappedPromise);
+              const controller = new AbortController();
+              this.abortControllers.set(uploadKey, controller);
 
-            if (executing.length >= concurrency) {
-              await Promise.race(executing);
-            }
+              const resp = await axios.post(
+                `${BASE_API_URL}/media-uploader.php`,
+                formData,
+                {
+                  headers: { "Content-Type": "multipart/form-data" },
+                  timeout: 60000, // Longer timeout for uploads
+                  signal: controller.signal,
+                  onUploadProgress: (evt) => {
+                    const pct = evt.total
+                      ? Math.round((evt.loaded * 100) / evt.total)
+                      : null;
+                    this.notify({
+                      status: "in_progress",
+                      message:
+                        pct !== null
+                          ? `Uploading media ${uploadSynced+1}/${uploads.length} (${pct}%)`
+                          : `Uploading media ${uploadSynced+1}/${uploads.length}...`,
+                      syncedCount: jobSynced + costSynced + uploadSynced,
+                      failedCount: uploadFailed,
+                    });
+                  },
+                  validateStatus: (s) => s < 500,
+                }
+              );
+
+              this.abortControllers.delete(uploadKey);
+
+              if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
+
+              await deleteUpload(upload.id);
+              uploadSynced++;
+
+              this.notify({
+                status: "in_progress",
+                message: `Media ${uploadSynced}/${uploads.length}`,
+                progress: uploads.length ? uploadSynced / uploads.length : 1,
+                syncedCount: jobSynced + costSynced + uploadSynced,
+                failedCount: uploadFailed,
+              });
+            }, MAX_RETRIES);
+          } catch (err) {
+            console.error(`[SyncManager] Upload sync failed after retries:`, err);
+            Toast.error(`Upload sync failed (${upload.id}) after ${MAX_RETRIES} retries`);
+            uploadFailed++;
+            this.syncInProgress.delete(uploadKey);
           }
-
-          // Wait for current batch to complete
-          await Promise.all(executing);
         }
       }
 
