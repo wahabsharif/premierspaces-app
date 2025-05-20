@@ -48,6 +48,8 @@ export class SyncManager {
   private syncInProgress = new Set<string>();
   private lastSyncAttempt = 0;
   private syncNotificationId: string | null = null;
+  private abortControllers: Map<string, AbortController> = new Map();
+  private debounceTimers: Record<string, NodeJS.Timeout> = {};
 
   private constructor() {}
 
@@ -337,8 +339,51 @@ export class SyncManager {
     }
   }
 
+  // Optimized network quality assessment
+  private async assessNetworkQuality(): Promise<
+    "high" | "medium" | "low" | "offline"
+  > {
+    try {
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) return "offline";
+
+      if (netInfo.type === "wifi") {
+        // On WiFi, we generally have good bandwidth
+        return "high";
+      }
+
+      if (netInfo.type === "cellular") {
+        // On cellular, consider the effective type
+        if (netInfo.details?.cellularGeneration) {
+          const gen = netInfo.details.cellularGeneration;
+          if (gen === "4g" || gen === "5g") return "medium";
+          return "low";
+        }
+      }
+
+      return "medium"; // Default to medium
+    } catch (e) {
+      console.warn("Error assessing network quality:", e);
+      return "medium";
+    }
+  }
+
+  // Debounce implementation for better performance
+  private debounce(key: string, fn: Function, delay: number) {
+    if (this.debounceTimers[key]) {
+      clearTimeout(this.debounceTimers[key]);
+    }
+
+    this.debounceTimers[key] = setTimeout(() => {
+      delete this.debounceTimers[key];
+      fn();
+    }, delay);
+  }
+
+  // Enhanced syncAll with better performance
   public async syncAll(skipTimeCheck = false) {
     if (this.isSyncing) return;
+
     if (!skipTimeCheck) {
       const lastSyncTime = await AsyncStorage.getItem("lastSyncTime");
       const now = Date.now();
@@ -347,6 +392,11 @@ export class SyncManager {
 
     this.isSyncing = true;
     this.syncInProgress.clear();
+
+    // Clear any existing abort controllers
+    this.abortControllers.forEach((controller) => controller.abort());
+    this.abortControllers.clear();
+
     await this.notify({ status: "syncing", message: "Syncing all data..." });
 
     let jobSynced = 0,
@@ -362,47 +412,120 @@ export class SyncManager {
       const userId = userData?.payload?.userid || userData?.userid;
       if (!userId) throw new Error("No user ID in AsyncStorage");
 
-      // Sync Jobs
+      // Get network quality to optimize sync strategy
+      const networkQuality = await this.assessNetworkQuality();
+
+      // Adjust concurrency based on network quality
+      const getConcurrency = () => {
+        switch (networkQuality) {
+          case "high":
+            return 3;
+          case "medium":
+            return 2;
+          case "low":
+            return 1;
+          default:
+            return 1;
+        }
+      };
+
+      const concurrency = getConcurrency();
+      console.log(
+        `Network quality: ${networkQuality}, concurrency: ${concurrency}`
+      );
+
+      // Sync Jobs with optimized batching
       const jobs = await getAllJobs();
 
-      for (const job of jobs) {
-        // Skip if already syncing this item
-        const itemKey = `job_${job.id}`;
-        if (this.syncInProgress.has(itemKey)) {
-          continue;
-        }
+      if (jobs.length > 0) {
+        const processBatchJobs = async (
+          startIdx: number,
+          batchSize: number
+        ) => {
+          const endIdx = Math.min(startIdx + batchSize, jobs.length);
+          const batch = jobs.slice(startIdx, endIdx);
 
-        this.syncInProgress.add(itemKey);
+          // Use Promise.all with concurrency control
+          const executing: Promise<any>[] = [];
 
-        try {
-          const jobData = {
-            userid: userId,
-            payload: { ...job, id: undefined },
-          };
-          const resp = await axios.post(
-            `${BASE_API_URL}/newjob.php?userid=${userId}`,
-            jobData,
-            { timeout: 10000, validateStatus: (s) => s < 500 }
-          );
-          if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
+          for (const job of batch) {
+            // Skip if already syncing
+            const itemKey = `job_${job.id}`;
+            if (this.syncInProgress.has(itemKey)) continue;
 
-          // Remove from DB only after successful sync
-          await deleteJob(job.id);
-          jobSynced++;
-          this.notify({
-            status: "in_progress",
-            message: `Jobs ${jobSynced}/${jobs.length}`,
-            progress: jobs.length ? jobSynced / jobs.length : 1,
-            syncedCount: jobSynced + costSynced + uploadSynced,
-            failedCount: jobFailed + costFailed + uploadFailed,
-          });
-        } catch (err) {
-          console.error(`[SyncManager] Job sync failed:`, err);
-          Toast.error(`Job sync failed (${job.id}):`);
-          jobFailed++;
-        } finally {
-          this.syncInProgress.delete(itemKey);
-        }
+            this.syncInProgress.add(itemKey);
+
+            const syncJob = (async () => {
+              try {
+                const jobData = {
+                  userid: userId,
+                  payload: { ...job, id: undefined },
+                };
+
+                // Create abort controller for this request
+                const controller = new AbortController();
+                this.abortControllers.set(itemKey, controller);
+
+                const resp = await axios.post(
+                  `${BASE_API_URL}/newjob.php?userid=${userId}`,
+                  jobData,
+                  {
+                    timeout: 15000,
+                    signal: controller.signal,
+                    validateStatus: (s) => s < 500,
+                  }
+                );
+
+                this.abortControllers.delete(itemKey);
+
+                if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
+
+                // Remove from DB only after successful sync
+                await deleteJob(job.id);
+                jobSynced++;
+
+                this.notify({
+                  status: "in_progress",
+                  message: `Jobs ${jobSynced}/${jobs.length}`,
+                  progress: jobs.length ? jobSynced / jobs.length : 1,
+                  syncedCount: jobSynced + costSynced + uploadSynced,
+                  failedCount: jobFailed + costFailed + uploadFailed,
+                });
+              } catch (err) {
+                console.error(`[SyncManager] Job sync failed:`, err);
+                Toast.error(`Job sync failed (${job.id}):`);
+                jobFailed++;
+              } finally {
+                this.syncInProgress.delete(itemKey);
+              }
+            })();
+
+            const wrappedPromise = syncJob.then(() => {
+              executing.splice(executing.indexOf(wrappedPromise), 1);
+            });
+
+            executing.push(wrappedPromise);
+
+            if (executing.length >= concurrency) {
+              await Promise.race(executing);
+            }
+          }
+
+          // Wait for all executing jobs to complete
+          await Promise.all(executing);
+
+          // Continue with next batch if needed
+          if (endIdx < jobs.length) {
+            await processBatchJobs(endIdx, batchSize);
+          }
+        };
+
+        // Start processing jobs in batches
+        const jobBatchSize = Math.min(
+          10,
+          Math.max(5, Math.ceil(jobs.length / 2))
+        );
+        await processBatchJobs(0, jobBatchSize);
       }
 
       // 2. Sync Costs
@@ -448,72 +571,134 @@ export class SyncManager {
 
       // 3. Sync Media Uploads
       const uploads = await getAllUploads();
-      for (const upload of uploads) {
-        try {
-          // build FormData
-          const formData = new FormData();
-          const fileInfo = await FileSystem.getInfoAsync(
-            upload.content_path ?? upload.uri ?? ""
-          );
-          const contentUri = fileInfo.exists
-            ? upload.content_path!
-            : upload.uri!;
 
-          formData.append("id", upload.id.toString());
-          formData.append("total_segments", String(upload.total_segments));
-          formData.append("segment_number", String(upload.segment_number));
-          formData.append("main_category", String(upload.main_category));
-          formData.append("category_level_1", String(upload.category_level_1));
-          formData.append("property_id", String(upload.property_id));
-          formData.append("job_id", String(upload.job_id));
-          formData.append("file_name", upload.file_name || "");
-          if (upload.file_type) {
-            formData.append("file_type", upload.file_type);
-          }
-          formData.append("user_name", userData?.payload?.username || "");
-          formData.append("common_id", upload.common_id || "");
+      if (uploads.length > 0) {
+        const uploadBatchSize = Math.min(5, uploads.length);
 
-          formData.append("content", {
-            uri: contentUri,
-            type: upload.file_type || "application/octet-stream",
-            name: upload.file_name,
-          } as any);
-          const resp = await axios.post(
-            `${BASE_API_URL}/media-uploader.php`,
-            formData,
-            {
-              headers: { "Content-Type": "multipart/form-data" },
-              timeout: 10000,
-              onUploadProgress: (evt) => {
-                const pct = evt.total
-                  ? Math.round((evt.loaded * 100) / evt.total)
-                  : null;
+        for (let i = 0; i < uploads.length; i += uploadBatchSize) {
+          const batchUploads = uploads.slice(i, i + uploadBatchSize);
+          const executing: Promise<any>[] = [];
+
+          for (const upload of batchUploads) {
+            const uploadKey = `upload_${upload.id}`;
+
+            if (this.syncInProgress.has(uploadKey)) continue;
+            this.syncInProgress.add(uploadKey);
+
+            const uploadPromise = (async () => {
+              try {
+                const fileInfo = await FileSystem.getInfoAsync(
+                  upload.content_path ?? upload.uri ?? ""
+                );
+
+                const contentUri = fileInfo.exists
+                  ? upload.content_path!
+                  : upload.uri!;
+
+                // For large files, consider chunking
+                const fileSize =
+                  fileInfo.exists && "size" in fileInfo ? fileInfo.size : 0;
+
+                if (fileSize > 5 * 1024 * 1024 && networkQuality !== "high") {
+                  // Large file on non-high quality network - consider chunking
+                  // This would require API support for chunked uploads
+                  // ...chunked upload implementation if API supports...
+                }
+
+                // Standard upload
+                const formData = new FormData();
+                formData.append("id", upload.id.toString());
+                formData.append(
+                  "total_segments",
+                  String(upload.total_segments)
+                );
+                formData.append(
+                  "segment_number",
+                  String(upload.segment_number)
+                );
+                formData.append("main_category", String(upload.main_category));
+                formData.append(
+                  "category_level_1",
+                  String(upload.category_level_1)
+                );
+                formData.append("property_id", String(upload.property_id));
+                formData.append("job_id", String(upload.job_id));
+                formData.append("file_name", upload.file_name || "");
+                if (upload.file_type) {
+                  formData.append("file_type", upload.file_type);
+                }
+                formData.append("user_name", userData?.payload?.username || "");
+                formData.append("common_id", upload.common_id || "");
+
+                formData.append("content", {
+                  uri: contentUri,
+                  type: upload.file_type || "application/octet-stream",
+                  name: upload.file_name,
+                } as any);
+
+                const controller = new AbortController();
+                this.abortControllers.set(uploadKey, controller);
+
+                const resp = await axios.post(
+                  `${BASE_API_URL}/media-uploader.php`,
+                  formData,
+                  {
+                    headers: { "Content-Type": "multipart/form-data" },
+                    timeout: 60000, // Longer timeout for uploads
+                    signal: controller.signal,
+                    onUploadProgress: (evt) => {
+                      const pct = evt.total
+                        ? Math.round((evt.loaded * 100) / evt.total)
+                        : null;
+                      this.notify({
+                        status: "in_progress",
+                        message:
+                          pct !== null
+                            ? `Uploading media ${pct}%`
+                            : "Uploading media...",
+                        syncedCount: jobSynced + costSynced + uploadSynced,
+                        failedCount: jobFailed + costFailed + uploadFailed,
+                      });
+                    },
+                    validateStatus: (s) => s < 500,
+                  }
+                );
+
+                this.abortControllers.delete(uploadKey);
+
+                if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
+
+                await deleteUpload(upload.id);
+                uploadSynced++;
+
                 this.notify({
                   status: "in_progress",
-                  message:
-                    pct !== null
-                      ? `Uploading media ${pct}%`
-                      : "Uploading media...",
+                  message: `Media ${uploadSynced}/${uploads.length}`,
+                  progress: uploads.length ? uploadSynced / uploads.length : 1,
                   syncedCount: jobSynced + costSynced + uploadSynced,
                   failedCount: jobFailed + costFailed + uploadFailed,
                 });
-              },
-              validateStatus: (s) => s < 500,
+              } catch (err) {
+                Toast.error(`Upload sync failed (${upload.id}):`);
+                uploadFailed++;
+              } finally {
+                this.syncInProgress.delete(uploadKey);
+              }
+            })();
+
+            const wrappedPromise = uploadPromise.then(() => {
+              executing.splice(executing.indexOf(wrappedPromise), 1);
+            });
+
+            executing.push(wrappedPromise);
+
+            if (executing.length >= concurrency) {
+              await Promise.race(executing);
             }
-          );
-          if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
-          await deleteUpload(upload.id);
-          uploadSynced++;
-          this.notify({
-            status: "in_progress",
-            message: `Media ${uploadSynced}/${uploads.length}`,
-            progress: uploads.length ? uploadSynced / uploads.length : 1,
-            syncedCount: jobSynced + costSynced + uploadSynced,
-            failedCount: jobFailed + costFailed + uploadFailed,
-          });
-        } catch (err) {
-          Toast.error(`Upload sync failed (${upload.id}):`);
-          uploadFailed++;
+          }
+
+          // Wait for current batch to complete
+          await Promise.all(executing);
         }
       }
 
@@ -547,6 +732,14 @@ export class SyncManager {
       const msg = err.message || "Sync failed; will retry when online.";
       await this.notify({ status: "error", message: msg });
     } finally {
+      // Clean up resources
+      this.abortControllers.forEach((controller) => controller.abort());
+      this.abortControllers.clear();
+
+      Object.keys(this.debounceTimers).forEach((key) => {
+        clearTimeout(this.debounceTimers[key]);
+      });
+
       await AsyncStorage.setItem("lastSyncTime", Date.now().toString());
       this.isSyncing = false;
       this.syncInProgress.clear();
@@ -626,8 +819,13 @@ export class SyncManager {
     };
   }
 
+  // Cancel sync with proper resource cleanup
   public cancelSync(): void {
     if (this.isSyncing) {
+      // Abort all in-progress requests
+      this.abortControllers.forEach((controller) => controller.abort());
+      this.abortControllers.clear();
+
       this.isSyncing = false;
       this.syncInProgress.clear();
       this.notify({ status: "error", message: "Sync cancelled by user" });

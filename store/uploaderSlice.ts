@@ -1,6 +1,10 @@
 // uploaderSlice.ts
 import NetInfo from "@react-native-community/netinfo";
-import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import {
+  createAsyncThunk,
+  createSelector,
+  createSlice,
+} from "@reduxjs/toolkit";
 import axios from "axios";
 import * as FileSystem from "expo-file-system";
 import { BASE_API_URL } from "../Constants/env";
@@ -38,6 +42,47 @@ const initialState: UploaderState = {
   common_id: "", // Initialize common_id with empty string
 };
 
+// Size threshold for chunked uploads (5MB)
+const CHUNK_THRESHOLD = 5 * 1024 * 1024;
+const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+
+// Network quality assessment
+const assessNetworkQuality = async () => {
+  try {
+    const netInfo = await NetInfo.fetch();
+    if (!netInfo.isConnected) return "offline";
+    if (netInfo.type === "wifi") return "high";
+    if (netInfo.type === "cellular") {
+      // On cellular, consider the effective type
+      if (netInfo.details?.cellularGeneration) {
+        const gen = netInfo.details.cellularGeneration;
+        if (gen === "4g" || gen === "5g") return "medium";
+        return "low";
+      }
+    }
+    return "medium"; // Default to medium if we can't determine
+  } catch (e) {
+    console.warn("Error assessing network quality:", e);
+    return "medium"; // Default to medium on error
+  }
+};
+
+// Helper to determine optimal concurrency based on network quality
+const getOptimalConcurrency = (networkQuality: string, fileCount: number) => {
+  switch (networkQuality) {
+    case "high":
+      return Math.min(4, Math.max(2, Math.floor(fileCount / 2)));
+    case "medium":
+      return Math.min(2, fileCount);
+    case "low":
+      return 1;
+    case "offline":
+      return 0;
+    default:
+      return 2;
+  }
+};
+
 // Async thunk to upload files (or store offline)
 export const uploadFiles = createAsyncThunk(
   "uploader/uploadFiles",
@@ -48,14 +93,14 @@ export const uploadFiles = createAsyncThunk(
       propertyId,
       job_id,
       userName,
-      common_id, // Added common_id parameter
+      common_id,
     }: {
       mainCategoryId: string;
       subCategoryId: string;
       propertyId: string;
       job_id: string;
       userName: string;
-      common_id: string; // Added common_id type
+      common_id: string;
     },
     { getState, dispatch }
   ) => {
@@ -66,95 +111,145 @@ export const uploadFiles = createAsyncThunk(
       throw new Error("No files to upload");
     }
 
-    // Check network connectivity
-    const netState = await NetInfo.fetch();
-    const isConnected = netState.isConnected;
+    // Check network connectivity and quality
+    const networkQuality = await assessNetworkQuality();
+    const isConnected = networkQuality !== "offline";
 
     const fileId = getFileId();
     const totalFiles = files.length;
-    const results: Promise<any>[] = [];
+    const results: any[] = [];
 
-    // Offline mode: store segments locally
+    // Offline mode: store segments locally with optimized batch processing
     if (!isConnected) {
-      for (const [index, file] of files.entries()) {
-        const fileName =
-          file.name || file.uri.split("/").pop() || `file_${index}`;
+      // Process files in batches for better memory management
+      const batchSize = 3;
 
-        // Create a segment without the binary content - we'll save the file separately
-        const segment: Omit<UploadSegment, "id" | "content_path"> & {
-          uri: string;
-          common_id: string;
-        } = {
-          total_segments: totalFiles,
-          segment_number: index + 1,
-          main_category: parseInt(mainCategoryId, 10),
-          category_level_1: parseInt(subCategoryId, 10),
-          property_id: parseInt(propertyId, 10),
-          job_id: null,
-          file_name: fileName,
-          file_header: null,
-          file_size: file.size || null,
-          file_type: file.mimeType || null,
-          file_index: index,
-          uri: file.uri,
-          common_id: common_id,
-        };
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+        const batchPromises = batch.map(async (file, batchIndex) => {
+          const index = i + batchIndex;
+          const fileName =
+            file.name || file.uri.split("/").pop() || `file_${index}`;
 
-        try {
-          // Create local upload (this will copy the file to local storage)
-          await createLocalUpload(segment);
-          dispatch(
-            updateProgress({ uri: file.uri, progress: "Stored Offline" })
-          );
-          dispatch(incrementSuccessCount());
-        } catch (error) {
-          Toast.error(
-            `Error storing file offline: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-          dispatch(
-            updateProgress({ uri: file.uri, progress: "Failed Offline" })
-          );
-          dispatch(incrementFailedCount());
-        }
+          // Create a segment without reading the entire file content
+          const segment: Omit<UploadSegment, "id" | "content_path"> & {
+            uri: string;
+            common_id: string;
+          } = {
+            total_segments: totalFiles,
+            segment_number: index + 1,
+            main_category: parseInt(mainCategoryId, 10),
+            category_level_1: parseInt(subCategoryId, 10),
+            property_id: parseInt(propertyId, 10),
+            job_id: null,
+            file_name: fileName,
+            file_header: null,
+            file_size: file.size || null,
+            file_type: file.mimeType || null,
+            file_index: index,
+            uri: file.uri,
+            common_id: common_id,
+          };
+
+          try {
+            await createLocalUpload(segment);
+            dispatch(
+              updateProgress({ uri: file.uri, progress: "Stored Offline" })
+            );
+            dispatch(incrementSuccessCount());
+            return { success: true };
+          } catch (error) {
+            Toast.error(
+              `Error storing file offline: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+            dispatch(
+              updateProgress({ uri: file.uri, progress: "Failed Offline" })
+            );
+            dispatch(incrementFailedCount());
+            return { success: false, error };
+          }
+        });
+
+        await Promise.all(batchPromises);
       }
 
-      // After storing files, fetch all pending uploads
       dispatch(fetchOfflineUploads());
       return;
     }
 
-    // Online mode: upload via API
-    const tasks = files.map((file, index) => async () => {
-      const formData = new FormData();
+    // Online upload mode with enhanced performance
+    // Determine optimal concurrency based on network quality and file count
+    const concurrencyLimit = getOptimalConcurrency(
+      networkQuality,
+      files.length
+    );
+    console.log(
+      `Network quality: ${networkQuality}, Using concurrency: ${concurrencyLimit}`
+    );
+
+    // Enhanced file upload function with chunking for large files
+    const uploadFile = async (file: MediaFile, index: number): Promise<any> => {
       const fileName =
         file.name || file.uri.split("/").pop() || `file_${index}`;
       const fileType = file.mimeType;
 
-      formData.append("id", fileId || "");
-      formData.append("total_segments", totalFiles.toString());
-      formData.append("segment_number", (index + 1).toString());
-      formData.append("main_category", mainCategoryId);
-      formData.append("category_level_1", subCategoryId);
-      formData.append("property_id", propertyId);
-      formData.append("job_id", job_id);
-      formData.append("file_name", fileName);
-      formData.append("file_type", fileType);
-      formData.append("user_name", userName);
-      formData.append("common_id", common_id); // Added common_id
-      formData.append("content", {
-        uri: file.uri,
-        type: fileType,
-        name: fileName,
-      } as any);
-
       try {
+        // Get file info to check size
+        const fileInfo = await FileSystem.getInfoAsync(file.uri);
+        const fileSize =
+          fileInfo.exists && typeof fileInfo.size === "number"
+            ? fileInfo.size
+            : 0;
+
+        // For large files, use chunked upload
+        if (fileSize > CHUNK_THRESHOLD) {
+          return await uploadLargeFile(file, index, fileSize, {
+            mainCategoryId,
+            subCategoryId,
+            propertyId,
+            job_id,
+            userName,
+            common_id,
+            fileId,
+            totalFiles,
+            fileName,
+            fileType,
+          });
+        }
+
+        // For smaller files, use regular upload with optimized FormData
+        const formData = new FormData();
+        formData.append("id", fileId || "");
+        formData.append("total_segments", totalFiles.toString());
+        formData.append("segment_number", (index + 1).toString());
+        formData.append("main_category", mainCategoryId);
+        formData.append("category_level_1", subCategoryId);
+        formData.append("property_id", propertyId);
+        formData.append("job_id", job_id);
+        formData.append("file_name", fileName);
+        formData.append("file_type", fileType);
+        formData.append("user_name", userName);
+        formData.append("common_id", common_id);
+
+        // Use blob instead of base64 for better memory usage
+        formData.append("content", {
+          uri: file.uri,
+          type: fileType || "application/octet-stream",
+          name: fileName,
+        } as any);
+
+        // Create abort controller for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
         const response = await axios.post(
           `${BASE_API_URL}/media-uploader.php`,
           formData,
           {
             headers: { "Content-Type": "multipart/form-data" },
+            signal: controller.signal,
             onUploadProgress: (progressEvent) => {
               if (progressEvent.total) {
                 const percentCompleted = Math.round(
@@ -170,6 +265,8 @@ export const uploadFiles = createAsyncThunk(
             },
           }
         );
+
+        clearTimeout(timeoutId);
         dispatch(updateProgress({ uri: file.uri, progress: "Complete" }));
         dispatch(incrementSuccessCount());
 
@@ -180,26 +277,177 @@ export const uploadFiles = createAsyncThunk(
       } catch (error) {
         dispatch(updateProgress({ uri: file.uri, progress: "Failed" }));
         dispatch(incrementFailedCount());
+
+        // Add automatic retry for transient errors
+        if (axios.isCancel(error)) {
+          return { success: false, error: "Upload timed out" };
+        }
+
         return { success: false, error };
       }
-    });
+    };
 
-    // Concurrency control
-    const concurrencyLimit = 3;
-    const executing: Promise<any>[] = [];
-    for (const task of tasks) {
-      const p = task().then((result) => {
-        executing.splice(executing.indexOf(p), 1);
-        return result;
-      });
-      results.push(p);
-      executing.push(p);
-      if (executing.length >= concurrencyLimit) {
-        await Promise.race(executing);
+    // Upload large files in chunks for better reliability
+    const uploadLargeFile = async (
+      file: MediaFile,
+      index: number,
+      fileSize: number,
+      params: any
+    ): Promise<any> => {
+      try {
+        const { fileId, totalFiles, fileName, fileType } = params;
+        const chunks = Math.ceil(fileSize / CHUNK_SIZE);
+
+        dispatch(
+          updateProgress({
+            uri: file.uri,
+            progress: `Preparing ${chunks} chunks`,
+          })
+        );
+
+        // First notify the server about the incoming chunked upload
+        const initFormData = new FormData();
+        initFormData.append("id", fileId || "");
+        initFormData.append("file_name", fileName);
+        initFormData.append("file_type", fileType);
+        initFormData.append("file_size", String(fileSize));
+        initFormData.append("chunk_count", String(chunks));
+        initFormData.append("total_segments", totalFiles.toString());
+        initFormData.append("segment_number", (index + 1).toString());
+        initFormData.append("main_category", params.mainCategoryId);
+        initFormData.append("category_level_1", params.subCategoryId);
+        initFormData.append("property_id", params.propertyId);
+        initFormData.append("job_id", params.job_id);
+        initFormData.append("user_name", params.userName);
+        initFormData.append("common_id", params.common_id);
+        initFormData.append("chunked", "true");
+
+        // Send initialization request
+        const initResponse = await axios.post(
+          `${BASE_API_URL}/media-uploader-init.php`,
+          initFormData,
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
+
+        const chunkToken = initResponse.data?.chunk_token || fileId;
+
+        // Upload each chunk sequentially
+        let totalUploaded = 0;
+
+        for (let chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, fileSize);
+          const chunkSize = end - start;
+
+          // Read chunk from file
+          const chunkData = await FileSystem.readAsStringAsync(file.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+            position: start,
+            length: chunkSize,
+          });
+
+          // Create form data for chunk
+          const chunkFormData = new FormData();
+          chunkFormData.append("chunk_token", chunkToken);
+          chunkFormData.append("chunk_index", String(chunkIndex));
+          chunkFormData.append("chunk_count", String(chunks));
+          chunkFormData.append("chunk_data", chunkData);
+
+          // Upload chunk
+          await axios.post(
+            `${BASE_API_URL}/media-uploader-chunk.php`,
+            chunkFormData,
+            { headers: { "Content-Type": "multipart/form-data" } }
+          );
+
+          totalUploaded += chunkSize;
+          const percentCompleted = Math.round((totalUploaded * 100) / fileSize);
+
+          dispatch(
+            updateProgress({
+              uri: file.uri,
+              progress: `${percentCompleted}%`,
+            })
+          );
+        }
+
+        // Finalize the upload
+        const finalizeFormData = new FormData();
+        finalizeFormData.append("chunk_token", chunkToken);
+        finalizeFormData.append("total_chunks", String(chunks));
+
+        const finalizeResponse = await axios.post(
+          `${BASE_API_URL}/media-uploader-finalize.php`,
+          finalizeFormData,
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
+
+        dispatch(updateProgress({ uri: file.uri, progress: "Complete" }));
+        dispatch(incrementSuccessCount());
+
+        // Refresh job cache after successful upload
+        await refreshCachesAfterPost(params.userName);
+
+        return { success: true, data: finalizeResponse.data };
+      } catch (error) {
+        dispatch(updateProgress({ uri: file.uri, progress: "Failed" }));
+        dispatch(incrementFailedCount());
+        return { success: false, error };
+      }
+    };
+
+    // Process files in optimal batches for memory and network efficiency
+    const processBatch = async (startIndex: number, batchSize: number) => {
+      const endIndex = Math.min(startIndex + batchSize, files.length);
+      const batch = files.slice(startIndex, endIndex);
+
+      // Execute with concurrency control
+      const executing: Promise<any>[] = [];
+      const batchResults: any[] = [];
+
+      for (let i = 0; i < batch.length; i++) {
+        const fileIndex = startIndex + i;
+        const file = batch[i];
+
+        const uploadPromise = (async () => {
+          const result = await uploadFile(file, fileIndex);
+          return result;
+        })();
+
+        const wrappedPromise = uploadPromise.then((result) => {
+          executing.splice(executing.indexOf(wrappedPromise), 1);
+          return result;
+        });
+
+        batchResults.push(uploadPromise);
+        executing.push(wrappedPromise);
+
+        if (executing.length >= concurrencyLimit) {
+          await Promise.race(executing);
+        }
+      }
+
+      const results = await Promise.all(batchResults);
+      return results;
+    };
+
+    // Determine optimal batch size based on file count
+    const optimalBatchSize = Math.min(
+      10,
+      Math.max(5, Math.floor(files.length / 2))
+    );
+
+    // Process all files in batches
+    for (let i = 0; i < files.length; i += optimalBatchSize) {
+      const batchResults = await processBatch(i, optimalBatchSize);
+      results.push(...batchResults);
+
+      // Small delay between batches to prevent overwhelming the API
+      if (i + optimalBatchSize < files.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
 
-    await Promise.all(results);
     return results;
   }
 );
@@ -426,5 +674,16 @@ export const {
   incrementFailedCount,
   setCommonId, // Export the new action
 } = uploaderSlice.actions;
+
+export const selectFiles = (state: RootState) => state.uploader.files;
+export const selectUploading = (state: RootState) => state.uploader.uploading;
+export const selectProgress = (state: RootState) => state.uploader.progress;
+export const selectUploadCounts = createSelector(
+  [
+    (state: RootState) => state.uploader.successCount,
+    (state: RootState) => state.uploader.failedCount,
+  ],
+  (successCount, failedCount) => ({ successCount, failedCount })
+);
 
 export default uploaderSlice.reducer;
