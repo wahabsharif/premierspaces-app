@@ -101,7 +101,11 @@ const CacheService: React.FC<CacheServiceProps> = ({
     }
   };
 
-  const fetchWithSessionCheck = async (url: string) => {
+  const fetchWithSessionCheck = async (
+    url: string,
+    retryCount = 0,
+    maxRetries = 2
+  ) => {
     try {
       const response = await axios.get(url, {
         signal: abortController.current.signal,
@@ -116,17 +120,29 @@ const CacheService: React.FC<CacheServiceProps> = ({
 
       return response.data;
     } catch (error) {
+      const err = error as { message?: string; code?: string };
       if (axios.isCancel(error)) {
         // Request was canceled
+      } else if (
+        err.message === "Network Error" ||
+        err.code === "ECONNABORTED"
+      ) {
+        // Handle network errors specifically
+
+        // Implement retry with exponential backoff
+        if (retryCount < maxRetries) {
+          const backoffTime = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s...
+          await new Promise((resolve) => setTimeout(resolve, backoffTime));
+          return fetchWithSessionCheck(url, retryCount + 1, maxRetries);
+        } else {
+          // Max retries reached, fallback to cache
+        }
       } else {
-        console.warn(
-          `[fetchWithSessionCheck] API request failed for ${url}:`,
-          error
-        );
-        // Return a special value to indicate we should use cache
-        return { useCache: true };
+        // API request failed
       }
-      return null;
+
+      // Return a special value to indicate we should use cache
+      return { useCache: true };
     }
   };
 
