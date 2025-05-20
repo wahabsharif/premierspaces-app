@@ -2,7 +2,7 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useEvent } from "expo";
 import * as FileSystem from "expo-file-system";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -112,6 +112,22 @@ const PendingDataScreen = () => {
     }
   };
 
+  // Create a refresh all data function
+  const refreshAllData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadJobs(), loadCosts(), loadUploads()]);
+    } catch (err) {
+      Toast.error(
+        `Error refreshing data: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   // Set up event listeners for sync events
   useEffect(() => {
     // Listen for sync events
@@ -126,7 +142,7 @@ const PendingDataScreen = () => {
       SYNC_EVENTS.SYNC_COMPLETED,
       (data) => {
         setSyncing(false);
-        loadJobs();
+        refreshAllData();
       }
     );
 
@@ -149,13 +165,23 @@ const PendingDataScreen = () => {
       }
     );
 
+    // Add listener for pending data changes (when data is synced/removed)
+    const pendingDataChangedListener = DeviceEventEmitter.addListener(
+      SYNC_EVENTS.PENDING_DATA_CHANGED,
+      (data) => {
+        // Automatically refresh all data when pending data changes
+        refreshAllData();
+      }
+    );
+
     return () => {
       syncStartedListener.remove();
       syncCompletedListener.remove();
       syncFailedListener.remove();
       pendingCountUpdatedListener.remove();
+      pendingDataChangedListener.remove();
     };
-  }, []);
+  }, [refreshAllData]);
 
   const loadJobs = async () => {
     try {
@@ -193,9 +219,7 @@ const PendingDataScreen = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadJobs();
-    loadCosts();
-    loadUploads();
+    refreshAllData();
   };
 
   const triggerManualSync = () => {
