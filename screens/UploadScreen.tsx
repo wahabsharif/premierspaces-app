@@ -579,10 +579,11 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         )}
         {uploading && (
           <ProgressBar
-            progress={Math.round(
-              ((successCount + failedCount) / files.length) * 100
+            progress={Math.min(
+              100,
+              Math.round(((successCount + failedCount) / files.length) * 100)
             )}
-            uploadedCount={successCount + failedCount}
+            uploadedCount={Math.min(files.length, successCount + failedCount)}
             totalCount={files.length}
           />
         )}
