@@ -34,18 +34,7 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
   const allSuccess = failedCount === 0;
 
   const handleOkay = () => {
-    onClose(); // hide the modal
-
-    // Navigate to JobDetailScreen with refresh parameter instead of going back
-    if (jobId) {
-      navigation.navigate("JobDetailScreen", {
-        id: jobId,
-        refresh: true,
-        materialCost: materialCost,
-      });
-    } else {
-      navigation.goBack();
-    }
+    onClose();
   };
 
   return (

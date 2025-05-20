@@ -26,6 +26,7 @@ import { default as style, default as styles } from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { AppDispatch } from "../store";
 import {
+  clearFiles,
   selectFiles,
   selectProgress,
   selectUploadCounts,
@@ -481,8 +482,19 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
     [files.length, successCount, failedCount]
   );
 
-  function handleStatusModalClose(): void {
-    throw new Error("Function not implemented.");
+  function handleStatusModalClose() {
+    setStatusModalVisible(false);
+    dispatch(clearFiles());
+    if (job_id) {
+      navigation.navigate("JobDetailScreen", {
+        id: job_id,
+        common_id: common_id,
+        refresh: true,
+        materialCost: materialCost || "0",
+      });
+    } else {
+      navigation.goBack();
+    }
   }
 
   return (

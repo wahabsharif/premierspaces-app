@@ -324,7 +324,7 @@ export const uploadFiles = createAsyncThunk(
 
         // Send initialization request
         const initResponse = await axios.post(
-          `${BASE_API_URL}/media-uploader-init.php`,
+          `${BASE_API_URL}/media-uploader.php`,
           initFormData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );
