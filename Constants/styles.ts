@@ -31,7 +31,7 @@ export default StyleSheet.create({
     height: 100,
   },
   headerContainer: {
-    height: 60,
+    height: 45,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
