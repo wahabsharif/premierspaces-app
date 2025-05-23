@@ -2,12 +2,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEvent } from "expo";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
   Image,
   Modal,
+  RefreshControl,
   SafeAreaView,
   SectionList,
   StatusBar,
@@ -16,8 +17,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import styles from "../Constants/styles";
+import { color } from "../Constants/theme";
 import { Header, VideoThumbnail } from "../components";
 import {
   loadFiles,
@@ -28,9 +31,10 @@ import {
 import { FileItem, RootStackParamList } from "../types";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const NUM_COLUMNS = 4;
+const NUM_COLUMNS = 5;
 const CONTAINER_PADDING = 12; // Container padding on both sides
 const ITEM_SPACING = 4; // Space between items
+const PAGE_SIZE = 30;
 
 // Calculate item width correctly based on available space
 const AVAILABLE_WIDTH = SCREEN_WIDTH - 2 * CONTAINER_PADDING;
@@ -66,6 +70,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   // Handle both navigation sources
   const { jobId, fileCategory, files: routeFiles } = route.params;
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
 
   // Redux state
   const allFiles = useSelector(selectFiles);
@@ -83,8 +88,14 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     height: SCREEN_HEIGHT,
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [orientation, setOrientation] = useState(1); // 1 for portrait, 2 for landscape
+  const [orientation, setOrientation] = useState(1);
   const [groupedMedia, setGroupedMedia] = useState<MediaSection[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [allFilteredFiles, setAllFilteredFiles] = useState<FileItem[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Add state to track failed images
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   // Use files from route.params if provided, otherwise undefined
   const filesFromRoute = useMemo(
@@ -153,31 +164,31 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
   };
 
+  // Load files function
+  const loadJobFiles = useCallback(async () => {
+    try {
+      const AsyncStorage = await import(
+        "@react-native-async-storage/async-storage"
+      ).then((m) => m.default);
+      const propRaw = await AsyncStorage.getItem("selectedProperty");
+      if (!propRaw) {
+        setError("Missing property data");
+        return;
+      }
+      const { id: propertyId } = JSON.parse(propRaw);
+      dispatch(loadFiles({ propertyId }) as any);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }, [dispatch]);
+
   // Load files using Redux
   useEffect(() => {
     if (filesFromRoute) {
       return;
     }
-
-    async function loadJobFiles() {
-      try {
-        const AsyncStorage = await import(
-          "@react-native-async-storage/async-storage"
-        ).then((m) => m.default);
-        const propRaw = await AsyncStorage.getItem("selectedProperty");
-        if (!propRaw) {
-          setError("Missing property data");
-          return;
-        }
-        const { id: propertyId } = JSON.parse(propRaw);
-        dispatch(loadFiles({ propertyId }) as any);
-      } catch (e: any) {
-        setError(e.message);
-      }
-    }
-
     loadJobFiles();
-  }, [dispatch, jobId, filesFromRoute]);
+  }, [filesFromRoute, loadJobFiles]);
 
   // Update error state if Redux has an error - only when reduxError changes
   useEffect(() => {
@@ -204,11 +215,16 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         .filter((item) => item.file_category === categoryNumber);
     }
 
-    // Set filtered files to mediaFiles state
-    setMediaFiles(filteredFiles);
+    setAllFilteredFiles(filteredFiles);
+    setCurrentPage(1);
+  }, [activeTab, allFiles, jobId, filesFromRoute]);
+
+  useEffect(() => {
+    const paginatedFiles = allFilteredFiles.slice(0, currentPage * PAGE_SIZE);
+    setMediaFiles(paginatedFiles);
 
     // Group files by date
-    const groupedByDate = filteredFiles.reduce<Record<string, FileItem[]>>(
+    const groupedByDate = paginatedFiles.reduce<Record<string, FileItem[]>>(
       (acc, file) => {
         const dateStr = new Date(file.date_created).toDateString();
         if (!acc[dateStr]) {
@@ -243,7 +259,43 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     });
 
     setGroupedMedia(sections);
-  }, [activeTab, allFiles, jobId, filesFromRoute]);
+  }, [allFilteredFiles, currentPage]);
+
+  const loadMoreData = () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    setTimeout(() => {
+      setCurrentPage((prev) => prev + 1);
+      setTimeout(() => {
+        setIsLoadingMore(false);
+      }, 500);
+    }, 300);
+  };
+
+  // Pull to refresh handler
+  const onRefresh = useCallback(async () => {
+    if (filesFromRoute) {
+      // If using route files, just reset the view
+      setIsRefreshing(true);
+      setTimeout(() => {
+        setCurrentPage(1);
+        setIsRefreshing(false);
+      }, 1000);
+      return;
+    }
+
+    setIsRefreshing(true);
+    setError(null);
+    try {
+      await loadJobFiles();
+    } catch (e) {
+      console.error("Refresh failed:", e);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 1000);
+    }
+  }, [filesFromRoute, loadJobFiles]);
 
   // Handle modal ready state
   useEffect(() => {
@@ -324,11 +376,24 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           activeOpacity={0.7}
         >
           {activeTab === "image" ? (
-            <Image
-              source={{ uri: item.stream_url }}
-              style={innerStyles.image}
-              resizeMode="cover"
-            />
+            failedImages.has(item.stream_url) ? (
+              <View style={innerStyles.brokenImageContainer}>
+                <Image
+                  source={require("../assets/images/broken-image.png")}
+                  style={{ width: 80, height: 80 }}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: item.stream_url }}
+                style={innerStyles.image}
+                resizeMode="cover"
+                onError={() => {
+                  setFailedImages((prev) => new Set(prev).add(item.stream_url));
+                }}
+              />
+            )
           ) : activeTab === "video" ? (
             <View style={innerStyles.videoThumbnailContainer}>
               <View style={innerStyles.videoThumbnail}>
@@ -374,11 +439,24 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
 
     if (activeTab === "image") {
-      return (
+      return failedImages.has(selectedItem.stream_url) ? (
+        <View style={innerStyles.modalBrokenImageContainer}>
+          <Image
+            source={require("../assets/images/broken-image.png")}
+            style={{ width: 200, height: 200 }}
+            resizeMode="contain"
+          />
+        </View>
+      ) : (
         <Image
           source={{ uri: selectedItem.stream_url }}
           style={innerStyles.modalImage}
           resizeMode="contain"
+          onError={() => {
+            setFailedImages((prev) =>
+              new Set(prev).add(selectedItem.stream_url)
+            );
+          }}
         />
       );
     }
@@ -425,24 +503,22 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
   const handleRetry = () => {
     setError(null);
-    // Re-fetch property ID and dispatch the load files action
-    async function retryLoad() {
-      try {
-        const AsyncStorage = await import(
-          "@react-native-async-storage/async-storage"
-        ).then((m) => m.default);
-        const propRaw = await AsyncStorage.getItem("selectedProperty");
-        if (!propRaw) {
-          setError("Missing property data");
-          return;
-        }
-        const property = JSON.parse(propRaw);
-        dispatch(loadFiles({ propertyId: property.id }) as any);
-      } catch (e: any) {
-        setError(e.message);
-      }
-    }
-    retryLoad();
+    loadJobFiles();
+  };
+
+  const renderFooter = () => {
+    return (
+      <View
+        style={[
+          innerStyles.loaderFooter,
+          { paddingBottom: insets.bottom + 20 },
+        ]}
+      >
+        {isLoadingMore ? (
+          <ActivityIndicator size="large" color={color.primary} />
+        ) : null}
+      </View>
+    );
   };
 
   if (isLoading && !filesFromRoute) {
@@ -450,8 +526,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
       <View style={styles.screenContainer}>
         <Header />
         <View style={[styles.container, innerStyles.center]}>
-          <ActivityIndicator size="large" color="#0077B6" />
-          <Text style={innerStyles.loadingText}>Loading media...</Text>
+          <ActivityIndicator size="large" color={color.primary} />
         </View>
       </View>
     );
@@ -483,7 +558,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   return (
     <View style={styles.screenContainer}>
       <Header />
-      <View>
+      <View style={{ flex: 1 }}>
         <View style={innerStyles.tabsContainer}>
           {tabs.map((tab) => (
             <TouchableOpacity
@@ -506,7 +581,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           ))}
         </View>
 
-        {/* SectionList with proper key extraction */}
         <SectionList
           sections={groupedMedia}
           keyExtractor={(items, sectionIndex) =>
@@ -520,7 +594,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           contentContainerStyle={
             mediaFiles.length === 0
               ? { flex: 1, justifyContent: "center" }
-              : undefined
+              : { paddingBottom: insets.bottom }
           }
           ListEmptyComponent={() => (
             <View style={innerStyles.emptyContainer}>
@@ -529,6 +603,19 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
               </Text>
             </View>
           )}
+          ListFooterComponent={renderFooter}
+          onEndReached={loadMoreData}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              colors={[color.primary]}
+              tintColor={color.primary}
+              title="Pull to refresh"
+              titleColor={color.primary}
+            />
+          }
         />
         <Modal
           visible={modalVisible}
@@ -881,7 +968,7 @@ const innerStyles = StyleSheet.create({
   sectionHeader: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderBottomWidth: 1,
+    marginBottom: ITEM_SPACING,
   },
   sectionHeaderText: {
     fontSize: 18,
@@ -890,15 +977,43 @@ const innerStyles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
-    justifyContent: "center", // Center items in the row
+    justifyContent: "center",
     flexWrap: "nowrap",
-    paddingHorizontal: CONTAINER_PADDING - ITEM_SPACING / 2, // Adjust for item margins
+    paddingHorizontal: CONTAINER_PADDING - ITEM_SPACING / 2,
     marginBottom: ITEM_SPACING,
   },
   placeholderItem: {
     width: ITEM_WIDTH,
     height: ITEM_WIDTH,
     margin: ITEM_SPACING / 2,
+  },
+  loaderFooter: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    height: 80,
+    width: "100%",
+  },
+  loadingMoreText: {
+    color: "#666",
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  brokenImageContainer: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+  },
+  modalBrokenImageContainer: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * (4 / 3),
+    maxHeight: SCREEN_HEIGHT - 150,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
   },
 });
 export default MediaPreviewScreen;
