@@ -2,7 +2,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEvent } from "expo";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -30,16 +36,16 @@ import {
 } from "../store/filesSlice";
 import { FileItem, RootStackParamList } from "../types";
 
+// Constants
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const NUM_COLUMNS = 5;
-const CONTAINER_PADDING = 12; // Container padding on both sides
-const ITEM_SPACING = 4; // Space between items
+const CONTAINER_PADDING = 12;
+const ITEM_SPACING = 4;
 const PAGE_SIZE = 30;
-
-// Calculate item width correctly based on available space
 const AVAILABLE_WIDTH = SCREEN_WIDTH - 2 * CONTAINER_PADDING;
 const ITEM_WIDTH = AVAILABLE_WIDTH / NUM_COLUMNS - ITEM_SPACING;
 
+// Types
 type Props = NativeStackScreenProps<RootStackParamList, "MediaPreviewScreen">;
 
 interface MediaSection {
@@ -47,30 +53,105 @@ interface MediaSection {
   data: FileItem[][];
 }
 
+interface ViewDimensions {
+  width: number;
+  height: number;
+}
+
+// Utility functions
+const getFileCategoryNumber = (category: string): string => {
+  const categoryMap: Record<string, string> = {
+    image: "1",
+    document: "2",
+    video: "3",
+  };
+  return categoryMap[category] || "1";
+};
+
 const formatSectionDate = (date: Date): string => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (date.toDateString() === today.toDateString()) {
-    return "Today";
-  } else if (date.toDateString() === yesterday.toDateString()) {
-    return "Yesterday";
-  } else {
-    // Format date like "January 15, 2023"
-    return date.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
+const createFileRows = (files: FileItem[]): FileItem[][] => {
+  const rows: FileItem[][] = [];
+  for (let i = 0; i < files.length; i += NUM_COLUMNS) {
+    rows.push(files.slice(i, i + NUM_COLUMNS));
+  }
+  return rows;
+};
+
+const groupFilesByDate = (files: FileItem[]): MediaSection[] => {
+  const groupedByDate = files.reduce<Record<string, FileItem[]>>(
+    (acc, file) => {
+      const dateStr = new Date(file.date_created).toDateString();
+      if (!acc[dateStr]) acc[dateStr] = [];
+      acc[dateStr].push(file);
+      return acc;
+    },
+    {}
+  );
+
+  const sortedDates = Object.keys(groupedByDate).sort(
+    (a, b) => new Date(b).getTime() - new Date(a).getTime()
+  );
+
+  return sortedDates.map((dateStr) => ({
+    title: formatSectionDate(new Date(dateStr)),
+    data: createFileRows(groupedByDate[dateStr]),
+  }));
+};
+
+// Custom hooks
+const useAsyncStorage = () => {
+  const getProperty = useCallback(async () => {
+    const AsyncStorage = await import(
+      "@react-native-async-storage/async-storage"
+    ).then((m) => m.default);
+    const propRaw = await AsyncStorage.getItem("selectedProperty");
+    if (!propRaw) throw new Error("Missing property data");
+    return JSON.parse(propRaw);
+  }, []);
+
+  return { getProperty };
+};
+
+const useScreenOrientation = () => {
+  const [dimensions, setDimensions] = useState<ViewDimensions>({
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  });
+  const [orientation, setOrientation] = useState(1);
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener("change", ({ window }) => {
+      setDimensions(window);
+      setOrientation(window.width > window.height ? 2 : 1);
+    });
+
+    return () => subscription?.remove();
+  }, []);
+
+  return { dimensions, orientation };
+};
+
+// Component
 const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
-  // Handle both navigation sources
   const { jobId, fileCategory, files: routeFiles } = route.params;
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
+  const { getProperty } = useAsyncStorage();
+  const { dimensions, orientation } = useScreenOrientation();
 
   // Redux state
   const allFiles = useSelector(selectFiles);
@@ -78,226 +159,92 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const reduxError = useSelector(selectFilesError);
 
   // Local state
-  const [mediaFiles, setMediaFiles] = useState<FileItem[]>([]);
+  const [activeTab, setActiveTab] = useState<string>(fileCategory || "image");
   const [error, setError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FileItem | null>(null);
   const [isModalReady, setIsModalReady] = useState(false);
-  const [dimensions, setDimensions] = useState({
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-  });
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [orientation, setOrientation] = useState(1);
-  const [groupedMedia, setGroupedMedia] = useState<MediaSection[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [allFilteredFiles, setAllFilteredFiles] = useState<FileItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  // Add state to track failed images
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [videoUrl, setVideoUrl] = useState<string>("");
 
-  // Use files from route.params if provided, otherwise undefined
+  // Refs and memoized values
+  const videoUrlRef = useRef<string | null>(null);
+  const thumbnailCache = useMemo(() => new Map<string, string>(), []);
   const filesFromRoute = useMemo(
     () => (routeFiles ? [...routeFiles] : undefined),
     [routeFiles]
   );
 
-  const [activeTab, setActiveTab] = useState<string>(fileCategory || "image");
-  const thumbnailCache = useMemo(() => new Map<string, string>(), []);
-
-  // Add state to track current video URL
-  const [videoUrl, setVideoUrl] = useState<string>("");
-
-  // Use refs to store the video URL for reference
-  const videoUrlRef = React.useRef<string | null>(null);
-
-  // Always call the hook unconditionally with the state URL
+  // Video player
   const videoPlayer = useVideoPlayer(videoUrl, (player) => {
-    if (videoUrl) {
-      player.play();
-    }
+    if (videoUrl) player.play();
   });
 
-  // Update video URL when needed
+  const { isPlaying } = useEvent(videoPlayer, "playingChange", {
+    isPlaying: videoPlayer.playing,
+  });
+
+  // Computed values
+  const allFilteredFiles = useMemo(() => {
+    if (filesFromRoute) {
+      const categoryNumber = getFileCategoryNumber(activeTab);
+      return filesFromRoute.filter(
+        (item) => item.file_category === categoryNumber
+      );
+    }
+
+    if (allFiles.length > 0 && jobId) {
+      const categoryNumber = getFileCategoryNumber(activeTab);
+      return allFiles
+        .filter((item) => item.job_id === jobId)
+        .filter((item) => item.file_category === categoryNumber);
+    }
+
+    return [];
+  }, [activeTab, allFiles, jobId, filesFromRoute]);
+
+  const paginatedFiles = useMemo(
+    () => allFilteredFiles.slice(0, currentPage * PAGE_SIZE),
+    [allFilteredFiles, currentPage]
+  );
+
+  const groupedMedia = useMemo(
+    () => groupFilesByDate(paginatedFiles),
+    [paginatedFiles]
+  );
+
+  const tabs = useMemo(
+    () => [
+      { key: "image", label: "Images" },
+      { key: "video", label: "Videos" },
+      { key: "document", label: "Documents" },
+    ],
+    []
+  );
+
+  // Effects
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, allFiles, jobId, filesFromRoute]);
+
+  useEffect(() => {
+    if (reduxError) setError(reduxError);
+  }, [reduxError]);
+
   useEffect(() => {
     if (selectedItem && activeTab === "video" && isModalReady && modalVisible) {
       setVideoUrl(selectedItem.stream_url);
       videoUrlRef.current = selectedItem.stream_url;
     } else {
-      // Clear URL when not needed
       setVideoUrl("");
       videoUrlRef.current = null;
     }
   }, [selectedItem, activeTab, isModalReady, modalVisible]);
 
-  // Get playing state from the video player
-  const { isPlaying } = useEvent(videoPlayer, "playingChange", {
-    isPlaying: videoPlayer.playing,
-  });
-
-  useEffect(() => {
-    const dimensionsListener = Dimensions.addEventListener(
-      "change",
-      ({ window }) => {
-        const { width, height } = window;
-        setDimensions({ width, height });
-        setOrientation(width > height ? 2 : 1);
-      }
-    );
-
-    return () => {
-      dimensionsListener.remove();
-    };
-  }, []);
-
-  const getFileCategoryNumber = (category: string): string => {
-    switch (category) {
-      case "image":
-        return "1";
-      case "document":
-        return "2";
-      case "video":
-        return "3";
-      default:
-        return "1";
-    }
-  };
-
-  // Load files function
-  const loadJobFiles = useCallback(async () => {
-    try {
-      const AsyncStorage = await import(
-        "@react-native-async-storage/async-storage"
-      ).then((m) => m.default);
-      const propRaw = await AsyncStorage.getItem("selectedProperty");
-      if (!propRaw) {
-        setError("Missing property data");
-        return;
-      }
-      const { id: propertyId } = JSON.parse(propRaw);
-      dispatch(loadFiles({ propertyId }) as any);
-    } catch (e: any) {
-      setError(e.message);
-    }
-  }, [dispatch]);
-
-  // Load files using Redux
-  useEffect(() => {
-    if (filesFromRoute) {
-      return;
-    }
-    loadJobFiles();
-  }, [filesFromRoute, loadJobFiles]);
-
-  // Update error state if Redux has an error - only when reduxError changes
-  useEffect(() => {
-    if (reduxError) {
-      setError(reduxError);
-    }
-  }, [reduxError]);
-
-  // Filter files for the current job and active tab
-  useEffect(() => {
-    let filteredFiles: FileItem[] = [];
-
-    if (filesFromRoute) {
-      // If files were passed via route params, use those
-      const categoryNumber = getFileCategoryNumber(activeTab);
-      filteredFiles = filesFromRoute.filter(
-        (item) => item.file_category === categoryNumber
-      );
-    } else if (allFiles.length > 0 && jobId) {
-      // Filter from Redux store using jobId
-      const categoryNumber = getFileCategoryNumber(activeTab);
-      filteredFiles = allFiles
-        .filter((item) => item.job_id === jobId)
-        .filter((item) => item.file_category === categoryNumber);
-    }
-
-    setAllFilteredFiles(filteredFiles);
-    setCurrentPage(1);
-  }, [activeTab, allFiles, jobId, filesFromRoute]);
-
-  useEffect(() => {
-    const paginatedFiles = allFilteredFiles.slice(0, currentPage * PAGE_SIZE);
-    setMediaFiles(paginatedFiles);
-
-    // Group files by date
-    const groupedByDate = paginatedFiles.reduce<Record<string, FileItem[]>>(
-      (acc, file) => {
-        const dateStr = new Date(file.date_created).toDateString();
-        if (!acc[dateStr]) {
-          acc[dateStr] = [];
-        }
-        acc[dateStr].push(file);
-        return acc;
-      },
-      {}
-    );
-
-    // Sort dates in descending order (newest first)
-    const sortedDates = Object.keys(groupedByDate).sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
-    );
-
-    // Create sections with date headers
-    const sections: MediaSection[] = sortedDates.map((dateStr) => {
-      const date = new Date(dateStr);
-      const files = groupedByDate[dateStr];
-
-      // Create rows for grid layout (NUM_COLUMNS items per row)
-      const rows: FileItem[][] = [];
-      for (let i = 0; i < files.length; i += NUM_COLUMNS) {
-        rows.push(files.slice(i, i + NUM_COLUMNS));
-      }
-
-      return {
-        title: formatSectionDate(date),
-        data: rows,
-      };
-    });
-
-    setGroupedMedia(sections);
-  }, [allFilteredFiles, currentPage]);
-
-  const loadMoreData = () => {
-    if (isLoadingMore) return;
-    setIsLoadingMore(true);
-    setTimeout(() => {
-      setCurrentPage((prev) => prev + 1);
-      setTimeout(() => {
-        setIsLoadingMore(false);
-      }, 500);
-    }, 300);
-  };
-
-  // Pull to refresh handler
-  const onRefresh = useCallback(async () => {
-    if (filesFromRoute) {
-      // If using route files, just reset the view
-      setIsRefreshing(true);
-      setTimeout(() => {
-        setCurrentPage(1);
-        setIsRefreshing(false);
-      }, 1000);
-      return;
-    }
-
-    setIsRefreshing(true);
-    setError(null);
-    try {
-      await loadJobFiles();
-    } catch (e) {
-      console.error("Refresh failed:", e);
-    } finally {
-      setTimeout(() => {
-        setIsRefreshing(false);
-      }, 1000);
-    }
-  }, [filesFromRoute, loadJobFiles]);
-
-  // Handle modal ready state
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null;
 
@@ -306,7 +253,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     } else {
       setIsModalReady(false);
       setIsFullscreen(false);
-      // Reset orientation when closing modal
       if (orientation !== 1) {
         ScreenOrientation.lockAsync(
           ScreenOrientation.OrientationLock.PORTRAIT_UP
@@ -319,119 +265,206 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     };
   }, [modalVisible, orientation]);
 
-  const openModal = async (item: FileItem) => {
+  // Handlers
+  const loadJobFiles = useCallback(async () => {
+    try {
+      const { id: propertyId } = await getProperty();
+      dispatch(loadFiles({ propertyId }) as any);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }, [dispatch, getProperty]);
+
+  const loadMoreData = useCallback(() => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    setTimeout(() => {
+      setCurrentPage((prev) => prev + 1);
+      setTimeout(() => setIsLoadingMore(false), 500);
+    }, 300);
+  }, [isLoadingMore]);
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    setError(null);
+
+    if (filesFromRoute) {
+      setTimeout(() => {
+        setCurrentPage(1);
+        setIsRefreshing(false);
+      }, 1000);
+      return;
+    }
+
+    try {
+      await loadJobFiles();
+    } catch (e) {
+      console.error("Refresh failed:", e);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 1000);
+    }
+  }, [filesFromRoute, loadJobFiles]);
+
+  const openModal = useCallback(async (item: FileItem) => {
     setSelectedItem(item);
     setModalVisible(true);
 
-    // Allow screen rotation if it's a video
     if (item.file_category === getFileCategoryNumber("video")) {
       await ScreenOrientation.unlockAsync().catch(() => {});
     }
-  };
+  }, []);
 
-  const closeModal = async () => {
-    // Stop video playback if needed
+  const closeModal = useCallback(async () => {
     if (videoPlayer && videoUrl) {
       videoPlayer.pause();
     }
 
-    // Lock back to portrait when closing
     await ScreenOrientation.lockAsync(
       ScreenOrientation.OrientationLock.PORTRAIT_UP
     ).catch(() => {});
-
     setModalVisible(false);
-  };
+  }, [videoPlayer, videoUrl]);
 
-  const toggleFullscreen = async () => {
+  const toggleFullscreen = useCallback(async () => {
     const newState = !isFullscreen;
     setIsFullscreen(newState);
 
-    if (newState) {
-      await ScreenOrientation.lockAsync(
-        ScreenOrientation.OrientationLock.LANDSCAPE
-      ).catch(() => {});
-    } else {
-      await ScreenOrientation.lockAsync(
-        ScreenOrientation.OrientationLock.PORTRAIT_UP
-      ).catch(() => {});
+    const lockOrientation = newState
+      ? ScreenOrientation.OrientationLock.LANDSCAPE
+      : ScreenOrientation.OrientationLock.PORTRAIT_UP;
+
+    await ScreenOrientation.lockAsync(lockOrientation).catch(() => {});
+  }, [isFullscreen]);
+
+  const handleImageError = useCallback((url: string) => {
+    setFailedImages((prev) => new Set(prev).add(url));
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+    loadJobFiles();
+  }, [loadJobFiles]);
+
+  // Load files on mount
+  useEffect(() => {
+    if (!filesFromRoute) {
+      loadJobFiles();
     }
-  };
+  }, [filesFromRoute, loadJobFiles]);
 
-  // Create a renderSectionHeader function
-  const renderSectionHeader = ({ section }: { section: MediaSection }) => (
-    <View style={innerStyles.sectionHeader}>
-      <Text style={innerStyles.sectionHeaderText}>{section.title}</Text>
-    </View>
-  );
+  // Render functions
+  const renderImageItem = useCallback(
+    (item: FileItem) => {
+      const isFailed = failedImages.has(item.stream_url);
 
-  // Create a renderRow function for displaying a row of items
-  const renderRow = (items: FileItem[], rowKey: string) => (
-    <View style={innerStyles.row} key={rowKey}>
-      {items.map((item) => (
-        <TouchableOpacity
-          key={`file-${item.id}`}
-          style={innerStyles.itemContainer}
-          onPress={() => openModal(item)}
-          activeOpacity={0.7}
-        >
-          {activeTab === "image" ? (
-            failedImages.has(item.stream_url) ? (
-              <View style={innerStyles.brokenImageContainer}>
-                <Image
-                  source={require("../assets/images/broken-image.png")}
-                  style={{ width: 80, height: 80 }}
-                  resizeMode="contain"
-                />
-              </View>
-            ) : (
-              <Image
-                source={{ uri: item.stream_url }}
-                style={innerStyles.image}
-                resizeMode="cover"
-                onError={() => {
-                  setFailedImages((prev) => new Set(prev).add(item.stream_url));
-                }}
-              />
-            )
-          ) : activeTab === "video" ? (
-            <View style={innerStyles.videoThumbnailContainer}>
-              <View style={innerStyles.videoThumbnail}>
-                <VideoThumbnail
-                  uri={item.stream_url}
-                  onPress={() => openModal(item)}
-                  active
-                  cache={thumbnailCache}
-                />
-              </View>
-              <View style={innerStyles.videoThumbnailOverlay}>
-                <Text style={innerStyles.videoIcon}>▶</Text>
-              </View>
-              <Text style={innerStyles.videoLabel} numberOfLines={1}>
-                {item.file_name || "Video"}
-              </Text>
-            </View>
-          ) : (
-            <View style={innerStyles.documentPlaceholder}>
-              <Text style={innerStyles.documentText}>Document</Text>
-              <Text style={innerStyles.documentName} numberOfLines={1}>
-                {item.file_name}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      ))}
-      {/* Add empty placeholders with unique keys */}
-      {Array.from({ length: NUM_COLUMNS - items.length }).map((_, i) => (
-        <View
-          key={`placeholder-${rowKey}-${i}`}
-          style={innerStyles.placeholderItem}
+      if (isFailed) {
+        return (
+          <View style={innerStyles.brokenImageContainer}>
+            <Image
+              source={require("../assets/images/broken-image.png")}
+              style={{ width: 80, height: 80 }}
+              resizeMode="contain"
+            />
+          </View>
+        );
+      }
+
+      return (
+        <Image
+          source={{ uri: item.stream_url }}
+          style={innerStyles.image}
+          resizeMode="cover"
+          onError={() => handleImageError(item.stream_url)}
         />
-      ))}
-    </View>
+      );
+    },
+    [failedImages, handleImageError]
   );
 
-  const renderModalContent = () => {
+  const renderVideoItem = useCallback(
+    (item: FileItem) => (
+      <View style={innerStyles.videoThumbnailContainer}>
+        <View style={innerStyles.videoThumbnail}>
+          <VideoThumbnail
+            uri={item.stream_url}
+            onPress={() => openModal(item)}
+            active
+            cache={thumbnailCache}
+          />
+        </View>
+        <View style={innerStyles.videoThumbnailOverlay}>
+          <Text style={innerStyles.videoIcon}>▶</Text>
+        </View>
+        <Text style={innerStyles.videoLabel} numberOfLines={1}>
+          {item.file_name || "Video"}
+        </Text>
+      </View>
+    ),
+    [openModal, thumbnailCache]
+  );
+
+  const renderDocumentItem = useCallback(
+    (item: FileItem) => (
+      <View style={innerStyles.documentPlaceholder}>
+        <Text style={innerStyles.documentText}>Document</Text>
+        <Text style={innerStyles.documentName} numberOfLines={1}>
+          {item.file_name}
+        </Text>
+      </View>
+    ),
+    []
+  );
+
+  const renderItem = useCallback(
+    (item: FileItem) => {
+      switch (activeTab) {
+        case "image":
+          return renderImageItem(item);
+        case "video":
+          return renderVideoItem(item);
+        case "document":
+          return renderDocumentItem(item);
+        default:
+          return renderImageItem(item);
+      }
+    },
+    [activeTab, renderImageItem, renderVideoItem, renderDocumentItem]
+  );
+
+  const renderRow = useCallback(
+    (items: FileItem[], rowKey: string) => (
+      <View style={innerStyles.row} key={rowKey}>
+        {items.map((item) => (
+          <TouchableOpacity
+            key={`file-${item.id}`}
+            style={innerStyles.itemContainer}
+            onPress={() => openModal(item)}
+            activeOpacity={0.7}
+          >
+            {renderItem(item)}
+          </TouchableOpacity>
+        ))}
+        {Array.from({ length: NUM_COLUMNS - items.length }).map((_, i) => (
+          <View
+            key={`placeholder-${rowKey}-${i}`}
+            style={innerStyles.placeholderItem}
+          />
+        ))}
+      </View>
+    ),
+    [openModal, renderItem]
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: MediaSection }) => (
+      <View style={innerStyles.sectionHeader}>
+        <Text style={innerStyles.sectionHeaderText}>{section.title}</Text>
+      </View>
+    ),
+    []
+  );
+
+  const renderModalContent = useCallback(() => {
     if (!selectedItem) return null;
 
     if (activeTab === "video" && !isModalReady) {
@@ -439,55 +472,56 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
 
     if (activeTab === "image") {
-      return failedImages.has(selectedItem.stream_url) ? (
-        <View style={innerStyles.modalBrokenImageContainer}>
-          <Image
-            source={require("../assets/images/broken-image.png")}
-            style={{ width: 200, height: 200 }}
-            resizeMode="contain"
-          />
-        </View>
-      ) : (
+      const isFailed = failedImages.has(selectedItem.stream_url);
+
+      if (isFailed) {
+        return (
+          <View style={innerStyles.modalBrokenImageContainer}>
+            <Image
+              source={require("../assets/images/broken-image.png")}
+              style={{ width: 200, height: 200 }}
+              resizeMode="contain"
+            />
+          </View>
+        );
+      }
+
+      return (
         <Image
           source={{ uri: selectedItem.stream_url }}
           style={innerStyles.modalImage}
           resizeMode="contain"
-          onError={() => {
-            setFailedImages((prev) =>
-              new Set(prev).add(selectedItem.stream_url)
-            );
-          }}
+          onError={() => handleImageError(selectedItem.stream_url)}
         />
       );
     }
 
     if (activeTab === "video") {
-      const videoStyles =
-        orientation === 2 || isFullscreen
-          ? [
-              innerStyles.videoPlayer,
-              { width: dimensions.width, height: dimensions.height },
-            ]
-          : [innerStyles.videoPlayer];
+      const isLandscape = orientation === 2 || isFullscreen;
+      const videoStyles = isLandscape
+        ? [
+            innerStyles.videoPlayer,
+            { width: dimensions.width, height: dimensions.height },
+          ]
+        : [innerStyles.videoPlayer];
 
       return (
         <View
           style={[
             innerStyles.modalVideoContainer,
-            orientation === 2 || isFullscreen
-              ? { width: dimensions.width, height: dimensions.height }
-              : {},
+            isLandscape && {
+              width: dimensions.width,
+              height: dimensions.height,
+            },
           ]}
         >
           {videoUrl && (
-            <>
-              <VideoView
-                style={videoStyles}
-                player={videoPlayer}
-                allowsFullscreen
-                allowsPictureInPicture
-              />
-            </>
+            <VideoView
+              style={videoStyles}
+              player={videoPlayer}
+              allowsFullscreen
+              allowsPictureInPicture
+            />
           )}
         </View>
       );
@@ -499,28 +533,45 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         <Text style={innerStyles.modalFileName}>{selectedItem.file_name}</Text>
       </View>
     );
-  };
+  }, [
+    selectedItem,
+    activeTab,
+    isModalReady,
+    failedImages,
+    orientation,
+    isFullscreen,
+    dimensions,
+    videoUrl,
+    videoPlayer,
+    handleImageError,
+  ]);
 
-  const handleRetry = () => {
-    setError(null);
-    loadJobFiles();
-  };
-
-  const renderFooter = () => {
-    return (
+  const renderFooter = useCallback(
+    () => (
       <View
         style={[
           innerStyles.loaderFooter,
           { paddingBottom: insets.bottom + 20 },
         ]}
       >
-        {isLoadingMore ? (
+        {isLoadingMore && (
           <ActivityIndicator size="large" color={color.primary} />
-        ) : null}
+        )}
       </View>
-    );
-  };
+    ),
+    [isLoadingMore, insets.bottom]
+  );
 
+  const renderEmptyComponent = useCallback(
+    () => (
+      <View style={innerStyles.emptyContainer}>
+        <Text style={innerStyles.emptyText}>No {activeTab} files found.</Text>
+      </View>
+    ),
+    [activeTab]
+  );
+
+  // Loading state
   if (isLoading && !filesFromRoute) {
     return (
       <View style={styles.screenContainer}>
@@ -532,6 +583,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     );
   }
 
+  // Error state
   if (error && !filesFromRoute) {
     return (
       <View style={styles.screenContainer}>
@@ -549,16 +601,14 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     );
   }
 
-  const tabs = [
-    { key: "image", label: "Images" },
-    { key: "video", label: "Videos" },
-    { key: "document", label: "Documents" },
-  ];
+  const isLandscapeModal =
+    activeTab === "video" && (orientation === 2 || isFullscreen);
 
   return (
     <View style={styles.screenContainer}>
       <Header />
       <View style={{ flex: 1 }}>
+        {/* Tabs */}
         <View style={innerStyles.tabsContainer}>
           {tabs.map((tab) => (
             <TouchableOpacity
@@ -581,6 +631,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           ))}
         </View>
 
+        {/* Content */}
         <SectionList
           sections={groupedMedia}
           keyExtractor={(items, sectionIndex) =>
@@ -592,17 +643,11 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           renderSectionHeader={renderSectionHeader}
           stickySectionHeadersEnabled={false}
           contentContainerStyle={
-            mediaFiles.length === 0
+            paginatedFiles.length === 0
               ? { flex: 1, justifyContent: "center" }
               : { paddingBottom: insets.bottom }
           }
-          ListEmptyComponent={() => (
-            <View style={innerStyles.emptyContainer}>
-              <Text style={innerStyles.emptyText}>
-                No {activeTab} files found.
-              </Text>
-            </View>
-          )}
+          ListEmptyComponent={renderEmptyComponent}
           ListFooterComponent={renderFooter}
           onEndReached={loadMoreData}
           onEndReachedThreshold={0.5}
@@ -617,6 +662,8 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             />
           }
         />
+
+        {/* Modal */}
         <Modal
           visible={modalVisible}
           transparent
@@ -627,9 +674,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           <SafeAreaView
             style={[
               innerStyles.modalContainer,
-              activeTab === "video" &&
-                (orientation === 2 || isFullscreen) &&
-                innerStyles.fullscreenModalContainer,
+              isLandscapeModal && innerStyles.fullscreenModalContainer,
             ]}
           >
             <StatusBar
@@ -639,10 +684,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             />
 
             <TouchableOpacity
-              style={[
-                innerStyles.closeButton,
-                (orientation === 2 || isFullscreen) && { top: 20 },
-              ]}
+              style={[innerStyles.closeButton, isLandscapeModal && { top: 20 }]}
               onPress={closeModal}
               hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             >
@@ -653,7 +695,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
               <TouchableOpacity
                 style={[
                   innerStyles.fullscreenButton,
-                  (orientation === 2 || isFullscreen) && { top: 20, right: 70 },
+                  isLandscapeModal && { top: 20, right: 70 },
                 ]}
                 onPress={toggleFullscreen}
                 hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
@@ -667,27 +709,22 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             <View
               style={[
                 innerStyles.modalContent,
-                activeTab === "video" &&
-                  (orientation === 2 || isFullscreen) && { padding: 0 },
+                isLandscapeModal && { padding: 0 },
               ]}
             >
               {renderModalContent()}
             </View>
 
-            {selectedItem &&
-              !(
-                activeTab === "video" &&
-                (orientation === 2 || isFullscreen)
-              ) && (
-                <View style={innerStyles.fileInfoContainer}>
-                  <Text style={innerStyles.fileInfoText}>
-                    {selectedItem.file_name}
-                  </Text>
-                  <Text style={innerStyles.fileInfoDate}>
-                    {new Date(selectedItem.date_created).toLocaleDateString()}
-                  </Text>
-                </View>
-              )}
+            {selectedItem && !isLandscapeModal && (
+              <View style={innerStyles.fileInfoContainer}>
+                <Text style={innerStyles.fileInfoText}>
+                  {selectedItem.file_name}
+                </Text>
+                <Text style={innerStyles.fileInfoDate}>
+                  {new Date(selectedItem.date_created).toLocaleDateString()}
+                </Text>
+              </View>
+            )}
           </SafeAreaView>
         </Modal>
       </View>
@@ -695,6 +732,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   );
 };
 
+// Styles remain the same
 const innerStyles = StyleSheet.create({
   tabsContainer: {
     flexDirection: "row",
@@ -731,31 +769,9 @@ const innerStyles = StyleSheet.create({
     overflow: "hidden",
     elevation: 2,
   },
-  imageContainer: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-  },
-  errorItem: {
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  errorItemText: {
-    color: "#666",
-    fontSize: 12,
-    textAlign: "center",
-    padding: 5,
-  },
   image: {
     width: "100%",
     height: "100%",
-  },
-  loadingText: {
-    marginTop: 10,
-    color: "#666",
   },
   documentPlaceholder: {
     width: "100%",
@@ -821,19 +837,6 @@ const innerStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 10,
-  },
-  errorModalContent: {
-    width: SCREEN_WIDTH * 0.8,
-    height: 200,
-    backgroundColor: "#aa3333",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  errorModalText: {
-    color: "#fff",
-    fontSize: 16,
-    textAlign: "center",
   },
   modalImage: {
     width: SCREEN_WIDTH,
@@ -994,12 +997,6 @@ const innerStyles = StyleSheet.create({
     height: 80,
     width: "100%",
   },
-  loadingMoreText: {
-    color: "#666",
-    marginTop: 8,
-    fontSize: 14,
-    textAlign: "center",
-  },
   brokenImageContainer: {
     width: "100%",
     height: "100%",
@@ -1016,4 +1013,5 @@ const innerStyles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
   },
 });
+
 export default MediaPreviewScreen;
