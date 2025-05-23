@@ -1,5 +1,11 @@
 yarn expo prebuild
+
 eas update:configure
+
 eas update --branch production
+
 eas update
+
 eas build --platform android
+
+eas build --profile development --platform android

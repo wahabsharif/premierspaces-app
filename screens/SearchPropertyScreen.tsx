@@ -33,6 +33,7 @@ import {
   setConnectionStatus,
 } from "../store/propertySlice";
 import { RootStackParamList } from "../types";
+import GetAllCache from "../components/GetAllCache";
 
 // Define property type for better type safety
 interface Property {
@@ -319,6 +320,7 @@ const SearchPropertyScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      <GetAllCache />
     </View>
   );
 };

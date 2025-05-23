@@ -5,6 +5,7 @@
   },
   "build": {
     "production": {
+      "environment": "production",
       "releaseChannel": "production",
       "distribution": "store",
       "autoIncrement": true,
@@ -14,6 +15,7 @@
       "channel": "production"
     },
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "releaseChannel": "development",
       "distribution": "internal",
@@ -21,6 +23,9 @@
         "buildType": "apk"
       },
       "channel": "development"
+    },
+    "preview": {
+      "environment": "preview"
     }
   }
 }
