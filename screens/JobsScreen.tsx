@@ -55,7 +55,7 @@ const JobItem = memo(
       [item]
     );
 
-    const statusNum = Number(item.status);
+    const statusNum = Number(item.job_status);
     const statusBackground =
       statusNum === 1
         ? color.orange

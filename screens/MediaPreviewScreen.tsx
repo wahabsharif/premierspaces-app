@@ -6,10 +6,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
-  FlatList,
   Image,
   Modal,
   SafeAreaView,
+  SectionList,
   StatusBar,
   StyleSheet,
   Text,
@@ -28,9 +28,39 @@ import {
 import { FileItem, RootStackParamList } from "../types";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const NUM_COLUMNS = 2;
+const NUM_COLUMNS = 4;
+const CONTAINER_PADDING = 12; // Container padding on both sides
+const ITEM_SPACING = 4; // Space between items
+
+// Calculate item width correctly based on available space
+const AVAILABLE_WIDTH = SCREEN_WIDTH - 2 * CONTAINER_PADDING;
+const ITEM_WIDTH = AVAILABLE_WIDTH / NUM_COLUMNS - ITEM_SPACING;
 
 type Props = NativeStackScreenProps<RootStackParamList, "MediaPreviewScreen">;
+
+interface MediaSection {
+  title: string;
+  data: FileItem[][];
+}
+
+const formatSectionDate = (date: Date): string => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  } else {
+    // Format date like "January 15, 2023"
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+};
 
 const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   // Handle both navigation sources
@@ -54,6 +84,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [orientation, setOrientation] = useState(1); // 1 for portrait, 2 for landscape
+  const [groupedMedia, setGroupedMedia] = useState<MediaSection[]>([]);
 
   // Use files from route.params if provided, otherwise undefined
   const filesFromRoute = useMemo(
@@ -157,24 +188,61 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
   // Filter files for the current job and active tab
   useEffect(() => {
+    let filteredFiles: FileItem[] = [];
+
     if (filesFromRoute) {
       // If files were passed via route params, use those
       const categoryNumber = getFileCategoryNumber(activeTab);
-      setMediaFiles(
-        filesFromRoute.filter((item) => item.file_category === categoryNumber)
+      filteredFiles = filesFromRoute.filter(
+        (item) => item.file_category === categoryNumber
       );
     } else if (allFiles.length > 0 && jobId) {
       // Filter from Redux store using jobId
       const categoryNumber = getFileCategoryNumber(activeTab);
-      setMediaFiles(
-        allFiles
-          .filter((item) => item.job_id === jobId)
-          .filter((item) => item.file_category === categoryNumber)
-      );
-    } else {
-      // No files source
-      setMediaFiles([]);
+      filteredFiles = allFiles
+        .filter((item) => item.job_id === jobId)
+        .filter((item) => item.file_category === categoryNumber);
     }
+
+    // Set filtered files to mediaFiles state
+    setMediaFiles(filteredFiles);
+
+    // Group files by date
+    const groupedByDate = filteredFiles.reduce<Record<string, FileItem[]>>(
+      (acc, file) => {
+        const dateStr = new Date(file.date_created).toDateString();
+        if (!acc[dateStr]) {
+          acc[dateStr] = [];
+        }
+        acc[dateStr].push(file);
+        return acc;
+      },
+      {}
+    );
+
+    // Sort dates in descending order (newest first)
+    const sortedDates = Object.keys(groupedByDate).sort(
+      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+    );
+
+    // Create sections with date headers
+    const sections: MediaSection[] = sortedDates.map((dateStr) => {
+      const date = new Date(dateStr);
+      const files = groupedByDate[dateStr];
+
+      // Create rows for grid layout (NUM_COLUMNS items per row)
+      const rows: FileItem[][] = [];
+      for (let i = 0; i < files.length; i += NUM_COLUMNS) {
+        rows.push(files.slice(i, i + NUM_COLUMNS));
+      }
+
+      return {
+        title: formatSectionDate(date),
+        data: rows,
+      };
+    });
+
+    setGroupedMedia(sections);
   }, [activeTab, allFiles, jobId, filesFromRoute]);
 
   // Handle modal ready state
@@ -238,44 +306,64 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
   };
 
-  const renderItem = ({ item }: { item: FileItem }) => (
-    <TouchableOpacity
-      style={innerStyles.itemContainer}
-      onPress={() => openModal(item)}
-      activeOpacity={0.7}
-    >
-      {activeTab === "image" ? (
-        <Image
-          source={{ uri: item.stream_url }}
-          style={innerStyles.image}
-          resizeMode="cover"
-        />
-      ) : activeTab === "video" ? (
-        <View style={innerStyles.videoThumbnailContainer}>
-          <View style={innerStyles.videoThumbnail}>
-            <VideoThumbnail
-              uri={item.stream_url}
-              onPress={() => openModal(item)}
-              active
-              cache={thumbnailCache}
+  // Create a renderSectionHeader function
+  const renderSectionHeader = ({ section }: { section: MediaSection }) => (
+    <View style={innerStyles.sectionHeader}>
+      <Text style={innerStyles.sectionHeaderText}>{section.title}</Text>
+    </View>
+  );
+
+  // Create a renderRow function for displaying a row of items
+  const renderRow = (items: FileItem[], rowKey: string) => (
+    <View style={innerStyles.row} key={rowKey}>
+      {items.map((item) => (
+        <TouchableOpacity
+          key={`file-${item.id}`}
+          style={innerStyles.itemContainer}
+          onPress={() => openModal(item)}
+          activeOpacity={0.7}
+        >
+          {activeTab === "image" ? (
+            <Image
+              source={{ uri: item.stream_url }}
+              style={innerStyles.image}
+              resizeMode="cover"
             />
-          </View>
-          <View style={innerStyles.videoThumbnailOverlay}>
-            <Text style={innerStyles.videoIcon}>▶</Text>
-          </View>
-          <Text style={innerStyles.videoLabel} numberOfLines={1}>
-            {item.file_name || "Video"}
-          </Text>
-        </View>
-      ) : (
-        <View style={innerStyles.documentPlaceholder}>
-          <Text style={innerStyles.documentText}>Document</Text>
-          <Text style={innerStyles.documentName} numberOfLines={1}>
-            {item.file_name}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
+          ) : activeTab === "video" ? (
+            <View style={innerStyles.videoThumbnailContainer}>
+              <View style={innerStyles.videoThumbnail}>
+                <VideoThumbnail
+                  uri={item.stream_url}
+                  onPress={() => openModal(item)}
+                  active
+                  cache={thumbnailCache}
+                />
+              </View>
+              <View style={innerStyles.videoThumbnailOverlay}>
+                <Text style={innerStyles.videoIcon}>▶</Text>
+              </View>
+              <Text style={innerStyles.videoLabel} numberOfLines={1}>
+                {item.file_name || "Video"}
+              </Text>
+            </View>
+          ) : (
+            <View style={innerStyles.documentPlaceholder}>
+              <Text style={innerStyles.documentText}>Document</Text>
+              <Text style={innerStyles.documentName} numberOfLines={1}>
+                {item.file_name}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      ))}
+      {/* Add empty placeholders with unique keys */}
+      {Array.from({ length: NUM_COLUMNS - items.length }).map((_, i) => (
+        <View
+          key={`placeholder-${rowKey}-${i}`}
+          style={innerStyles.placeholderItem}
+        />
+      ))}
+    </View>
   );
 
   const renderModalContent = () => {
@@ -395,7 +483,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   return (
     <View style={styles.screenContainer}>
       <Header />
-      <View style={styles.container}>
+      <View>
         <View style={innerStyles.tabsContainer}>
           {tabs.map((tab) => (
             <TouchableOpacity
@@ -417,11 +505,18 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             </TouchableOpacity>
           ))}
         </View>
-        <FlatList
-          data={mediaFiles}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          numColumns={NUM_COLUMNS}
+
+        {/* SectionList with proper key extraction */}
+        <SectionList
+          sections={groupedMedia}
+          keyExtractor={(items, sectionIndex) =>
+            `section-${sectionIndex}-${items.map((item) => item.id).join("-")}`
+          }
+          renderItem={({ item, index, section }) =>
+            renderRow(item, `row-${section.title}-${index}`)
+          }
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled={false}
           contentContainerStyle={
             mediaFiles.length === 0
               ? { flex: 1, justifyContent: "center" }
@@ -541,9 +636,9 @@ const innerStyles = StyleSheet.create({
     marginTop: 4,
   },
   itemContainer: {
-    margin: 10,
-    width: 160,
-    height: 160,
+    width: ITEM_WIDTH,
+    height: ITEM_WIDTH,
+    margin: ITEM_SPACING / 2,
     borderRadius: 8,
     backgroundColor: "#fff",
     overflow: "hidden",
@@ -783,6 +878,27 @@ const innerStyles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
   },
+  sectionHeader: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+  },
+  sectionHeaderText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "center", // Center items in the row
+    flexWrap: "nowrap",
+    paddingHorizontal: CONTAINER_PADDING - ITEM_SPACING / 2, // Adjust for item margins
+    marginBottom: ITEM_SPACING,
+  },
+  placeholderItem: {
+    width: ITEM_WIDTH,
+    height: ITEM_WIDTH,
+    margin: ITEM_SPACING / 2,
+  },
 });
-
 export default MediaPreviewScreen;
