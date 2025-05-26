@@ -281,7 +281,7 @@ export const createJob = createAsyncThunk<
 
     if (netInfo.isConnected) {
       const postData = { userid: userId, payload: formattedJobData };
-      const response = await axios.post(`${BASE_API_URL}/newjob.php`, postData);
+      const response = await axios.post(`${BASE_API_URL}/job.php`, postData);
 
       // Refresh caches after successful POST operation
       await refreshCachesAfterPost(userId);

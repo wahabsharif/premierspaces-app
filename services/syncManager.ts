@@ -414,17 +414,20 @@ export class SyncManager {
 
       // Get network quality to optimize sync strategy
       const networkQuality = await this.assessNetworkQuality();
-      
+
       // Maximum number of retries for failed requests
       const MAX_RETRIES = 3;
       const RETRY_DELAY = 3000; // 3 seconds between retries
 
-      const retryWithDelay = async (fn: () => Promise<any>, retries: number): Promise<any> => {
+      const retryWithDelay = async (
+        fn: () => Promise<any>,
+        retries: number
+      ): Promise<any> => {
         try {
           return await fn();
         } catch (error) {
           if (retries > 0) {
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
             return retryWithDelay(fn, retries - 1);
           }
           throw error;
@@ -434,7 +437,7 @@ export class SyncManager {
       // 1. STEP ONE: Sync Jobs first
       const jobs = await getAllJobs();
       let allJobsSuccessful = true;
-      
+
       if (jobs.length > 0) {
         this.notify({
           status: "in_progress",
@@ -442,13 +445,13 @@ export class SyncManager {
           syncedCount: 0,
           failedCount: 0,
         });
-        
+
         for (const job of jobs) {
           const itemKey = `job_${job.id}`;
           if (this.syncInProgress.has(itemKey)) continue;
 
           this.syncInProgress.add(itemKey);
-          
+
           try {
             await retryWithDelay(async () => {
               const jobData = {
@@ -461,7 +464,7 @@ export class SyncManager {
               this.abortControllers.set(itemKey, controller);
 
               const resp = await axios.post(
-                `${BASE_API_URL}/newjob.php?userid=${userId}`,
+                `${BASE_API_URL}/job.php?userid=${userId}`,
                 jobData,
                 {
                   timeout: 15000,
@@ -485,22 +488,25 @@ export class SyncManager {
                 syncedCount: jobSynced,
                 failedCount: jobFailed,
               });
-              
             }, MAX_RETRIES);
           } catch (err) {
             console.error(`[SyncManager] Job sync failed after retries:`, err);
-            Toast.error(`Job sync failed (${job.id}) after ${MAX_RETRIES} retries`);
+            Toast.error(
+              `Job sync failed (${job.id}) after ${MAX_RETRIES} retries`
+            );
             jobFailed++;
             allJobsSuccessful = false;
             this.syncInProgress.delete(itemKey);
           }
         }
-        
+
         // If any job failed, don't proceed to costs
         if (!allJobsSuccessful) {
-          throw new Error(`Failed to sync ${jobFailed} jobs. Stopping sync process.`);
+          throw new Error(
+            `Failed to sync ${jobFailed} jobs. Stopping sync process.`
+          );
         }
-        
+
         this.notify({
           status: "in_progress",
           message: `All jobs synced successfully (${jobSynced})`,
@@ -512,7 +518,7 @@ export class SyncManager {
       // 2. STEP TWO: Sync Costs ONLY if all jobs were successful
       const costs = await getAllCosts();
       let allCostsSuccessful = true;
-      
+
       if (costs.length > 0) {
         this.notify({
           status: "in_progress",
@@ -520,13 +526,13 @@ export class SyncManager {
           syncedCount: jobSynced,
           failedCount: 0,
         });
-        
+
         for (const cost of costs) {
           const itemKey = `cost_${cost.id}`;
           if (this.syncInProgress.has(itemKey)) continue;
 
           this.syncInProgress.add(itemKey);
-          
+
           try {
             await retryWithDelay(async () => {
               const costData = {
@@ -537,18 +543,18 @@ export class SyncManager {
                 amount: cost.amount,
                 material_cost: cost.material_cost,
               };
-              
+
               const resp = await axios.post(
                 `${BASE_API_URL}/costs.php?userid=${userId}`,
                 costData,
                 { timeout: 10000, validateStatus: (s) => s < 500 }
               );
-              
+
               if (resp.status >= 400) throw new Error(`HTTP ${resp.status}`);
-              
+
               await deleteCost(String(cost.id));
               costSynced++;
-              
+
               this.notify({
                 status: "in_progress",
                 message: `Costs ${costSynced}/${costs.length}`,
@@ -559,18 +565,22 @@ export class SyncManager {
             }, MAX_RETRIES);
           } catch (err) {
             console.error(`[SyncManager] Cost sync failed after retries:`, err);
-            Toast.error(`Cost sync failed (${cost.id}) after ${MAX_RETRIES} retries`);
+            Toast.error(
+              `Cost sync failed (${cost.id}) after ${MAX_RETRIES} retries`
+            );
             costFailed++;
             allCostsSuccessful = false;
             this.syncInProgress.delete(itemKey);
           }
         }
-        
+
         // If any cost failed, don't proceed to uploads
         if (!allCostsSuccessful) {
-          throw new Error(`Failed to sync ${costFailed} costs. Stopping sync process.`);
+          throw new Error(
+            `Failed to sync ${costFailed} costs. Stopping sync process.`
+          );
         }
-        
+
         this.notify({
           status: "in_progress",
           message: `All costs synced successfully (${costSynced})`,
@@ -581,7 +591,7 @@ export class SyncManager {
 
       // 3. STEP THREE: Sync Media Uploads ONLY if all costs were successful
       const uploads = await getAllUploads();
-      
+
       if (uploads.length > 0) {
         this.notify({
           status: "in_progress",
@@ -589,13 +599,13 @@ export class SyncManager {
           syncedCount: jobSynced + costSynced,
           failedCount: 0,
         });
-        
+
         for (const upload of uploads) {
           const uploadKey = `upload_${upload.id}`;
           if (this.syncInProgress.has(uploadKey)) continue;
-          
+
           this.syncInProgress.add(uploadKey);
-          
+
           try {
             await retryWithDelay(async () => {
               const fileInfo = await FileSystem.getInfoAsync(
@@ -609,14 +619,8 @@ export class SyncManager {
               // Standard upload
               const formData = new FormData();
               formData.append("id", upload.id.toString());
-              formData.append(
-                "total_segments",
-                String(upload.total_segments)
-              );
-              formData.append(
-                "segment_number",
-                String(upload.segment_number)
-              );
+              formData.append("total_segments", String(upload.total_segments));
+              formData.append("segment_number", String(upload.segment_number));
               formData.append("main_category", String(upload.main_category));
               formData.append(
                 "category_level_1",
@@ -655,8 +659,12 @@ export class SyncManager {
                       status: "in_progress",
                       message:
                         pct !== null
-                          ? `Uploading media ${uploadSynced+1}/${uploads.length} (${pct}%)`
-                          : `Uploading media ${uploadSynced+1}/${uploads.length}...`,
+                          ? `Uploading media ${uploadSynced + 1}/${
+                              uploads.length
+                            } (${pct}%)`
+                          : `Uploading media ${uploadSynced + 1}/${
+                              uploads.length
+                            }...`,
                       syncedCount: jobSynced + costSynced + uploadSynced,
                       failedCount: uploadFailed,
                     });
@@ -681,8 +689,13 @@ export class SyncManager {
               });
             }, MAX_RETRIES);
           } catch (err) {
-            console.error(`[SyncManager] Upload sync failed after retries:`, err);
-            Toast.error(`Upload sync failed (${upload.id}) after ${MAX_RETRIES} retries`);
+            console.error(
+              `[SyncManager] Upload sync failed after retries:`,
+              err
+            );
+            Toast.error(
+              `Upload sync failed (${upload.id}) after ${MAX_RETRIES} retries`
+            );
             uploadFailed++;
             this.syncInProgress.delete(uploadKey);
           }
