@@ -48,37 +48,25 @@ export const fetchJobTypes = createAsyncThunk<
 >(
   "jobTypes/fetch",
   async ({ userId, useCache = false }, { rejectWithValue, getState }) => {
-    console.log(
-      `[JobTypes] Fetching job types for user: ${userId}, useCache: ${useCache}`
-    );
     const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
 
     const { lastFetched, items } = (getState() as RootState).job.jobTypes;
     const isFresh =
       lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
 
-    console.log(
-      `[JobTypes] Cache status - lastFetched: ${lastFetched}, isFresh: ${isFresh}, items count: ${items.length}`
-    );
-
     // If data is fresh and available, return it immediately
     if (isFresh && items.length > 0) {
-      console.log("[JobTypes] Using fresh in-memory data");
       return items;
     }
 
     // If useCache flag is set, prefer cache even if stale
     if (useCache) {
       try {
-        console.log("[JobTypes] Attempting to load from cache storage");
         const cachedEntry = await getCache(cacheKey);
         if (cachedEntry?.payload?.payload) {
-          console.log("[JobTypes] Successfully loaded data from cache storage");
           return cachedEntry.payload.payload as Job[];
         }
-        console.log("[JobTypes] No valid data found in cache storage");
       } catch (err) {
-        console.log("[JobTypes] Error loading from cache:", err);
         // Continue to next strategy
       }
     }
@@ -144,9 +132,6 @@ export const fetchJobs = createAsyncThunk<
       propertyId ? "&property_id=" + propertyId : ""
     }`;
 
-    // Log the endpoint we're using
-    console.log(`Fetching jobs from: ${ENDPOINT}`);
-
     // 1) Always grab local (offline) jobs first
     let offlineJobs: Job[] = [];
     try {
@@ -158,9 +143,6 @@ export const fetchJobs = createAsyncThunk<
         const propIdStr = String(propertyId);
         offlineJobs = offlineJobs.filter(
           (j) => String(j.property_id) === propIdStr
-        );
-        console.log(
-          `Filtered offline jobs for property ${propIdStr}: ${offlineJobs.length} found`
         );
       }
     } catch (err) {
@@ -216,94 +198,60 @@ export const fetchJobs = createAsyncThunk<
       return combinedJobs;
     }
 
-    // 3) Fast-path for online but not forcing refresh: use in-memory data if fresh
-    const { lastFetched, items } = getState().job.jobsList;
-    const isFresh =
-      lastFetched != null && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
+    // 3) ONLINE CASE: If we have network, prioritize API data
+    if (isOnline) {
+      try {
+        const resp = await axios.get(ENDPOINT, {
+          timeout: 15000, // Add timeout to prevent hanging requests
+        });
 
-    if (!force && isFresh && items.length > 0) {
-      // merge offline + in‐memory
-      const mergedFast = [...items];
-      offlineJobs.forEach((o) => {
-        if (!mergedFast.some((j) => j.id === o.id)) {
-          mergedFast.push(o);
+        if (resp.data.status === 1) {
+          const serverJobs = resp.data.payload as Job[];
+          const merged = [...serverJobs];
+          offlineJobs.forEach((o) => {
+            if (!merged.some((j) => j.id === o.id)) {
+              merged.push(o);
+            }
+          });
+
+          // Sort by date_created desc
+          merged.sort(
+            (a, b) =>
+              new Date(b.date_created).getTime() -
+              new Date(a.date_created).getTime()
+          );
+
+          return merged;
+        } else {
+          throw new Error("Invalid API response");
         }
-      });
+      } catch (err: any) {
+        // API request failed, fall back to cache
+        Toast.info("Using cached data - API request failed");
 
-      // Sort and filter
-      mergedFast.sort(
-        (a, b) =>
-          new Date(b.date_created).getTime() -
-          new Date(a.date_created).getTime()
-      );
+        // Fall back to cache
+        const entry = await getCache(cacheKey);
+        const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
 
-      const result = propertyId
-        ? mergedFast.filter((j) => j.property_id === propertyId)
-        : mergedFast;
-      return result;
-    }
+        const fallback = [...cached];
+        offlineJobs.forEach((o) => {
+          if (!fallback.some((j) => j.id === o.id)) {
+            fallback.push(o);
+          }
+        });
 
-    // 4) Online and needs fresh data: fetch from server
-    try {
-      const resp = await axios.get(ENDPOINT, {
-        timeout: 15000, // Add timeout to prevent hanging requests
-      });
-
-      console.log(`Jobs API response status: ${resp.data.status}`);
-
-      const serverJobs =
-        resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
-
-      if (serverJobs.length === 0) {
-        console.log(
-          `No jobs found ${propertyId ? "for property ID " + propertyId : ""}`
+        fallback.sort(
+          (a, b) =>
+            new Date(b.date_created).getTime() -
+            new Date(a.date_created).getTime()
         );
-      } else {
-        console.log(`Found ${serverJobs.length} jobs from server`);
+
+        return fallback;
       }
-
-      const merged = [...serverJobs];
-      offlineJobs.forEach((o) => {
-        if (!merged.some((j) => j.id === o.id)) {
-          merged.push(o);
-        }
-      });
-
-      // Sort by date_created desc
-      merged.sort(
-        (a, b) =>
-          new Date(b.date_created).getTime() -
-          new Date(a.date_created).getTime()
-      );
-
-      return merged;
-    } catch (err: any) {
-      // Show user-friendly toast message
-      Toast.info(
-        `Using cached data - server unavailable ${
-          propertyId ? "for property" : ""
-        }`
-      );
-      console.error(`API Error: ${err.message || "Unknown error"}`);
-
-      // 5) Error fallback: merge cached + offline
-      const entry = await getCache(cacheKey);
-      const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
-      const fallback = [...cached];
-      offlineJobs.forEach((o) => {
-        if (!fallback.some((j) => j.id === o.id)) {
-          fallback.push(o);
-        }
-      });
-
-      fallback.sort(
-        (a, b) =>
-          new Date(b.date_created).getTime() -
-          new Date(a.date_created).getTime()
-      );
-
-      return fallback;
     }
+
+    // This should never happen (either offline or online case should be handled)
+    return [];
   }
 );
 
