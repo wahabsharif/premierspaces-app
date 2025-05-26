@@ -52,7 +52,11 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
   // Get only the failed files
   const failedFiles = useSelector(selectFailedFiles);
 
-  const allSuccess = failedCount === 0;
+  // Ensure we never display zero counts when files have been uploaded
+  const displayTotalCount = Math.max(totalCount, successCount + failedCount, 1);
+  const displaySuccessCount = Math.max(successCount, 0);
+  const displayFailedCount = Math.max(failedCount, 0);
+  const allSuccess = displayFailedCount === 0 && displaySuccessCount > 0;
 
   const handleOkay = () => {
     onClose();
@@ -156,7 +160,9 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
           <View style={innerStyles.statusContainer}>
             <View style={innerStyles.statusRow}>
               <Text style={styles.label}>Total:</Text>
-              <Text style={innerStyles.statusValue}>{totalCount} files</Text>
+              <Text style={innerStyles.statusValue}>
+                {displayTotalCount} files
+              </Text>
             </View>
 
             <View style={innerStyles.statusRow}>
@@ -164,16 +170,16 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
               <Text
                 style={[innerStyles.statusValue, { color: color.lightGreen }]}
               >
-                {successCount} files
+                {displaySuccessCount} files
               </Text>
             </View>
 
-            {failedCount > 0 && (
+            {displayFailedCount > 0 && (
               <View style={innerStyles.statusRow}>
                 <Text style={styles.label}>Failed:</Text>
                 <View style={innerStyles.failedContainer}>
                   <Text style={[innerStyles.statusValue, { color: color.red }]}>
-                    {failedCount} files
+                    {displayFailedCount} files
                   </Text>
                   {!isRetrying && (
                     <TouchableOpacity
@@ -213,7 +219,7 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
           <Text style={styles.modalText}>
             {allSuccess
               ? "All files were uploaded successfully!"
-              : `${successCount} of ${totalCount} files were uploaded successfully.`}
+              : `${displaySuccessCount} of ${displayTotalCount} files were uploaded successfully.`}
           </Text>
 
           <TouchableOpacity

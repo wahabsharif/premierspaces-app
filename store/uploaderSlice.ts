@@ -183,9 +183,6 @@ export const uploadFiles = createAsyncThunk(
       networkQuality,
       files.length
     );
-    console.log(
-      `Network quality: ${networkQuality}, Using concurrency: ${concurrencyLimit}`
-    );
 
     const uploadFile = async (file: MediaFile, index: number): Promise<any> => {
       const fileName =
@@ -543,6 +540,38 @@ export const retryFailedUploads = createAsyncThunk(
   }
 );
 
+// Helper function to ensure counts are correct
+export const validateUploadCounts = createAsyncThunk(
+  "uploader/validateUploadCounts",
+  async (_, { getState, dispatch }) => {
+    const state = getState() as RootState;
+    const files = state.uploader.files;
+    const fileStatus = state.uploader.fileStatus;
+
+    // Count files by their actual status
+    let successCount = 0;
+    let failedCount = 0;
+
+    files.forEach((file) => {
+      if (fileStatus[file.uri] === "success") {
+        successCount++;
+      } else if (fileStatus[file.uri] === "failed") {
+        failedCount++;
+      }
+    });
+
+    // Update counts if they don't match
+    if (
+      successCount !== state.uploader.successCount ||
+      failedCount !== state.uploader.failedCount
+    ) {
+      dispatch(setUploadCounts({ successCount, failedCount }));
+    }
+
+    return { successCount, failedCount };
+  }
+);
+
 const uploaderSlice = createSlice({
   name: "uploader",
   initialState,
@@ -579,6 +608,11 @@ const uploaderSlice = createSlice({
       state.successCount = 0;
       state.failedCount = 0;
     },
+    setUploadCounts: (state, action) => {
+      const { successCount, failedCount } = action.payload;
+      state.successCount = successCount;
+      state.failedCount = failedCount;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -611,6 +645,9 @@ const uploaderSlice = createSlice({
       })
       .addCase(retryFailedUploads.rejected, (state) => {
         state.uploading = false;
+      })
+      .addCase(validateUploadCounts.fulfilled, (state) => {
+        // No state update needed, just trigger re-calculation
       });
   },
 });
@@ -624,6 +661,7 @@ export const {
   setCommonId,
   updateFileStatus, // Export the new action
   resetRetryCounters, // Export the reset counters action
+  setUploadCounts,
 } = uploaderSlice.actions;
 
 export const selectFiles = (state: RootState) => state.uploader.files;

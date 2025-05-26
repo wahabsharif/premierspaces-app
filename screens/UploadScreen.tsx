@@ -124,6 +124,10 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [statusModalData, setStatusModalData] = useState({
+    successCount: 0,
+    failedCount: 0,
+  });
 
   // Memoized mime type inference function
   const inferMimeType = useCallback((fileName: string) => {
@@ -180,6 +184,11 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       files.length > 0 &&
       successCount + failedCount === files.length
     ) {
+      // Store the current counts before showing modal
+      setStatusModalData({
+        successCount,
+        failedCount,
+      });
       setStatusModalVisible(true);
     }
   }, [uploading, successCount, failedCount, files.length]);
@@ -721,9 +730,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
       <UploadStatusModal
         visible={statusModalVisible}
         onClose={handleStatusModalClose}
-        successCount={successCount}
-        failedCount={failedCount}
-        totalCount={successCount + failedCount}
+        successCount={statusModalData.successCount}
+        failedCount={statusModalData.failedCount}
+        totalCount={statusModalData.successCount + statusModalData.failedCount}
         jobId={job_id}
         materialCost={materialCost}
         category={category}
