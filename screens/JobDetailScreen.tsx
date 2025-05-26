@@ -566,33 +566,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               </View>
             )
           )}
-
-          {showSkeletons ? (
-            <SkeletonLoader.Line
-              width="100%"
-              height={48}
-              style={{
-                borderRadius: 24,
-                marginVertical: 8,
-              }}
-            />
-          ) : (
-            showContent && (
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => {
-                  const id = jobId || jobDetail?.job_id || "";
-                  navigation.navigate("UploadScreen", {
-                    job_id: id,
-                    common_id: jobDetail.common_id,
-                    materialCost: jobDetail.material_cost,
-                  });
-                }}
-              >
-                <Text style={styles.buttonText}>Upload Files</Text>
-              </TouchableOpacity>
-            )
-          )}
         </View>
 
         {showError ? (
@@ -722,7 +695,32 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                       </Text>
                     </View>
                   </View>
-
+                  {showSkeletons ? (
+                    <SkeletonLoader.Line
+                      width="100%"
+                      height={48}
+                      style={{
+                        borderRadius: 24,
+                        marginVertical: 8,
+                      }}
+                    />
+                  ) : (
+                    showContent && (
+                      <TouchableOpacity
+                        style={styles.primaryButton}
+                        onPress={() => {
+                          const id = jobId || jobDetail?.job_id || "";
+                          navigation.navigate("UploadScreen", {
+                            job_id: id,
+                            common_id: jobDetail.common_id,
+                            materialCost: jobDetail.material_cost,
+                          });
+                        }}
+                      >
+                        <Text style={styles.buttonText}>Upload Files</Text>
+                      </TouchableOpacity>
+                    )
+                  )}
                   {/* File counts with combined totals */}
                   <View style={innerStyles.countsContainer}>
                     <TouchableOpacity

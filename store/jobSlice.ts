@@ -48,25 +48,37 @@ export const fetchJobTypes = createAsyncThunk<
 >(
   "jobTypes/fetch",
   async ({ userId, useCache = false }, { rejectWithValue, getState }) => {
+    console.log(
+      `[JobTypes] Fetching job types for user: ${userId}, useCache: ${useCache}`
+    );
     const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`;
 
     const { lastFetched, items } = (getState() as RootState).job.jobTypes;
     const isFresh =
       lastFetched && Date.now() - lastFetched < JOB_TYPES_CACHE_EXPIRY;
 
+    console.log(
+      `[JobTypes] Cache status - lastFetched: ${lastFetched}, isFresh: ${isFresh}, items count: ${items.length}`
+    );
+
     // If data is fresh and available, return it immediately
     if (isFresh && items.length > 0) {
+      console.log("[JobTypes] Using fresh in-memory data");
       return items;
     }
 
     // If useCache flag is set, prefer cache even if stale
     if (useCache) {
       try {
+        console.log("[JobTypes] Attempting to load from cache storage");
         const cachedEntry = await getCache(cacheKey);
         if (cachedEntry?.payload?.payload) {
+          console.log("[JobTypes] Successfully loaded data from cache storage");
           return cachedEntry.payload.payload as Job[];
         }
+        console.log("[JobTypes] No valid data found in cache storage");
       } catch (err) {
+        console.log("[JobTypes] Error loading from cache:", err);
         // Continue to next strategy
       }
     }
@@ -125,14 +137,32 @@ export const fetchJobs = createAsyncThunk<
     { userId, propertyId, force = false, useCache = false },
     { getState, dispatch }
   ) => {
-    const cacheKey = `jobsCache_${userId}`;
-    const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}`;
+    const cacheKey = `jobsCache_${userId}${
+      propertyId ? "_prop_" + propertyId : ""
+    }`;
+    const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}${
+      propertyId ? "&property_id=" + propertyId : ""
+    }`;
+
+    // Log the endpoint we're using
+    console.log(`Fetching jobs from: ${ENDPOINT}`);
 
     // 1) Always grab local (offline) jobs first
     let offlineJobs: Job[] = [];
     try {
       offlineJobs = await getAllJobs();
       dispatch(updatePendingCount(offlineJobs.length));
+
+      // Filter offline jobs by property if needed
+      if (propertyId) {
+        const propIdStr = String(propertyId);
+        offlineJobs = offlineJobs.filter(
+          (j) => String(j.property_id) === propIdStr
+        );
+        console.log(
+          `Filtered offline jobs for property ${propIdStr}: ${offlineJobs.length} found`
+        );
+      }
     } catch (err) {
       Toast.error(
         `Error fetching offline jobs: ${
@@ -152,6 +182,13 @@ export const fetchJobs = createAsyncThunk<
       try {
         const entry = await getCache(cacheKey);
         cachedServerJobs = (entry?.payload?.payload as Job[]) || [];
+
+        // Apply property filter if not already in the cache key
+        if (propertyId && !cacheKey.includes("_prop_")) {
+          cachedServerJobs = cachedServerJobs.filter(
+            (j) => j.property_id === propertyId
+          );
+        }
       } catch (err) {
         Toast.error(
           `Error fetching cached jobs: ${
@@ -176,11 +213,7 @@ export const fetchJobs = createAsyncThunk<
           new Date(a.date_created).getTime()
       );
 
-      // Apply property filter if specified
-      const result = propertyId
-        ? combinedJobs.filter((j) => j.property_id === propertyId)
-        : combinedJobs;
-      return result;
+      return combinedJobs;
     }
 
     // 3) Fast-path for online but not forcing refresh: use in-memory data if fresh
@@ -215,8 +248,20 @@ export const fetchJobs = createAsyncThunk<
       const resp = await axios.get(ENDPOINT, {
         timeout: 15000, // Add timeout to prevent hanging requests
       });
+
+      console.log(`Jobs API response status: ${resp.data.status}`);
+
       const serverJobs =
         resp.data.status === 1 ? (resp.data.payload as Job[]) : [];
+
+      if (serverJobs.length === 0) {
+        console.log(
+          `No jobs found ${propertyId ? "for property ID " + propertyId : ""}`
+        );
+      } else {
+        console.log(`Found ${serverJobs.length} jobs from server`);
+      }
+
       const merged = [...serverJobs];
       offlineJobs.forEach((o) => {
         if (!merged.some((j) => j.id === o.id)) {
@@ -231,14 +276,15 @@ export const fetchJobs = createAsyncThunk<
           new Date(a.date_created).getTime()
       );
 
-      // Apply property filter if specified
-      const result = propertyId
-        ? merged.filter((j) => j.property_id === propertyId)
-        : merged;
-      return result;
+      return merged;
     } catch (err: any) {
       // Show user-friendly toast message
-      Toast.info("Using cached data - server unavailable");
+      Toast.info(
+        `Using cached data - server unavailable ${
+          propertyId ? "for property" : ""
+        }`
+      );
+      console.error(`API Error: ${err.message || "Unknown error"}`);
 
       // 5) Error fallback: merge cached + offline
       const entry = await getCache(cacheKey);
@@ -256,11 +302,7 @@ export const fetchJobs = createAsyncThunk<
           new Date(a.date_created).getTime()
       );
 
-      // Apply property filter if specified
-      const result = propertyId
-        ? fallback.filter((j) => j.property_id === propertyId)
-        : fallback;
-      return result;
+      return fallback;
     }
   }
 );

@@ -138,12 +138,6 @@ const PropertyBannerSkeleton = memo(() => (
   </View>
 ));
 
-const NoJobsFound = ({ address }: { address: string }) => (
-  <View style={innerStyles.noJobsContainer}>
-    <Text style={innerStyles.noJobsText}>No Jobs Found for {address}</Text>
-  </View>
-);
-
 const JobsScreen = ({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, "JobsScreen">) => {
@@ -179,9 +173,21 @@ const JobsScreen = ({
   }, [jobTypes]);
 
   const jobs = useMemo(() => {
-    const filtered = propertyData
-      ? allJobs.filter((j) => j.property_id === propertyData.id)
-      : [];
+    if (!propertyData || !allJobs.length) {
+      return [];
+    }
+
+    // Normalize property ID to string for consistent comparison
+    const propIdStr = String(propertyData.id);
+
+    const filtered = allJobs.filter(
+      (job) => String(job.property_id) === propIdStr
+    );
+
+    console.log(
+      `Filtering jobs: Found ${filtered.length} jobs for property ID ${propIdStr} out of ${allJobs.length} total jobs`
+    );
+
     return filtered;
   }, [allJobs, propertyData]);
 
@@ -193,15 +199,22 @@ const JobsScreen = ({
         AsyncStorage.getItem("selectedProperty"),
         AsyncStorage.getItem("userData"),
       ]);
+
+      console.log("AsyncStorage - selectedProperty:", prop);
+      console.log("AsyncStorage - userData:", user);
+
       if (!mounted) return;
       if (prop) {
         const parsed = JSON.parse(prop);
+        console.log("Parsed selectedProperty:", parsed);
         setPropertyData(parsed);
       }
 
       if (user) {
         const parsed = JSON.parse(user);
+        console.log("Parsed userData:", parsed);
         const uid = parsed.payload?.userid ?? parsed.userid;
+        console.log("User ID:", uid);
         setUserData(parsed);
       }
 
@@ -268,7 +281,9 @@ const JobsScreen = ({
 
       setRefreshing(true);
       const uid = userData.payload?.userid ?? userData.userid;
-      dispatch(fetchJobs({ userId: uid }) as any).finally(() => {
+      dispatch(
+        fetchJobs({ userId: uid, propertyId: propertyData.id }) as any
+      ).finally(() => {
         setRefreshing(false);
       });
     }, [userData, propertyData, lastFetched, dispatch])
@@ -280,12 +295,15 @@ const JobsScreen = ({
     }
     setRefreshing(true);
     const uid = userData.payload?.userid ?? userData.userid;
+    const propId = propertyData.id;
 
     if (isOffline) {
       // In offline mode, just refresh from local sources
-      dispatch(fetchJobs({ userId: uid }) as any).finally(() => {
-        setRefreshing(false);
-      });
+      dispatch(fetchJobs({ userId: uid, propertyId: propId }) as any).finally(
+        () => {
+          setRefreshing(false);
+        }
+      );
     } else {
       // When online, try to sync pending jobs first, then refresh
       // Define interfaces for type safety
@@ -304,10 +322,14 @@ const JobsScreen = ({
 
       dispatch(syncPendingJobs() as any)
         .then((result: SyncPendingJobsResult) => {
-          return dispatch(fetchJobs({ userId: uid, force: true }) as any);
+          return dispatch(
+            fetchJobs({ userId: uid, propertyId: propId, force: true }) as any
+          );
         })
         .catch((err: SyncError) => {
-          return dispatch(fetchJobs({ userId: uid, force: true }) as any);
+          return dispatch(
+            fetchJobs({ userId: uid, propertyId: propId, force: true }) as any
+          );
         })
         .finally(() => {
           setRefreshing(false);
@@ -377,30 +399,26 @@ const JobsScreen = ({
 
             {error && <Text style={styles.errorText}>{error}</Text>}
 
-            {jobs.length ? (
-              <FlatList
-                data={jobs}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <JobItem
-                    item={item}
-                    typeName={jobTypeMap[item.job_type] ?? ""}
-                    onPress={handleJobPress}
-                  />
-                )}
-                contentContainerStyle={{ paddingBottom: 20 }}
-                style={{ width: "100%" }}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={[color.primary]}
-                  />
-                }
-              />
-            ) : (
-              <NoJobsFound address={propertyData.address} />
-            )}
+            <FlatList
+              data={jobs}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <JobItem
+                  item={item}
+                  typeName={jobTypeMap[item.job_type] ?? ""}
+                  onPress={handleJobPress}
+                />
+              )}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              style={{ width: "100%" }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[color.primary]}
+                />
+              }
+            />
           </>
         ) : null}
       </View>
@@ -440,19 +458,6 @@ const innerStyles = StyleSheet.create({
     marginTop: 5,
   },
   statusText: { color: color.white, fontWeight: "semibold" },
-  noJobsContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 50,
-    width: "100%",
-  },
-  noJobsText: {
-    fontSize: fontSize.large,
-    color: color.gray,
-    textAlign: "center",
-    fontWeight: "500",
-  },
 });
 
 export default JobsScreen;
