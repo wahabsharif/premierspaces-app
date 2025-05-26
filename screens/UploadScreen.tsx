@@ -726,6 +726,9 @@ const UploadScreen: React.FC<UploadScreenProps> = ({ route, navigation }) => {
         totalCount={successCount + failedCount}
         jobId={job_id}
         materialCost={materialCost}
+        category={category}
+        subCategory={subCategory}
+        common_id={common_id}
       />
     </View>
   );

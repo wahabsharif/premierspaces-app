@@ -5,7 +5,13 @@ export type RootStackParamList = {
   AppLockSettingScreen: undefined;
   CategoryScreen: { paramKey: string; fromOfflineMode?: boolean };
   SearchPropertyScreen: undefined;
-  UploadScreen: { job_id: string; common_id: string; materialCost?: string };
+  UploadScreen: {
+    job_id: string;
+    common_id: string;
+    materialCost?: string;
+    category?: any;
+    subCategory?: any;
+  };
   AddCostsScreen: { jobId: string; materialCost: string; common_id: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;

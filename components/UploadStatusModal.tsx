@@ -25,6 +25,9 @@ interface UploadStatusModalProps {
   totalCount: number;
   jobId?: string;
   materialCost?: string;
+  category?: any; // Add category prop
+  subCategory?: any; // Add subCategory prop
+  common_id?: string; // Add common_id prop
 }
 
 // Define the type for our navigation prop
@@ -37,6 +40,9 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
   failedCount,
   totalCount,
   jobId,
+  category,
+  subCategory,
+  common_id,
 }) => {
   // Properly type the navigation hook
   const dispatch = useDispatch<AppDispatch>();
@@ -84,11 +90,11 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
       if (userDataStr) userData = JSON.parse(userDataStr);
       if (propertyStr) storedProperty = JSON.parse(propertyStr);
 
-      const mainCategoryId = ""; // You should get this from context or navigation params
-      const subCategoryId = ""; // You should get this from context or navigation params
+      // Use the provided category and subCategory IDs instead of empty strings
+      const mainCategoryId = category?.id?.toString() || "";
+      const subCategoryId = subCategory?.id?.toString() || "";
       const propertyId = storedProperty ? storedProperty.id : "";
       const userName = userData?.payload?.name || "";
-      const common_id = ""; // You should get this from context or navigation params
 
       // Dispatch the retry action for failed files only
       await dispatch(
@@ -98,7 +104,7 @@ const UploadStatusModal: React.FC<UploadStatusModalProps> = ({
           propertyId,
           job_id: jobId || "",
           userName,
-          common_id,
+          common_id: common_id || "",
         })
       );
 
