@@ -1,13 +1,21 @@
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import Octicons from "@expo/vector-icons/Octicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import React, { useEffect, useState } from "react";
-import { Image, Text, TouchableOpacity, View, DevSettings } from "react-native";
 import * as Updates from "expo-updates";
+import React, { useEffect, useState } from "react";
+import {
+  DevSettings,
+  Image,
+  Text,
+  TouchableOpacity,
+  View,
+  TouchableWithoutFeedback,
+} from "react-native";
 import styles from "../Constants/styles";
-import { RootStackParamList } from "../types";
 import { fontSize } from "../Constants/theme";
+import { RootStackParamList } from "../types";
 
 type HeaderNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -34,7 +42,14 @@ const Header = () => {
       }
     };
     fetchUserData();
-  }, []);
+
+    // Add navigation listener to close dropdown when navigating
+    const unsubscribe = navigation.addListener("state", () => {
+      setDropdownVisible(false);
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const dropdownOptions = ["Home", "Settings", "Pending Data", "Logout"];
   const handleOptionSelect = (option: string) => {
@@ -98,35 +113,57 @@ const Header = () => {
           />
         </TouchableOpacity>
 
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+          }}
+        >
           <TouchableOpacity
             onPress={handleReload}
-            style={{ paddingHorizontal: 10 }}
+            style={{
+              padding: 12,
+            }}
           >
-            <Octicons name="sync" size={fontSize.large} color="black" />
+            <Octicons name="sync" size={fontSize.medium} color="black" />
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setDropdownVisible((p) => !p)}
-            style={{ paddingHorizontal: 10 }}
+            style={{
+              padding: 12,
+            }}
           >
-            <Octicons name="three-bars" size={fontSize.large} color="black" />
+            {dropdownVisible ? (
+              <FontAwesome5 name="times" size={fontSize.large} color="black" />
+            ) : (
+              <Octicons
+                name="three-bars"
+                size={fontSize.medium}
+                color="black"
+              />
+            )}
           </TouchableOpacity>
         </View>
       </View>
 
       {dropdownVisible && (
-        <View style={styles.dropdownContainer}>
-          {dropdownOptions.map((option) => (
-            <TouchableOpacity
-              key={option}
-              style={styles.dropdownItem}
-              onPress={() => handleOptionSelect(option)}
-            >
-              <Text style={styles.dropdownItemText}>{option}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <>
+          <TouchableWithoutFeedback onPress={() => setDropdownVisible(false)}>
+            <View style={styles.dropdownOverlay} />
+          </TouchableWithoutFeedback>
+          <View style={styles.dropdownContainer}>
+            {dropdownOptions.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={{ padding: 10 }}
+                onPress={() => handleOptionSelect(option)}
+              >
+                <Text style={styles.dropdownItemText}>{option}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
       )}
     </>
   );

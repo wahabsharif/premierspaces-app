@@ -65,9 +65,9 @@ export default StyleSheet.create({
 
   dropdownContainer: {
     position: "absolute",
-    top: 60,
-    right: 10,
-    width: 150,
+    top: 45,
+    right: 0,
+    width: 140,
     backgroundColor: color.white,
     borderWidth: 1,
     borderColor: color.secondary,
@@ -78,10 +78,14 @@ export default StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
   },
-  dropdownItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: color.secondary,
+  dropdownOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "transparent",
+    zIndex: 5,
   },
   dropdownItemText: {
     fontSize: fontSize.small,
