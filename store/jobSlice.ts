@@ -12,6 +12,7 @@ import { getCache, refreshCachesAfterPost } from "../services/cacheService";
 import {
   createJob as createOfflineJob,
   getAllJobs,
+  updateJob as updateOfflineJob,
 } from "../services/jobService";
 import { syncManager } from "../services/syncManager";
 import { Job } from "../types";
@@ -308,6 +309,54 @@ export const createJob = createAsyncThunk<
   }
 });
 
+export const updateJob = createAsyncThunk<
+  any,
+  { userId: string; jobData: Job },
+  { rejectValue: string; state: RootState }
+>("job/update", async ({ userId, jobData }, { rejectWithValue }) => {
+  try {
+    const common_id = jobData.common_id || generateCommonId();
+    const formattedJobData = {
+      ...jobData,
+      material_cost: jobData.material_cost
+        ? String(Math.round(parseFloat(jobData.material_cost)))
+        : "0",
+      common_id,
+    };
+    const netInfo = await NetInfo.fetch();
+    if (netInfo.isConnected) {
+      const apiPayload = {
+        ...formattedJobData,
+        job_id: formattedJobData.id,
+      };
+      const postData = { userid: userId, payload: apiPayload };
+      const response = await axios.put(`${BASE_API_URL}/job.php`, postData);
+      if (response.data.status !== 1) {
+        await updateOfflineJob(formattedJobData);
+        return {
+          message:
+            response.data.payload?.message ||
+            "API update failed, saved locally",
+          isOffline: true,
+          apiError: true,
+        };
+      }
+      await refreshCachesAfterPost(userId);
+      await updateOfflineJob(formattedJobData);
+      return response.data;
+    } else {
+      await updateOfflineJob(formattedJobData);
+      return {
+        message: "Job updated offline and will be synced when online",
+        isOffline: true,
+      };
+    }
+  } catch (err: any) {
+    console.error("Error updating job:", err);
+    return rejectWithValue(err.message || "Failed to update job");
+  }
+});
+
 export const syncPendingJobs = createAsyncThunk<
   { syncedCount: number; failedCount: number },
   void,
@@ -456,6 +505,19 @@ const slice = createSlice({
             state.job.pendingCount - action.payload.syncedCount
           );
         }
+      })
+      .addCase(updateJob.pending, (state) => {
+        state.job.loading = true;
+        state.job.error = null;
+        state.job.success = false;
+      })
+      .addCase(updateJob.fulfilled, (state, action) => {
+        state.job.loading = false;
+        state.job.success = true;
+      })
+      .addCase(updateJob.rejected, (state, action) => {
+        state.job.loading = false;
+        state.job.error = action.payload || "Failed to update job";
       });
   },
 });

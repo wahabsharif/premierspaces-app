@@ -33,10 +33,12 @@ const JobItem = memo(
     item,
     typeName,
     onPress,
+    onEdit,
   }: {
     item: Job;
     typeName: string;
     onPress: (item: Job) => void;
+    onEdit: (item: Job) => void;
   }) => {
     const tasks = useMemo(
       () =>
@@ -55,7 +57,7 @@ const JobItem = memo(
       [item]
     );
 
-    const statusNum = Number(item.job_status);
+    const statusNum = Number(item.status);
     const statusBackground =
       statusNum === 1
         ? color.orange
@@ -73,17 +75,31 @@ const JobItem = memo(
         onPress={() => onPress(item)}
       >
         <View style={innerStyles.jobDetails}>
-          <Text style={innerStyles.jobNum}>{item.job_num}</Text>
-          <Text>{formatDate(item.date_created)}</Text>
-          <View
-            style={[
-              innerStyles.statusContainer,
-              { backgroundColor: statusBackground },
-            ]}
-          >
-            <Text style={innerStyles.statusText}>{statusText}</Text>
+          <View>
+            <Text style={innerStyles.jobNum}>{item.job_num}</Text>
+            <Text>{formatDate(item.date_created)}</Text>
+            <View
+              style={[
+                innerStyles.statusContainer,
+                { backgroundColor: statusBackground },
+              ]}
+            >
+              <Text style={innerStyles.statusText}>{statusText}</Text>
+            </View>
+            <Text>{typeName}</Text>
           </View>
-          <Text>{typeName}</Text>
+
+          {statusNum === 1 && (
+            <TouchableOpacity
+              style={[styles.primaryButton, { marginTop: 10 }]}
+              onPress={(e) => {
+                e.stopPropagation();
+                onEdit(item);
+              }}
+            >
+              <Text style={styles.buttonText}>Edit</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={innerStyles.taskListContainer}>
           {tasks.map((task, i) => (
@@ -140,6 +156,7 @@ const PropertyBannerSkeleton = memo(() => (
 
 const JobsScreen = ({
   navigation,
+  route,
 }: NativeStackScreenProps<RootStackParamList, "JobsScreen">) => {
   const dispatch: AppDispatch = useDispatch();
   const {
@@ -160,6 +177,7 @@ const JobsScreen = ({
   const [showSkeletons, setShowSkeletons] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
 
   const jobTypeMap = useMemo(() => {
     const map = jobTypes.reduce(
@@ -184,10 +202,6 @@ const JobsScreen = ({
       (job) => String(job.property_id) === propIdStr
     );
 
-    console.log(
-      `Filtering jobs: Found ${filtered.length} jobs for property ID ${propIdStr} out of ${allJobs.length} total jobs`
-    );
-
     return filtered;
   }, [allJobs, propertyData]);
 
@@ -199,22 +213,15 @@ const JobsScreen = ({
         AsyncStorage.getItem("selectedProperty"),
         AsyncStorage.getItem("userData"),
       ]);
-
-      console.log("AsyncStorage - selectedProperty:", prop);
-      console.log("AsyncStorage - userData:", user);
-
       if (!mounted) return;
       if (prop) {
         const parsed = JSON.parse(prop);
-        console.log("Parsed selectedProperty:", parsed);
         setPropertyData(parsed);
       }
 
       if (user) {
         const parsed = JSON.parse(user);
-        console.log("Parsed userData:", parsed);
         const uid = parsed.payload?.userid ?? parsed.userid;
-        console.log("User ID:", uid);
         setUserData(parsed);
       }
 
@@ -267,26 +274,50 @@ const JobsScreen = ({
     return () => unsubscribe();
   }, []);
 
-  // Fetch jobs on screen focus
   useFocusEffect(
     useCallback(() => {
       if (!userData || !propertyData) {
         return;
       }
 
-      const CACHE_TIME = 5 * 60 * 1000; // 5 minutes cache validity
-      if (lastFetched && Date.now() - lastFetched < CACHE_TIME) {
+      const needsRefresh = route.params?.refresh === true;
+      const MIN_REFRESH_INTERVAL = 2000; // 2 seconds
+      const now = Date.now();
+      const timeSinceLastRefresh = now - lastRefreshTime;
+      if (timeSinceLastRefresh < MIN_REFRESH_INTERVAL && !needsRefresh) {
         return;
       }
-
+      const CACHE_TIME = 5 * 60 * 1000;
+      const isCacheValid = lastFetched && Date.now() - lastFetched < CACHE_TIME;
+      if (!needsRefresh && isCacheValid) {
+        return;
+      }
       setRefreshing(true);
+      setLastRefreshTime(now);
       const uid = userData.payload?.userid ?? userData.userid;
       dispatch(
-        fetchJobs({ userId: uid, propertyId: propertyData.id }) as any
+        fetchJobs({
+          userId: uid,
+          propertyId: propertyData.id,
+          force: needsRefresh,
+        }) as any
       ).finally(() => {
         setRefreshing(false);
+
+        if (needsRefresh && navigation.setParams) {
+          setTimeout(() => {
+            navigation.setParams({ refresh: false });
+          }, 100);
+        }
       });
-    }, [userData, propertyData, lastFetched, dispatch])
+    }, [
+      userData,
+      propertyData,
+      lastFetched,
+      route.params?.refresh,
+      lastRefreshTime,
+      navigation,
+    ])
   );
 
   const onRefresh = useCallback(() => {
@@ -339,7 +370,6 @@ const JobsScreen = ({
 
   const handleJobPress = useCallback(
     async (item: Job) => {
-      console.log("Job item pressed:", item);
       await AsyncStorage.setItem("jobData", JSON.stringify(item));
       const jobId = item.id || "";
       navigation.navigate("JobDetailScreen", {
@@ -347,6 +377,17 @@ const JobsScreen = ({
         common_id: item.common_id || "", // Pass common_id as empty string if null
         refresh: true,
         materialCost: item.material_cost || "",
+      });
+    },
+    [navigation]
+  );
+
+  const handleEditJob = useCallback(
+    (item: Job) => {
+      navigation.navigate("CreateEditJobScreen", {
+        jobId: item.id,
+        common_id: item.common_id,
+        isEditMode: true,
       });
     },
     [navigation]
@@ -407,6 +448,7 @@ const JobsScreen = ({
                   item={item}
                   typeName={jobTypeMap[item.job_type] ?? ""}
                   onPress={handleJobPress}
+                  onEdit={handleEditJob}
                 />
               )}
               contentContainerStyle={{ paddingBottom: 20 }}
@@ -436,7 +478,12 @@ const innerStyles = StyleSheet.create({
     borderColor: color.secondary,
     marginBottom: 15,
   },
-  jobDetails: { flex: 0.3 },
+  jobDetails: {
+    flex: 0.3,
+    paddingRight: 15,
+    justifyContent: "space-between",
+    display: "flex",
+  },
   jobNum: {
     fontSize: fontSize.medium,
     color: color.primary,

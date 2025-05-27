@@ -15,7 +15,9 @@ export type RootStackParamList = {
   AddCostsScreen: { jobId: string; materialCost: string; common_id: string };
   PropertyListScreen: { door_num?: string; results?: any } | undefined;
   ChangeAppPinScreen: undefined;
-  CreateEditJobScreen: undefined;
+  CreateEditJobScreen:
+    | { jobId?: string; common_id?: string; isEditMode?: boolean }
+    | undefined;
   FilesScreen: undefined;
   MediaPreviewScreen: {
     jobId: string;
