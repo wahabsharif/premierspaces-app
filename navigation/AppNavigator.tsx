@@ -11,7 +11,7 @@ import ChangeAppPinScreen from "../screens/Settings/ChangeAppPinScreen";
 import PendingDataScreen from "../screens/PendingDataScreen";
 import LoginScreen from "../screens/LoginScreen";
 import JobsScreen from "../screens/JobsScreen";
-import OpenNewJobScreen from "../screens/OpenNewJobScreen";
+import CreateEditJobScreen from "../screens/CreateEditJobScreen";
 import JobDetailScreen from "../screens/JobDetailScreen";
 import MediaPreviewScreen from "../screens/MediaPreviewScreen";
 import FilesScreen from "../screens/FilesScreen";
@@ -53,7 +53,7 @@ export const AppNavigator = ({ setIsPickingImage }: AppNavigatorProps) => (
     />
     <Stack.Screen name="ChangeAppPinScreen" component={ChangeAppPinScreen} />
     <Stack.Screen name="JobsScreen" component={JobsScreen} />
-    <Stack.Screen name="OpenNewJobScreen" component={OpenNewJobScreen} />
+    <Stack.Screen name="CreateEditJobScreen" component={CreateEditJobScreen} />
     <Stack.Screen name="JobDetailScreen" component={JobDetailScreen} />
     <Stack.Screen name="MediaPreviewScreen" component={MediaPreviewScreen} />
     <Stack.Screen name="FilesScreen" component={FilesScreen} />

@@ -353,7 +353,7 @@ const JobsScreen = ({
   );
 
   const handleOpenNewJob = () => {
-    navigation.navigate("OpenNewJobScreen");
+    navigation.navigate("CreateEditJobScreen");
   };
 
   // We separate initial loading from refresh loading

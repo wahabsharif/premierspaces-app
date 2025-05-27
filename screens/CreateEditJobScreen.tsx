@@ -35,9 +35,9 @@ import { Job, PropertyData, RootStackParamList } from "../types";
 type TasksState = Record<string, string>;
 const TASK_KEYS = Array.from({ length: 10 }, (_, i) => `task${i + 1}`);
 
-const OpenNewJobScreen = ({
+const CreateEditJobScreen = ({
   navigation,
-}: NativeStackScreenProps<RootStackParamList, "OpenNewJobScreen">) => {
+}: NativeStackScreenProps<RootStackParamList, "CreateEditJobScreen">) => {
   const dispatch = useDispatch<AppDispatch>();
   const { loading, success, error } = useSelector(selectJobState);
   const { items: jobTypes, loading: typesLoading } =
@@ -388,4 +388,4 @@ const innerStyles = StyleSheet.create({
   noDataContainer: { padding: 15, alignItems: "center" },
 });
 
-export default OpenNewJobScreen;
+export default CreateEditJobScreen;
