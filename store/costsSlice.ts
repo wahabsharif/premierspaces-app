@@ -55,7 +55,6 @@ export const fetchCosts = createAsyncThunk<
 
     // Prevent concurrent fetches for the same job
     if (fetchInProgress[fetchKey]) {
-      // Return existing data if available, or an empty array
       return {
         jobId,
         costs: items[jobId] || [],
@@ -89,20 +88,25 @@ export const fetchCosts = createAsyncThunk<
       const online = await isOnline();
       dispatch(setOfflineMode(!online));
 
-      // Get local SQLite costs first (these are costs created while offline)
+      // STEP 1: Always get local SQLite costs (these are costs created while offline)
       let localCosts: Costs[] = [];
       try {
         const allLocalCosts = await getAllCosts();
+
         // Filter costs for this job based on both job_id and common_id (if available)
         localCosts = allLocalCosts.filter((cost) => {
-          // Match by job_id always
-          if (String(cost.job_id) === String(jobId)) return true;
+          // Match by job_id if it exists and matches
+          const matchesJobId =
+            cost.job_id && String(cost.job_id) === String(jobId);
 
-          // Also match by common_id if it exists
-          if (common_id && String(cost.common_id) === String(common_id))
-            return true;
+          // Match by common_id if it exists and matches
+          const matchesCommonId =
+            common_id &&
+            cost.common_id &&
+            String(cost.common_id) === String(common_id);
 
-          return false;
+          // Return true if either condition is met
+          return matchesJobId || matchesCommonId;
         });
       } catch (err) {
         Toast.error(
@@ -112,7 +116,8 @@ export const fetchCosts = createAsyncThunk<
         );
       }
 
-      // If online and we need to refresh, fetch from API
+      // STEP 2: If online and we need to refresh, fetch from API
+      let apiCosts: Costs[] = [];
       if (online && shouldRefreshFromNetwork) {
         try {
           // Build API parameters based on what we have
@@ -148,7 +153,7 @@ export const fetchCosts = createAsyncThunk<
           }
 
           // More flexible filtering logic - match by job_id or common_id
-          const filtered = payloadArray.filter((c) => {
+          apiCosts = payloadArray.filter((c) => {
             // Match by job_id
             const matchesJob = String(c.job_id) === String(jobId);
 
@@ -159,24 +164,26 @@ export const fetchCosts = createAsyncThunk<
             return matchesJob || matchesCommonId;
           });
 
-          // Combine API costs with local costs, avoiding duplicates
-          const combinedCosts = [...filtered];
+          // API fetch was successful, combine with local costs and return
+          const combinedCosts = [...apiCosts];
 
           // Add local costs that aren't in the API response
-          localCosts.forEach((localCost) => {
-            // Check if this local cost already exists in the API response
-            const exists = combinedCosts.some(
-              (apiCost) =>
-                apiCost.id === localCost.id ||
-                (apiCost.contractor_id === localCost.contractor_id &&
-                  apiCost.amount === localCost.amount &&
-                  apiCost.material_cost === localCost.material_cost)
-            );
+          if (localCosts.length > 0) {
+            localCosts.forEach((localCost) => {
+              // Check if this local cost already exists in the API response
+              const exists = combinedCosts.some(
+                (apiCost) =>
+                  apiCost.id === localCost.id ||
+                  (apiCost.contractor_id === localCost.contractor_id &&
+                    apiCost.amount === localCost.amount &&
+                    apiCost.material_cost === localCost.material_cost)
+              );
 
-            if (!exists) {
-              combinedCosts.push(localCost);
-            }
-          });
+              if (!exists) {
+                combinedCosts.push(localCost);
+              }
+            });
+          }
 
           return { jobId, costs: combinedCosts, isOffline: false };
         } catch (error) {
@@ -187,87 +194,113 @@ export const fetchCosts = createAsyncThunk<
           );
           // Fall back to cache on API error
         }
-      } else if (online) {
-        console.log(`[fetchCosts] Using cached data (recently fetched)`);
-      } else {
-        console.log(`[fetchCosts] Offline mode, using cached data`);
       }
 
-      // Use existing data in memory if available and combine with local costs
+      // STEP 3: OFFLINE MODE or API ERROR - Get cached costs from redux store first
+      let cachedCosts: Costs[] = [];
+
       if (items[jobId] && items[jobId].length > 0) {
-        const cachedCosts = items[jobId];
-        const combinedCosts = [...cachedCosts];
+        cachedCosts = [...items[jobId]];
+      } else {
+        // STEP 4: If not in redux store, try to get from cache service
+        try {
+          const cacheEntry = await getCache(cacheKey);
 
-        // Add local costs that aren't in the cached costs
-        localCosts.forEach((localCost) => {
-          const exists = combinedCosts.some(
-            (cachedCost) =>
-              cachedCost.id === localCost.id ||
-              (cachedCost.contractor_id === localCost.contractor_id &&
-                cachedCost.amount === localCost.amount &&
-                cachedCost.material_cost === localCost.material_cost)
-          );
+          if (cacheEntry?.payload) {
+            let archived: any[] = [];
 
-          if (!exists) {
-            combinedCosts.push(localCost);
+            if (Array.isArray(cacheEntry.payload)) {
+              archived = cacheEntry.payload;
+            } else if (
+              cacheEntry.payload.payload &&
+              Array.isArray(cacheEntry.payload.payload)
+            ) {
+              archived = cacheEntry.payload.payload;
+            } else if (typeof cacheEntry.payload === "object") {
+              // Handle case where payload is a single object
+              archived = [cacheEntry.payload];
+            }
+
+            // Filter by job_id or common_id
+            cachedCosts = archived.filter((c) => {
+              if (!c) return false;
+
+              const matchesJob = c.job_id && String(c.job_id) === String(jobId);
+              const matchesCommonId =
+                common_id &&
+                c.common_id &&
+                String(c.common_id) === String(common_id);
+              return matchesJob || matchesCommonId;
+            });
           }
-        });
-
-        return { jobId, costs: combinedCosts, isOffline: !online };
+        } catch (error) {
+          // Critical cache error
+        }
       }
 
-      // Offline mode or API error fallback - use cache + local costs
-      try {
-        const cacheEntry = await getCache(cacheKey);
-        let archived: any[] = [];
+      // STEP 5: Now combine cached costs with local costs - CRITICAL PART
+      // Start with all cached costs
+      const allCosts: Costs[] = [...cachedCosts];
 
-        if (cacheEntry?.payload) {
-          if (Array.isArray(cacheEntry.payload)) {
-            archived = cacheEntry.payload;
-          } else if (
-            cacheEntry.payload.payload &&
-            Array.isArray(cacheEntry.payload.payload)
-          ) {
-            archived = cacheEntry.payload.payload;
-          }
+      // Add local costs one by one to ensure proper merging
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      for (const localCost of localCosts) {
+        // Check if we already have this exact cost by ID
+        const existingIdIndex = allCosts.findIndex(
+          (c) => c.id === localCost.id
+        );
+
+        if (existingIdIndex >= 0) {
+          // Replace with local version
+          allCosts[existingIdIndex] = localCost;
+          updatedCount++;
+          continue;
         }
 
-        // More flexible filtering logic
-        const filtered = archived.filter((c) => {
-          const matchesJob = String(c.job_id) === String(jobId);
-          const matchesCommonId = String(c.common_id) === String(common_id);
-          return matchesJob || matchesCommonId; // Changed to OR to be more inclusive
-        });
+        // Check for similar costs (same contractor, amount, etc.)
+        const similarIndex = allCosts.findIndex((c) => {
+          if (!c || !localCost) return false;
 
-        // Combine cached costs with local costs
-        const combinedCosts = [...filtered];
+          const sameContractor = c.contractor_id === localCost.contractor_id;
 
-        // Add local costs that aren't in the cached costs
-        localCosts.forEach((localCost) => {
-          const exists = combinedCosts.some(
-            (cachedCost) =>
-              cachedCost.id === localCost.id ||
-              (cachedCost.contractor_id === localCost.contractor_id &&
-                cachedCost.amount === localCost.amount &&
-                cachedCost.material_cost === localCost.material_cost)
-          );
-
-          if (!exists) {
-            combinedCosts.push(localCost);
+          // Handle amount comparison safely
+          let sameAmount = false;
+          try {
+            const cAmount = parseFloat(String(c.amount || "0"));
+            const localAmount = parseFloat(String(localCost.amount || "0"));
+            sameAmount = Math.abs(cAmount - localAmount) < 0.01; // Allow tiny rounding differences
+          } catch (e) {
+            sameAmount = false;
           }
+
+          // Handle material cost comparison
+          const sameMaterialCost =
+            c.material_cost === localCost.material_cost ||
+            (c.material_cost === null && !localCost.material_cost) ||
+            (!c.material_cost && localCost.material_cost === null);
+
+          return sameContractor && sameAmount && sameMaterialCost;
         });
 
-        return { jobId, costs: combinedCosts, isOffline: !online };
-      } catch (error) {
-        Toast.error(
-          `[fetchCosts] cache fallback error: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+        if (similarIndex >= 0) {
+          // Replace with local version
+          allCosts[similarIndex] = localCost;
+          updatedCount++;
+        } else {
+          // Add as new cost
+          allCosts.push(localCost);
+          addedCount++;
+        }
       }
 
-      // If all else fails, just return local costs (which could be empty)
-      return { jobId, costs: localCosts, isOffline: true };
+      // Return the combined results
+      return {
+        jobId,
+        costs: allCosts,
+        isOffline: !online,
+      };
     } finally {
       // Always clear the in-progress flag when done
       dispatch(setFetchInProgress({ key: fetchKey, value: false }));
@@ -302,15 +335,14 @@ export const createCost = createAsyncThunk<
           : undefined;
 
       if (!online) {
-        // Offline mode - create cost locally
         const newCost = await createLocalCost({
-          job_id: undefined,
+          job_id: null,
           common_id: common_id || undefined,
           contractor_id: contractorId || undefined,
           amount: parseFloat(amount || "0").toFixed(2),
           material_cost:
             formattedMaterialCost !== undefined
-              ? parseInt(formattedMaterialCost) // Ensure it's stored as an integer
+              ? parseInt(formattedMaterialCost)
               : undefined,
         });
 

@@ -168,7 +168,7 @@ export interface GroupedFiles {
 
 export interface Costs {
   id?: string | number;
-  job_id?: string;
+  job_id?: string | null;
   common_id?: string | null;
   contractor_id?: string | null;
   name?: string;

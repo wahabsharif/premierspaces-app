@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 import { Costs } from "../types";
+import { Toast } from "toastify-react-native";
 
 interface CostRow {
   id: string;
@@ -68,10 +69,18 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
   try {
     const id = uuidv4();
     const now = Math.floor(Date.now() / 1000);
+
+    // Validate that at least one of job_id or common_id is provided
+    if (!cost.job_id && !cost.common_id) {
+      throw new Error(
+        "Either job_id or common_id must be provided for cost creation"
+      );
+    }
+
     const params: (string | number | null)[] = [
       id,
-      safeString(cost.job_id), // Removed the ?? "" to allow null values
-      safeString(cost.common_id), // Also removed here for consistency
+      safeString(cost.job_id), // This will now be null in offline mode
+      safeString(cost.common_id),
       safeString(cost.contractor_id),
       safeNumber(cost.amount) ?? 0,
       // Round material_cost to ensure it's an integer (decimal(10,0))
@@ -79,7 +88,7 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
       now,
     ];
     await stmt.executeAsync(params);
-    await stmt.finalizeAsync();
+
     return {
       id,
       job_id: cost.job_id,
@@ -120,8 +129,10 @@ export async function getCostById(id: string): Promise<Costs | null> {
 
 export async function getAllCosts(): Promise<Costs[]> {
   const db = await dbPromise;
-  const stmt = await db.prepareAsync(SQL.SELECT_ALL);
+  let stmt;
+
   try {
+    stmt = await db.prepareAsync(SQL.SELECT_ALL);
     const result = await stmt.executeAsync([]);
     const rows = (await result.getAllAsync()) as CostRow[];
     return rows.map((row) => ({
@@ -129,11 +140,34 @@ export async function getAllCosts(): Promise<Costs[]> {
       job_id: row.job_id,
       common_id: row.common_id,
       contractor_id: row.contractor_id,
-      amount: row.amount,
-      material_cost: row.material_cost,
+      // Ensure numeric fields are properly converted
+      amount:
+        typeof row.amount === "string" ? parseFloat(row.amount) : row.amount,
+      material_cost:
+        row.material_cost === null
+          ? null
+          : typeof row.material_cost === "string"
+          ? parseInt(row.material_cost)
+          : row.material_cost,
     }));
+  } catch (error) {
+    console.error("[costService] ERROR getting costs from SQLite:", error);
+    // Also show a Toast for critical errors
+    Toast.error(
+      `[getAllCosts] Database error: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    // Return empty array on error rather than throwing
+    return [];
   } finally {
-    await stmt.finalizeAsync();
+    if (stmt) {
+      try {
+        await stmt.finalizeAsync();
+      } catch (err) {
+        console.warn("[costService] Error finalizing statement:", err);
+      }
+    }
   }
 }
 
