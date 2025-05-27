@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { Toast } from "toastify-react-native";
 import { Header } from "../components";
 import SkeletonLoader from "../components/SkeletonLoader";
 import styles from "../Constants/styles";
@@ -29,9 +30,13 @@ import {
   resetCostsForJob,
   selectCostsForJobWithNames,
 } from "../store/costsSlice";
-import { fetchJobs, selectJobsList } from "../store/jobSlice";
+import {
+  fetchJobTypes,
+  fetchJobs,
+  selectJobTypes,
+  selectJobsList,
+} from "../store/jobSlice";
 import { RootStackParamList } from "../types";
-import { Toast } from "toastify-react-native";
 
 type Props = NativeStackScreenProps<RootStackParamList, "JobDetailScreen">;
 
@@ -166,6 +171,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     selectCostsForJobWithNames(state, jobId)
   );
   const costsLoading = useSelector((state: RootState) => state.cost.loading);
+  const { items: jobTypes } = useSelector(selectJobTypes);
 
   // Setup skeleton loader with delay to prevent flickering
   useEffect(() => {
@@ -305,17 +311,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       dataFetchedRef.current = true;
 
       try {
-        // Step 1: Fetch jobs and contractors first
+        // Step 1: Fetch jobs, job types, and contractors first
         await Promise.all([
           dispatch(fetchContractors(userId)),
           dispatch(fetchJobs({ userId })),
+          dispatch(fetchJobTypes({ userId })),
         ]);
 
         // Step 2: Use the common_id from route params directly when available
         if (routeCommonId && isMounted.current) {
-          console.log(
-            `[JobDetailScreen] Fetching costs with job_id: ${jobId} and common_id: ${routeCommonId}`
-          );
           await dispatch(
             fetchCosts({
               userId,
@@ -324,10 +328,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             })
           );
         } else {
-          // If no common_id available, fetch by job_id only
-          console.log(
-            `[JobDetailScreen] Fetching costs with job_id only: ${jobId}`
-          );
           await dispatch(
             fetchCosts({
               userId,
@@ -373,17 +373,15 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       dataFetchedRef.current = true;
 
       try {
-        // Step 1: Fetch jobs and contractors first
+        // Step 1: Fetch jobs, job types, and contractors first
         await Promise.all([
           dispatch(fetchContractors(userId)),
           dispatch(fetchJobs({ userId })),
+          dispatch(fetchJobTypes({ userId })),
         ]);
 
         // Step 2: Use the common_id from route params directly when available
         if (routeCommonId && isMounted.current) {
-          console.log(
-            `[JobDetailScreen] Fetching costs with job_id: ${jobId} and common_id: ${routeCommonId}`
-          );
           await dispatch(
             fetchCosts({
               userId,
@@ -393,9 +391,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           );
         } else {
           // If no common_id available, fetch by job_id only
-          console.log(
-            `[JobDetailScreen] Fetching costs with job_id only: ${jobId}`
-          );
           await dispatch(
             fetchCosts({
               userId,
@@ -445,13 +440,13 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       dispatch(resetCostsForJob(jobId));
 
       // Force a fresh API fetch on pull-to-refresh
-      await dispatch(fetchJobs({ userId, force: true }));
+      await Promise.all([
+        dispatch(fetchJobs({ userId, force: true })),
+        dispatch(fetchJobTypes({ userId, useCache: false })),
+      ]);
 
       // Use common_id from route params if available
       if (routeCommonId) {
-        console.log(
-          `[JobDetailScreen] Fetching costs with job_id: ${jobId} and common_id: ${routeCommonId}`
-        );
         await dispatch(
           fetchCosts({
             userId,
@@ -460,9 +455,6 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
           })
         );
       } else {
-        console.log(
-          `[JobDetailScreen] Fetching costs with job_id only: ${jobId}`
-        );
         await dispatch(
           fetchCosts({
             userId,
@@ -491,6 +483,19 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     refreshing,
     fetchOfflineFileCounts,
   ]);
+
+  // Function to get job type name from ID
+  const getJobTypeName = useCallback(
+    (typeId: string | number | undefined) => {
+      if (!typeId) return "Unknown";
+
+      const jobType = jobTypes.find(
+        (type) => String(type.id) === String(typeId)
+      );
+      return jobType?.job_type || "Unknown";
+    },
+    [jobTypes]
+  );
 
   // Tasks array
   const tasks = useMemo(() => {
@@ -592,7 +597,9 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   {/* Job Type */}
                   <View style={{ marginVertical: 10 }}>
                     <Text style={styles.label}>Job Type</Text>
-                    <Text style={styles.smallText}>{jobDetail.job_type}</Text>
+                    <Text style={styles.smallText}>
+                      {getJobTypeName(jobDetail.job_type)}
+                    </Text>
                   </View>
 
                   {/* Tasks */}
