@@ -158,18 +158,95 @@ export const fetchJobs = createAsyncThunk<
     const net = await NetInfo.fetch();
     const isOnline = net.isConnected;
 
+    // If online and not explicitly using cache, prioritize API data
+    if (isOnline && !useCache) {
+      try {
+        // Add cache-busting parameter when force=true to bypass HTTP caching
+        const cacheBuster = force ? `&_cb=${Date.now()}` : "";
+        const resp = await axios.get(`${ENDPOINT}${cacheBuster}`, {
+          timeout: 15000,
+          headers: force
+            ? {
+                "Cache-Control": "no-cache, no-store",
+                Pragma: "no-cache",
+              }
+            : {},
+        });
+
+        if (resp.data.status === 1) {
+          const serverJobs = resp.data.payload as Job[];
+          const merged = [...serverJobs];
+
+          // Add any offline jobs that aren't in the server response
+          offlineJobs.forEach((o) => {
+            if (!merged.some((j) => j.id === o.id)) {
+              merged.push(o);
+            }
+          });
+
+          // Sort by date_created desc
+          merged.sort(
+            (a, b) =>
+              new Date(b.date_created || Date.now()).getTime() -
+              new Date(a.date_created || Date.now()).getTime()
+          );
+
+          return merged;
+        } else {
+          throw new Error("Invalid API response");
+        }
+      } catch (err: any) {
+        // API request failed, fall back to cache
+        Toast.info("Using cached data - API request failed");
+
+        // Only use cache as fallback, not as primary source when online
+        const entry = await getCache(cacheKey);
+        const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
+
+        const fallback = [...cached];
+        offlineJobs.forEach((o) => {
+          if (!fallback.some((j) => j.id === o.id)) {
+            fallback.push(o);
+          }
+        });
+
+        fallback.sort(
+          (a, b) =>
+            new Date(b.date_created || Date.now()).getTime() -
+            new Date(a.date_created || Date.now()).getTime()
+        );
+
+        return fallback;
+      }
+    }
+
     // 2) If we're offline or useCache flag is set, combine SQLite jobs with cached server jobs
     if (!isOnline || useCache) {
       // Get cached server jobs
       let cachedServerJobs: Job[] = [];
       try {
         const entry = await getCache(cacheKey);
-        cachedServerJobs = (entry?.payload?.payload as Job[]) || [];
+        if (entry?.payload?.payload) {
+          cachedServerJobs = (entry.payload.payload as Job[]) || [];
+        } else {
+          // Try to get from general cache if property-specific cache doesn't exist
+          if (propertyId) {
+            const generalCacheKey = `jobsCache_${userId}`;
+            const generalEntry = await getCache(generalCacheKey);
+            if (generalEntry?.payload?.payload) {
+              const allCachedJobs = generalEntry.payload.payload as Job[];
+              // Filter by property ID
+              cachedServerJobs = allCachedJobs.filter(
+                (j) => String(j.property_id) === String(propertyId)
+              );
+            }
+          }
+        }
 
         // Apply property filter if not already in the cache key
         if (propertyId && !cacheKey.includes("_prop_")) {
           cachedServerJobs = cachedServerJobs.filter(
-            (j) => j.property_id === propertyId
+            (j) => String(j.property_id) === String(propertyId)
           );
         }
       } catch (err) {
@@ -192,63 +269,11 @@ export const fetchJobs = createAsyncThunk<
       // Sort by date (newest first)
       combinedJobs.sort(
         (a, b) =>
-          new Date(b.date_created).getTime() -
-          new Date(a.date_created).getTime()
+          new Date(b.date_created || Date.now()).getTime() -
+          new Date(a.date_created || Date.now()).getTime()
       );
 
       return combinedJobs;
-    }
-
-    // 3) ONLINE CASE: If we have network, prioritize API data
-    if (isOnline) {
-      try {
-        const resp = await axios.get(ENDPOINT, {
-          timeout: 15000, // Add timeout to prevent hanging requests
-        });
-
-        if (resp.data.status === 1) {
-          const serverJobs = resp.data.payload as Job[];
-          const merged = [...serverJobs];
-          offlineJobs.forEach((o) => {
-            if (!merged.some((j) => j.id === o.id)) {
-              merged.push(o);
-            }
-          });
-
-          // Sort by date_created desc
-          merged.sort(
-            (a, b) =>
-              new Date(b.date_created).getTime() -
-              new Date(a.date_created).getTime()
-          );
-
-          return merged;
-        } else {
-          throw new Error("Invalid API response");
-        }
-      } catch (err: any) {
-        // API request failed, fall back to cache
-        Toast.info("Using cached data - API request failed");
-
-        // Fall back to cache
-        const entry = await getCache(cacheKey);
-        const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
-
-        const fallback = [...cached];
-        offlineJobs.forEach((o) => {
-          if (!fallback.some((j) => j.id === o.id)) {
-            fallback.push(o);
-          }
-        });
-
-        fallback.sort(
-          (a, b) =>
-            new Date(b.date_created).getTime() -
-            new Date(a.date_created).getTime()
-        );
-
-        return fallback;
-      }
     }
 
     // This should never happen (either offline or online case should be handled)

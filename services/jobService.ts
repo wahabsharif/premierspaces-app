@@ -180,7 +180,8 @@ export async function getAllJobs(): Promise<Job[]> {
         error instanceof Error ? error.message : String(error)
       }`
     );
-    throw error;
+    // Return empty array instead of throwing to prevent crashes
+    return [];
   }
 }
 

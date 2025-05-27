@@ -176,6 +176,7 @@ const JobsScreen = ({
   const [refreshing, setRefreshing] = useState(false);
   const [showSkeletons, setShowSkeletons] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
 
@@ -244,11 +245,12 @@ const JobsScreen = ({
   useEffect(() => {
     let skeletonTimer: NodeJS.Timeout;
 
-    if (loading || initialLoad) {
+    // Show skeletons when loading, unless it's a manual pull-to-refresh
+    if ((loading && !isManualRefreshing) || initialLoad) {
       // Show skeletons after a small delay to avoid flickering
       skeletonTimer = setTimeout(() => {
         setShowSkeletons(true);
-      }, 300); // 300ms delay before showing skeletons
+      }, 200); // Reduced delay to make skeleton appear faster
     } else {
       setShowSkeletons(false);
     }
@@ -256,7 +258,7 @@ const JobsScreen = ({
     return () => {
       clearTimeout(skeletonTimer);
     };
-  }, [loading, initialLoad]);
+  }, [loading, initialLoad, isManualRefreshing]);
 
   // Check for network connectivity
   useEffect(() => {
@@ -292,23 +294,31 @@ const JobsScreen = ({
       if (!needsRefresh && isCacheValid) {
         return;
       }
+
+      // We're doing a screen focus refresh, not a manual pull-to-refresh
       setRefreshing(true);
       setLastRefreshTime(now);
       const uid = userData.payload?.userid ?? userData.userid;
-      dispatch(
-        fetchJobs({
-          userId: uid,
-          propertyId: propertyData.id,
-          force: needsRefresh,
-        }) as any
-      ).finally(() => {
-        setRefreshing(false);
 
-        if (needsRefresh && navigation.setParams) {
-          setTimeout(() => {
-            navigation.setParams({ refresh: false });
-          }, 100);
-        }
+      // Get network status
+      NetInfo.fetch().then((state) => {
+        const isConnected = !!state.isConnected;
+        dispatch(
+          fetchJobs({
+            userId: uid,
+            propertyId: propertyData.id,
+            force: isConnected || needsRefresh,
+            useCache: !isConnected,
+          }) as any
+        ).finally(() => {
+          setRefreshing(false);
+
+          if (needsRefresh && navigation.setParams) {
+            setTimeout(() => {
+              navigation.setParams({ refresh: false });
+            }, 100);
+          }
+        });
       });
     }, [
       userData,
@@ -324,46 +334,51 @@ const JobsScreen = ({
     if (!userData || !propertyData) {
       return;
     }
+
+    // This is a manual pull-to-refresh, so we use isManualRefreshing
     setRefreshing(true);
+    setIsManualRefreshing(true);
+
     const uid = userData.payload?.userid ?? userData.userid;
     const propId = propertyData.id;
 
     if (isOffline) {
-      // In offline mode, just refresh from local sources
-      dispatch(fetchJobs({ userId: uid, propertyId: propId }) as any).finally(
-        () => {
-          setRefreshing(false);
-        }
-      );
+      // In offline mode, explicitly set useCache to true
+      dispatch(
+        fetchJobs({
+          userId: uid,
+          propertyId: propId,
+          useCache: true,
+        }) as any
+      ).finally(() => {
+        setRefreshing(false);
+        setIsManualRefreshing(false);
+      });
     } else {
-      // When online, try to sync pending jobs first, then refresh
-      // Define interfaces for type safety
-      interface SyncPendingJobsResult {
-        success?: boolean;
-        synced?: number;
-        [key: string]: any; // For any additional properties in the result
-      }
-
-      type SyncError =
-        | Error
-        | {
-            message: string;
-            [key: string]: any;
-          };
-
       dispatch(syncPendingJobs() as any)
-        .then((result: SyncPendingJobsResult) => {
+        .then(() => {
           return dispatch(
-            fetchJobs({ userId: uid, propertyId: propId, force: true }) as any
+            fetchJobs({
+              userId: uid,
+              propertyId: propId,
+              force: true,
+              useCache: false,
+            }) as any
           );
         })
-        .catch((err: SyncError) => {
+        .catch(() => {
           return dispatch(
-            fetchJobs({ userId: uid, propertyId: propId, force: true }) as any
+            fetchJobs({
+              userId: uid,
+              propertyId: propId,
+              force: true,
+              useCache: false,
+            }) as any
           );
         })
         .finally(() => {
           setRefreshing(false);
+          setIsManualRefreshing(false);
         });
     }
   }, [userData, propertyData, dispatch, isOffline]);
@@ -398,6 +413,7 @@ const JobsScreen = ({
   };
 
   // We separate initial loading from refresh loading
+  // Show content when NOT initial loading AND we have property data AND we're not showing skeletons
   const shouldShowContent = !initialLoad && propertyData && !showSkeletons;
 
   return (
