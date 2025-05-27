@@ -284,7 +284,7 @@ export const createJob = createAsyncThunk<
       const postData = { userid: userId, payload: formattedJobData };
       const response = await axios.post(`${BASE_API_URL}/job.php`, postData);
 
-      // Refresh caches after successful POST operation
+      // Refresh caches after successful POST operation with comprehensive refresh
       await refreshCachesAfterPost(userId);
 
       // Force a job list refresh after creating a job
@@ -341,7 +341,10 @@ export const updateJob = createAsyncThunk<
           apiError: true,
         };
       }
+
+      // Refresh all relevant caches after successful job update
       await refreshCachesAfterPost(userId);
+
       await updateOfflineJob(formattedJobData);
       return response.data;
     } else {

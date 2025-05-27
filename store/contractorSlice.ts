@@ -31,12 +31,8 @@ export const fetchContractors = createAsyncThunk<
   const cacheKey = `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`;
   const online = await isOnline();
 
-  // Debug log to see what's happening
-  console.log("[fetchContractors] Starting fetch for user:", userId);
-
   if (!online) {
     try {
-      console.log("[fetchContractors] Offline, fetching from cache");
       const cached = await getCache(cacheKey);
 
       // Handle various possible cache structures
@@ -66,10 +62,6 @@ export const fetchContractors = createAsyncThunk<
           id: String(c.id),
         })
       );
-
-      console.log(
-        `[fetchContractors] Found ${normalized.length} contractors in cache`
-      );
       return normalized;
     } catch (err) {
       Toast.error(
@@ -82,8 +74,6 @@ export const fetchContractors = createAsyncThunk<
   }
 
   try {
-    console.log("[fetchContractors] Online, fetching from API");
-    // Using axios instead of fetch for consistency with your other code
     const { data } = await axios.get(`${BASE_API_URL}/contractors.php`, {
       params: { userid: userId },
       headers: { "Content-Type": "application/json" },
@@ -114,10 +104,6 @@ export const fetchContractors = createAsyncThunk<
       id: String(c.id || c.contractor_id), // Handle possible field name variations
       name: String(c.name || c.contractor_name || "Unknown"), // Handle possible field name variations
     }));
-
-    console.log(
-      `[fetchContractors] Received ${normalized.length} contractors from API`
-    );
 
     // Store the normalized array in cache with no expiration
     await setCache(cacheKey, normalized, { expiresIn: 0 });

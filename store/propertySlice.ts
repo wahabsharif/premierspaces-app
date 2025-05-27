@@ -1,8 +1,9 @@
-import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BASE_API_URL } from "../Constants/env";
 import NetInfo from "@react-native-community/netinfo";
+import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
+import axios from "axios";
+import { BASE_API_URL } from "../Constants/env";
+import { refreshCachesAfterPost } from "../services/cacheService";
 
 interface Property {
   id: string;
@@ -162,6 +163,44 @@ const filterPropertiesByDoorNum = (
   );
 };
 
+// Add a new action to update a property
+export const updateProperty = createAsyncThunk(
+  "property/update",
+  async (
+    { propertyData, userId }: { propertyData: Property; userId: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await axios.put(
+        `${BASE_API_URL}/property.php`,
+        {
+          userid: userId,
+          payload: propertyData,
+        },
+        {
+          timeout: 10000,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data.status !== 1) {
+        return rejectWithValue(
+          response.data.message || "Failed to update property"
+        );
+      }
+
+      // Refresh caches after successful property update
+      await refreshCachesAfterPost(userId);
+
+      return response.data.payload;
+    } catch (error: any) {
+      return rejectWithValue(error.message || "Network error");
+    }
+  }
+);
+
 // Property slice
 const propertySlice = createSlice({
   name: "property",
@@ -215,6 +254,25 @@ const propertySlice = createSlice({
       // Handle connectivity checks
       .addCase(checkConnectivity.fulfilled, (state, action) => {
         state.isConnected = action.payload ?? false;
+      })
+      // Handle property updates
+      .addCase(updateProperty.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateProperty.fulfilled, (state, action) => {
+        state.loading = false;
+        // Update the property in the state if it exists
+        const index = state.properties.findIndex(
+          (p) => p.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.properties[index] = action.payload;
+        }
+      })
+      .addCase(updateProperty.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
       });
   },
 });

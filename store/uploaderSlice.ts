@@ -243,7 +243,7 @@ export const uploadFiles = createAsyncThunk(
         // Track successful file status
         dispatch(updateFileStatus({ uri: file.uri, status: "success" }));
 
-        // Refresh job cache after successful upload
+        // Refresh job and files cache after successful upload
         await refreshCachesAfterPost(userName);
 
         return { success: true, data: response.data };
@@ -432,7 +432,7 @@ export const syncOfflineUploads = createAsyncThunk(
         );
         dispatch(incrementSuccessCount());
 
-        // Refresh job cache after successful upload
+        // Refresh job cache after successful upload - use the enhanced function
         await refreshCachesAfterPost(userName);
 
         // Delete the local upload after successful upload

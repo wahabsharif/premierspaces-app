@@ -4,6 +4,7 @@ import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BASE_API_URL } from "../Constants/env";
 import { Toast } from "toastify-react-native";
+import { refreshAllCachesAfterLogin } from "../services/cacheService";
 
 // Define the shape of our auth state
 interface AuthState {
@@ -46,6 +47,15 @@ export const login = createAsyncThunk<
       await AsyncStorage.setItem("userData", JSON.stringify(data));
       const stored = await AsyncStorage.getItem("userData");
       console.log("✅ Latest userData in AsyncStorage:", stored);
+
+      // Refresh all caches after successful login
+      const userId = data.payload?.userid;
+      if (userId) {
+        // Run this asynchronously to not block the login response
+        refreshAllCachesAfterLogin(userId).catch((err) => {
+          console.error("Error refreshing caches after login:", err);
+        });
+      }
     } catch (e) {
       // // console.error("❌ AsyncStorage error:", e);
     }

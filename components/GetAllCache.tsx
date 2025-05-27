@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -7,29 +7,55 @@ import {
   Text,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
 import { CacheEntry, getAllCache } from "../services/cacheService";
+
+// Refresh interval in milliseconds (30 seconds)
+const REFRESH_INTERVAL = 30000;
 
 const GetAllCache: React.FC = () => {
   const [entries, setEntries] = useState<CacheEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+
+  const fetchEntries = useCallback(async (isManualRefresh = false) => {
+    try {
+      if (!isManualRefresh) {
+        setLoading(true);
+      }
+      const allEntries = await getAllCache();
+      setEntries(allEntries);
+      setLastRefreshed(new Date());
+      setError(null);
+    } catch (err) {
+      console.error("[GetAllCache] Error fetching entries:", err);
+      setError("Failed to load cache entries");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchEntries(true);
+  }, [fetchEntries]);
 
   useEffect(() => {
-    const fetchEntries = async () => {
-      try {
-        const allEntries = await getAllCache();
-        setEntries(allEntries);
-      } catch (err) {
-        console.error("[GetAllCache] Error fetching entries:", err);
-        setError("Failed to load cache entries");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchEntries();
-  }, []);
+
+    // Set up interval for auto-refresh
+    const intervalId = setInterval(() => {
+      fetchEntries(true);
+    }, REFRESH_INTERVAL);
+
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId);
+  }, [fetchEntries]);
 
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id);
@@ -47,15 +73,29 @@ const GetAllCache: React.FC = () => {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => fetchEntries()}
+        >
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.headerContainer}>
+        <Text style={styles.refreshText}>
+          Last refreshed: {lastRefreshed.toLocaleTimeString()}
+        </Text>
+      </View>
       <FlatList
         data={entries}
         keyExtractor={(item) => item.id.toString()}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         renderItem={({ item }) => {
           // Handle payload data extraction
           const list = Array.isArray(item.payload.payload)
@@ -114,6 +154,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  headerContainer: {
+    paddingVertical: 8,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  refreshText: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: "#007AFF",
+    borderRadius: 4,
+  },
+  retryText: {
+    color: "white",
+    textAlign: "center",
   },
   item: {
     marginBottom: 12,

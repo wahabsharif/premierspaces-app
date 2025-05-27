@@ -501,50 +501,213 @@ export function shutdown() {
  * @param userId - The user ID for API requests
  */
 export async function refreshCachesAfterPost(userId: string): Promise<void> {
+  if (!userId) {
+    console.warn(
+      "[refreshCachesAfterPost] No userId provided, skipping refresh"
+    );
+    return;
+  }
+
+  const isConnected = await isOnline();
+  if (!isConnected) {
+    return; // Don't attempt refresh if offline
+  }
+
+  try {
+    // Define endpoints to refresh - all requests will be made in parallel
+    const endpoints = [
+      {
+        url: `${BASE_API_URL}/getjobs.php?userid=${userId}`,
+        cacheKey: `jobsCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/costs.php?userid=${userId}`,
+        cacheKey: `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`,
+        options: { timeout: 10000, expiresIn: 0 }, // Costs cache never expires
+      },
+      {
+        url: `${BASE_API_URL}/get-files.php?userid=${userId}`,
+        cacheKey: `filesCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/contractors.php?userid=${userId}`,
+        cacheKey: `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/searchproperty.php?userid=${userId}`,
+        cacheKey: `propertiesCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+    ];
+
+    // Track success/failure of each endpoint
+    const results = await Promise.allSettled(
+      endpoints.map(async ({ url, cacheKey, options }) => {
+        try {
+          const response = await axios
+            .get(url, {
+              timeout: options.timeout,
+              headers: {
+                "Cache-Control": "no-cache",
+                Pragma: "no-cache",
+              },
+            })
+            .catch((error) => {
+              console.warn(
+                `[refreshCachesAfterPost] Failed to fetch from ${url}:`,
+                error
+              );
+              return { data: null };
+            });
+
+          if (response.data?.status === 1 && response.data.payload) {
+            await setCache(cacheKey, response.data.payload, {
+              expiresIn: options.expiresIn,
+            });
+            return { url, success: true };
+          }
+
+          return {
+            url,
+            success: false,
+            reason: "Invalid response structure",
+          };
+        } catch (err) {
+          console.warn(
+            `[refreshCachesAfterPost] Error refreshing cache for ${url}:`,
+            err
+          );
+          return {
+            url,
+            success: false,
+            reason: err instanceof Error ? err.message : String(err),
+          };
+        }
+      })
+    );
+
+    // Log summary of refresh operation
+    const successful = results.filter(
+      (r) => r.status === "fulfilled" && r.value.success
+    ).length;
+
+    const failed = results.filter(
+      (r) =>
+        r.status === "rejected" ||
+        (r.status === "fulfilled" && !r.value.success)
+    ).length;
+  } catch (error) {
+    Toast.error(
+      `[refreshCachesAfterPost] Failed to refresh caches: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
+/**
+ * Refreshes ALL application caches after login
+ * @param userId - The user ID for API requests
+ */
+export async function refreshAllCachesAfterLogin(
+  userId: string
+): Promise<void> {
   const isConnected = await isOnline();
   if (!isConnected) return; // Don't attempt refresh if offline
 
   try {
-    // Fetch fresh jobs data
-    const jobsResponse = await axios
-      .get(
-        `${BASE_API_URL}/getjobs.php?userid=${userId}`,
-        { timeout: 10000 } // Add timeout to prevent hanging requests
+    // Define ALL endpoints to refresh after login
+    const endpoints = [
+      {
+        url: `${BASE_API_URL}/getjobs.php?userid=${userId}`,
+        cacheKey: `jobsCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/costs.php?userid=${userId}`,
+        cacheKey: `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`,
+        options: { timeout: 10000, expiresIn: 0 },
+      },
+      {
+        url: `${BASE_API_URL}/get-files.php?userid=${userId}`,
+        cacheKey: `filesCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/contractors.php?userid=${userId}`,
+        cacheKey: `${CACHE_CONFIG.CACHE_KEYS.CONTRACTORS}_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/jobtypes.php?userid=${userId}`,
+        cacheKey: `${CACHE_CONFIG.CACHE_KEYS.JOB_TYPES}_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/fileuploadcats.php?userid=${userId}`,
+        cacheKey: `categoryCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+      {
+        url: `${BASE_API_URL}/searchproperty.php?userid=${userId}`,
+        cacheKey: `propertiesCache_${userId}`,
+        options: { timeout: 10000 },
+      },
+    ];
+
+    // Use Promise.allSettled to handle all requests in parallel and continue even if some fail
+    const results = await Promise.allSettled(
+      endpoints.map(async ({ url, cacheKey, options }) => {
+        try {
+          const response = await axios.get(url, {
+            timeout: options.timeout,
+            headers: {
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
+          });
+
+          if (response.data?.status === 1 && response.data.payload) {
+            await setCache(cacheKey, response.data.payload, {
+              expiresIn: options.expiresIn,
+            });
+            return { url, success: true };
+          }
+          return { url, success: false, reason: "Invalid response structure" };
+        } catch (err) {
+          return {
+            url,
+            success: false,
+            reason: err instanceof Error ? err.message : String(err),
+          };
+        }
+      })
+    );
+
+    const failedEndpoints = results
+      .filter(
+        (result) =>
+          result.status === "rejected" ||
+          (result.status === "fulfilled" && !result.value.success)
       )
-      .catch((error) => {
-        console.warn("Failed to fetch jobs for refreshCachesAfterPost:", error);
-        return { data: null };
-      });
+      .map((result) =>
+        result.status === "rejected"
+          ? { url: "unknown", reason: result.reason }
+          : result.value
+      );
 
-    if (jobsResponse.data?.status === 1 && jobsResponse.data.payload) {
-      const jobsData = jobsResponse.data.payload;
-      const jobsCacheKey = `jobsCache_${userId}`;
-      await setCache(jobsCacheKey, jobsData);
-    }
-
-    // Fetch fresh costs data
-    const costsResponse = await axios
-      .get(
-        `${BASE_API_URL}/costs.php?userid=${userId}`,
-        { timeout: 10000 } // Add timeout to prevent hanging requests
-      )
-      .catch((error) => {
-        console.warn(
-          "Failed to fetch costs for refreshCachesAfterPost:",
-          error
-        );
-        return { data: null };
-      });
-
-    if (costsResponse.data?.status === 1 && costsResponse.data.payload) {
-      const costsData = costsResponse.data.payload;
-      const costsCacheKey = `${CACHE_CONFIG.CACHE_KEYS.COST}_${userId}`;
-      await setCache(costsCacheKey, costsData, { expiresIn: 0 }); // Costs cache never expires
+    if (failedEndpoints.length > 0) {
+      console.warn(
+        `Failed to refresh ${failedEndpoints.length} endpoints after login:`,
+        failedEndpoints
+      );
     }
   } catch (error) {
-    console.error("refreshCachesAfterPost error:", error);
     Toast.error(
-      `[refreshCachesAfterPost] Failed to refresh caches: ${
+      `[refreshAllCachesAfterLogin] Failed to refresh caches: ${
         error instanceof Error ? error.message : String(error)
       }`
     );

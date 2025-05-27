@@ -12,6 +12,7 @@ import { BASE_API_URL, SYNC_EVENTS } from "../Constants/env";
 import { deleteCost, getAllCosts } from "./costService";
 import { deleteJob, getAllJobs } from "./jobService";
 import { deleteUpload, getAllUploads } from "./uploadService";
+import { refreshCachesAfterPost } from "./cacheService";
 
 // Define the background task name
 const BACKGROUND_SYNC_TASK = "background-sync";
@@ -62,9 +63,6 @@ export class SyncManager {
 
   public async initialize() {
     if (isExpoGo) {
-      console.log(
-        "Running in Expo Go environment with limited notification support"
-      );
       if (Platform.OS === "android") {
         console.warn(
           "Notifications functionality removed from Expo Go on Android since SDK 53. Use a development build for full functionality."
@@ -117,7 +115,6 @@ export class SyncManager {
           return { success: false };
         }
       });
-      console.log("Background sync task defined successfully");
     } catch (error) {
       console.warn("Failed to define background sync task:", error);
     }
@@ -126,9 +123,6 @@ export class SyncManager {
   private async requestNotificationPermissions(): Promise<boolean> {
     try {
       if (!isNotificationsSupported) {
-        console.log(
-          "Skipping notification permissions in unsupported environment"
-        );
         return false;
       }
 
@@ -162,13 +156,10 @@ export class SyncManager {
       );
 
       if (!isRegistered) {
-        console.log("Background sync task is not registered yet.");
         await BackgroundTask.registerTaskAsync(BACKGROUND_SYNC_TASK, {
           minimumInterval: 60,
         });
-        console.log("Background sync task registered successfully");
       } else {
-        console.log("Background sync task is already registered.");
       }
     } catch (error) {
       console.error("Failed to register background task:", error);
@@ -301,7 +292,7 @@ export class SyncManager {
           break;
       }
     } catch (error) {
-      console.error("Failed to update sync notification:", error);
+      throw error;
     }
   }
 
@@ -718,6 +709,18 @@ export class SyncManager {
 
       if (totalSynced > 0) {
         Toast.success(summary);
+
+        // IMPORTANT: Refresh caches after successful sync to ensure fresh data
+        try {
+          await refreshCachesAfterPost(userId);
+          console.log("[SyncManager] Refreshed caches after successful sync");
+        } catch (refreshErr) {
+          console.error(
+            "[SyncManager] Error refreshing caches after sync:",
+            refreshErr
+          );
+        }
+
         DeviceEventEmitter.emit(SYNC_EVENTS.PENDING_DATA_CHANGED, {
           jobsSynced: jobSynced,
           costsSynced: costSynced,
@@ -748,11 +751,9 @@ export class SyncManager {
   }
 
   public async backgroundSync() {
-    console.log("Starting background sync...");
     try {
       const net = await NetInfo.fetch();
       if (!net.isConnected) {
-        console.log("No network connection for background sync");
         return;
       }
       const [jobs, costs, uploads] = await Promise.all([
@@ -764,7 +765,22 @@ export class SyncManager {
         jobs.length > 0 || costs.length > 0 || uploads.length > 0;
       if (hasPendingData) {
         await this.syncAll(true);
-        console.log("Background sync completed");
+
+        // Additional cache refresh after background sync
+        try {
+          const userStr = await AsyncStorage.getItem("userData");
+          const userData = userStr ? JSON.parse(userStr) : null;
+          const userId = userData?.payload?.userid || userData?.userid;
+          if (userId) {
+            await refreshCachesAfterPost(userId);
+            console.log("[SyncManager] Refreshed caches after background sync");
+          }
+        } catch (refreshErr) {
+          console.error(
+            "[SyncManager] Error refreshing caches after background sync:",
+            refreshErr
+          );
+        }
       } else {
         console.log("No pending data for background sync");
       }

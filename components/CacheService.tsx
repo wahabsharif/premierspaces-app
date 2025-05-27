@@ -18,6 +18,7 @@ import {
   getAllCache,
   getCache,
   isOnline,
+  refreshCachesAfterPost,
   setCache,
 } from "../services/cacheService";
 import { store } from "../store";
@@ -214,7 +215,18 @@ const CacheService: React.FC<CacheServiceProps> = ({
         }
 
         await cleanupUserCache(userId);
-        await prefetchUserData(userId, force);
+
+        // If force is true, directly use refreshCachesAfterPost for more reliable results
+        if (force) {
+          try {
+            await refreshCachesAfterPost(userId);
+          } catch (refreshErr) {
+            // Fall back to regular prefetch if refresh fails
+            await prefetchUserData(userId, force);
+          }
+        } else {
+          await prefetchUserData(userId, force);
+        }
       } catch (error) {
         console.error(
           `[prefetchAll] (#${callId}) Error in prefetchAll:`,
@@ -558,7 +570,6 @@ const CacheService: React.FC<CacheServiceProps> = ({
         } catch (fetchError) {
           retryCount++;
           if (retryCount <= maxRetries) {
-            console.log(`Retrying jobs fetch (${retryCount}/${maxRetries})...`);
             await new Promise((r) => setTimeout(r, 1000 * retryCount)); // Exponential backoff
           } else {
             throw fetchError; // Retries exhausted, propagate error
@@ -592,7 +603,6 @@ const CacheService: React.FC<CacheServiceProps> = ({
       // Try to use cache as fallback
       const cacheEntry = await getCache(key);
       if (cacheEntry?.payload) {
-        console.log("Using cached jobs data as fallback");
         await store.dispatch(fetchJobsThunk({ userId, useCache: true }));
         lastFetchTimes.current.jobs = Date.now(); // Update to prevent immediate retry
       } else {

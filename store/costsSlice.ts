@@ -384,7 +384,7 @@ export const createCost = createAsyncThunk<
         throw new Error(errorMsg);
       }
 
-      // After successful API call, refresh both caches from the server
+      // After successful API call, refresh caches with the enhanced function
       await refreshCachesAfterPost(userId);
 
       // Reset cost state for this job
