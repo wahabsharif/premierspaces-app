@@ -106,22 +106,61 @@ export async function createLocalCost(cost: Costs): Promise<Costs> {
 }
 
 export async function getCostById(id: string): Promise<Costs | null> {
-  const db = await dbPromise;
-  const stmt = await db.prepareAsync(SQL.SELECT_BY_ID);
-  try {
-    const result = await stmt.executeAsync([id]);
-    // === Cast the row to CostRow ===
-    const row = (await result.getFirstAsync()) as CostRow | undefined;
-    if (!row) return null;
+  const results = await filterCosts({ id });
+  return results.length > 0 ? results[0] : null;
+}
 
-    return {
+export async function filterCosts(filters: {
+  id?: string;
+  job_id?: string;
+  common_id?: string;
+}): Promise<Costs[]> {
+  const db = await dbPromise;
+
+  const conditions: string[] = [];
+  const params: string[] = [];
+
+  if (filters.id) {
+    conditions.push("id = ?");
+    params.push(filters.id);
+  }
+
+  if (filters.job_id) {
+    conditions.push("job_id = ?");
+    params.push(filters.job_id);
+  }
+
+  if (filters.common_id) {
+    conditions.push("common_id = ?");
+    params.push(filters.common_id);
+  }
+
+  // If no filters provided, return empty array
+  if (conditions.length === 0) {
+    return [];
+  }
+
+  const query = `SELECT * FROM costs WHERE ${conditions.join(" AND ")}`;
+  const stmt = await db.prepareAsync(query);
+
+  try {
+    const result = await stmt.executeAsync(params);
+    const rows = (await result.getAllAsync()) as CostRow[];
+
+    return rows.map((row) => ({
       id: row.id,
       job_id: row.job_id,
       common_id: row.common_id,
       contractor_id: row.contractor_id,
-      amount: row.amount,
-      material_cost: row.material_cost,
-    };
+      amount:
+        typeof row.amount === "string" ? parseFloat(row.amount) : row.amount,
+      material_cost:
+        row.material_cost === null
+          ? null
+          : typeof row.material_cost === "string"
+          ? parseInt(row.material_cost)
+          : row.material_cost,
+    }));
   } finally {
     await stmt.finalizeAsync();
   }
