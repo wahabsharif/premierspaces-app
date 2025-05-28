@@ -126,7 +126,7 @@ export async function filterCosts(filters: {
   }
 
   if (filters.job_id) {
-    conditions.push("job_id = ?");
+    conditions.push("(job_id = ? OR job_id IS NULL)");
     params.push(filters.job_id);
   }
 

@@ -228,7 +228,9 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
         dispatch(resetCostsForJob(jobId));
         navigation.navigate("JobDetailScreen", {
           id: jobId,
+          common_id: common_id,
           refresh: Date.now(),
+          materialCost: formattedMaterialCost,
         });
       }
     } catch (e: any) {

@@ -208,10 +208,20 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       // Force a fresh API fetch when refresh is true
       dispatch(fetchJobs({ userId, force: true }));
 
+      // Explicitly fetch fresh costs data with forceRefresh flag
+      dispatch(
+        fetchCosts({
+          userId,
+          jobId,
+          common_id: routeCommonId,
+          forceRefresh: true,
+        })
+      );
+
       setForceReload(true);
       setRefreshTimestamp(Date.now());
     }
-  }, [refresh, jobId, dispatch, userId]);
+  }, [refresh, jobId, dispatch, userId, routeCommonId]);
 
   // Load local storage - once only
   const loadLocalData = useCallback(async () => {
@@ -446,28 +456,23 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
       ]);
 
       // Use common_id from route params if available
-      if (routeCommonId) {
-        await dispatch(
-          fetchCosts({
-            userId,
-            jobId,
-            common_id: routeCommonId,
-          })
-        );
-      } else {
-        await dispatch(
-          fetchCosts({
-            userId,
-            jobId,
-          })
-        );
-      }
+      // Add forceRefresh flag to ensure fresh data
+      await dispatch(
+        fetchCosts({
+          userId,
+          jobId,
+          common_id: routeCommonId,
+          forceRefresh: true,
+        })
+      );
 
       // Refresh offline file counts
       offlineCountsFetchedRef.current = false;
       await fetchOfflineFileCounts();
     } catch (err) {
-      Toast.error(" Error refreshing:");
+      Toast.error(
+        `Error refreshing: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       if (isMounted.current) {
         setRefreshing(false);
