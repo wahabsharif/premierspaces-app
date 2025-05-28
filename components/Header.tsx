@@ -16,7 +16,7 @@ import {
 import styles from "../Constants/styles";
 import { fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
-
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 type HeaderNavigationProp = StackNavigationProp<
   RootStackParamList,
   "SearchPropertyScreen"
@@ -135,7 +135,12 @@ const Header = () => {
             }}
           >
             {dropdownVisible ? (
-              <FontAwesome5 name="times" size={fontSize.large} color="black" />
+              // <FontAwesome5 name="times"  />
+              <FontAwesome6
+                name="times-circle"
+                size={fontSize.small}
+                color="black"
+              />
             ) : (
               <Octicons
                 name="three-bars"

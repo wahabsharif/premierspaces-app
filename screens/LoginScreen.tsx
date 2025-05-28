@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  SafeAreaView,
 } from "react-native";
 import { Button, Dialog, Portal } from "react-native-paper";
 import { useDispatch, useSelector } from "react-redux";
@@ -52,7 +53,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }: LoginScreenProps) => {
   };
 
   return (
-    <View style={styles.screenContainer}>
+    <SafeAreaView style={styles.screenContainer}>
       <View style={[styles.container, { justifyContent: "center" }]}>
         <View
           style={{
@@ -148,7 +149,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }: LoginScreenProps) => {
           </Dialog>
         </Portal>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
