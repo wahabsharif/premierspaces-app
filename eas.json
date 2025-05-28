@@ -25,7 +25,8 @@
       "channel": "development"
     },
     "preview": {
-      "environment": "preview"
+      "environment": "preview",
+      "channel": "preview"
     }
   }
 }
