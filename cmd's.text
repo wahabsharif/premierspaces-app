@@ -2,7 +2,7 @@ yarn expo prebuild
 
 eas update:configure
 
-eas update --branch production
+eas update --branch production --platform android
 
 eas update
 
