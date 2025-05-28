@@ -109,6 +109,9 @@ const SQL = {
   UPDATE: `UPDATE jobs SET ${COLUMNS.filter((col) => col !== "id")
     .map((col) => `${col} = ?`)
     .join(", ")} WHERE id = ?;`,
+  UPDATE_BY_COMMON_ID: `UPDATE jobs SET ${COLUMNS.filter((col) => col !== "id")
+    .map((col) => `${col} = ?`)
+    .join(", ")} WHERE common_id = ?;`,
   DELETE: `DELETE FROM jobs WHERE id = ?;`,
 };
 
@@ -187,14 +190,27 @@ export async function getAllJobs(): Promise<Job[]> {
 
 export async function updateJob(job: Job): Promise<number> {
   const db = await dbPromise;
-  const statement = await db.prepareAsync(SQL.UPDATE);
+
+  // Determine if we're updating by id or common_id
+  const updateById = job.id && job.id.trim() !== "";
+  const updateByCommonId = job.common_id && job.common_id.trim() !== "";
+
+  if (!updateById && !updateByCommonId) {
+    throw new Error("Either id or common_id must be provided for update");
+  }
+
+  const sql = updateById ? SQL.UPDATE : SQL.UPDATE_BY_COMMON_ID;
+  const statement = await db.prepareAsync(sql);
+
   try {
     const params = COLUMNS.filter((col) => col !== "id").map(
       (col) => (job as any)[col]
     );
-    params.push(job.id);
-    const result = await statement.executeAsync(params);
 
+    // Push the identifier (either id or common_id) as the last parameter
+    params.push(updateById ? job.id : job.common_id);
+
+    const result = await statement.executeAsync(params);
     return result.changes;
   } finally {
     await statement.finalizeAsync();
