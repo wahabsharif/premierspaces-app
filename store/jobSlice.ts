@@ -348,15 +348,31 @@ export const updateJob = createAsyncThunk<
         : "0",
       common_id,
     };
+
+    // Check network connectivity
     const netInfo = await NetInfo.fetch();
-    if (netInfo.isConnected) {
+    const isOnline = netInfo.isConnected;
+
+    // If offline, immediately use updateOfflineJob without trying API
+    if (!isOnline) {
+      await updateOfflineJob(formattedJobData);
+      return {
+        message: "Job updated offline and will be synced when online",
+        isOffline: true,
+      };
+    }
+
+    // If online, try the API call
+    try {
       const apiPayload = {
         ...formattedJobData,
         job_id: formattedJobData.id,
       };
       const postData = { userid: userId, payload: apiPayload };
       const response = await axios.put(`${BASE_API_URL}/job.php`, postData);
+
       if (response.data.status !== 1) {
+        // API call failed with error status, save locally
         await updateOfflineJob(formattedJobData);
         return {
           message:
@@ -370,13 +386,18 @@ export const updateJob = createAsyncThunk<
       // Refresh all relevant caches after successful job update
       await refreshCachesAfterPost(userId);
 
+      // Also update in local database for consistency
       await updateOfflineJob(formattedJobData);
       return response.data;
-    } else {
+    } catch (apiError) {
+      // Network/API error occurred, fall back to offline storage
+      console.error("API error updating job:", apiError);
       await updateOfflineJob(formattedJobData);
       return {
-        message: "Job updated offline and will be synced when online",
+        message:
+          "API error, job updated offline and will be synced when online",
         isOffline: true,
+        apiError: true,
       };
     }
   } catch (err: any) {
