@@ -124,28 +124,22 @@ export const fetchJobs = createAsyncThunk<
   "jobs/fetch",
   async (
     { userId, propertyId, force = false, useCache = false },
-    { getState, dispatch }
+    { dispatch }
   ) => {
+    // First, check network connectivity status
+    const net = await NetInfo.fetch();
+    const isOnline = net.isConnected;
+
+    // Define cache key for later use if needed
     const cacheKey = `jobsCache_${userId}${
       propertyId ? "_prop_" + propertyId : ""
     }`;
-    const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}${
-      propertyId ? "&property_id=" + propertyId : ""
-    }`;
 
-    // 1) Always grab local (offline) jobs first
+    // Always get pending count from offline jobs for the UI indicator
     let offlineJobs: Job[] = [];
     try {
       offlineJobs = await getAllJobs();
       dispatch(updatePendingCount(offlineJobs.length));
-
-      // Filter offline jobs by property if needed
-      if (propertyId) {
-        const propIdStr = String(propertyId);
-        offlineJobs = offlineJobs.filter(
-          (j) => String(j.property_id) === propIdStr
-        );
-      }
     } catch (err) {
       Toast.error(
         `Error fetching offline jobs: ${
@@ -154,15 +148,17 @@ export const fetchJobs = createAsyncThunk<
       );
     }
 
-    // Check network connectivity first
-    const net = await NetInfo.fetch();
-    const isOnline = net.isConnected;
-
-    // If online and not explicitly using cache, prioritize API data
+    // ONLINE MODE: Prioritize API data, ignore cache and jobService
     if (isOnline && !useCache) {
       try {
-        // Add cache-busting parameter when force=true to bypass HTTP caching
+        const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}${
+          propertyId ? "&property_id=" + propertyId : ""
+        }`;
+
+        // Add cache-busting parameter when force=true
         const cacheBuster = force ? `&_cb=${Date.now()}` : "";
+
+        // Make API request
         const resp = await axios.get(`${ENDPOINT}${cacheBuster}`, {
           timeout: 15000,
           headers: force
@@ -175,53 +171,37 @@ export const fetchJobs = createAsyncThunk<
 
         if (resp.data.status === 1) {
           const serverJobs = resp.data.payload as Job[];
-          const merged = [...serverJobs];
 
-          // Add any offline jobs that aren't in the server response
-          offlineJobs.forEach((o) => {
-            if (!merged.some((j) => j.id === o.id)) {
-              merged.push(o);
-            }
-          });
-
+          // When online, we only return the server data
           // Sort by date_created desc
-          merged.sort(
+          serverJobs.sort(
             (a, b) =>
               new Date(b.date_created || Date.now()).getTime() -
               new Date(a.date_created || Date.now()).getTime()
           );
 
-          return merged;
+          return serverJobs;
         } else {
           throw new Error("Invalid API response");
         }
       } catch (err: any) {
-        // API request failed, fall back to cache
-        Toast.info("Using cached data - API request failed");
-
-        // Only use cache as fallback, not as primary source when online
-        const entry = await getCache(cacheKey);
-        const cached: Job[] = (entry?.payload?.payload as Job[]) || [];
-
-        const fallback = [...cached];
-        offlineJobs.forEach((o) => {
-          if (!fallback.some((j) => j.id === o.id)) {
-            fallback.push(o);
-          }
-        });
-
-        fallback.sort(
-          (a, b) =>
-            new Date(b.date_created || Date.now()).getTime() -
-            new Date(a.date_created || Date.now()).getTime()
-        );
-
-        return fallback;
+        Toast.error(`API request failed: ${err.message}`);
+        throw err; // Re-throw the error to be caught by the rejected action
       }
     }
 
-    // 2) If we're offline or useCache flag is set, combine SQLite jobs with cached server jobs
-    if (!isOnline || useCache) {
+    // OFFLINE MODE: Combine data from cache and job service
+    else {
+      // Filter offline jobs by property if needed
+      let filteredOfflineJobs = [...offlineJobs];
+      if (propertyId) {
+        const propIdStr = String(propertyId);
+        filteredOfflineJobs = filteredOfflineJobs.filter((job) => {
+          const jobPropId = String(job.property_id);
+          return jobPropId === propIdStr;
+        });
+      }
+
       // Get cached server jobs
       let cachedServerJobs: Job[] = [];
       try {
@@ -235,19 +215,15 @@ export const fetchJobs = createAsyncThunk<
             const generalEntry = await getCache(generalCacheKey);
             if (generalEntry?.payload?.payload) {
               const allCachedJobs = generalEntry.payload.payload as Job[];
+
               // Filter by property ID
-              cachedServerJobs = allCachedJobs.filter(
-                (j) => String(j.property_id) === String(propertyId)
-              );
+              const propIdStr = String(propertyId);
+              cachedServerJobs = allCachedJobs.filter((job) => {
+                const jobPropId = String(job.property_id);
+                return jobPropId === propIdStr;
+              });
             }
           }
-        }
-
-        // Apply property filter if not already in the cache key
-        if (propertyId && !cacheKey.includes("_prop_")) {
-          cachedServerJobs = cachedServerJobs.filter(
-            (j) => String(j.property_id) === String(propertyId)
-          );
         }
       } catch (err) {
         Toast.error(
@@ -259,7 +235,7 @@ export const fetchJobs = createAsyncThunk<
 
       // Combine offline and cached server jobs
       const combinedJobs = [...cachedServerJobs];
-      offlineJobs.forEach((o) => {
+      filteredOfflineJobs.forEach((o) => {
         // Don't add if already in the list (by ID)
         if (!combinedJobs.some((j) => j.id === o.id)) {
           combinedJobs.push(o);
@@ -275,9 +251,6 @@ export const fetchJobs = createAsyncThunk<
 
       return combinedJobs;
     }
-
-    // This should never happen (either offline or online case should be handled)
-    return [];
   }
 );
 
@@ -365,7 +338,7 @@ export const updateJob = createAsyncThunk<
           isOffline: true,
         };
       } catch (offlineError) {
-        console.error("Error saving offline:", offlineError);
+        console.error(`[updateJob] Error saving offline:`, offlineError);
         return rejectWithValue(
           `Failed to save offline: ${
             offlineError instanceof Error

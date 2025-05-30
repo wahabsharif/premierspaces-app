@@ -21,7 +21,6 @@ import { AppDispatch } from "../store";
 
 import {
   fetchJobs,
-  fetchJobTypes,
   selectJobsList,
   selectJobTypes,
   syncPendingJobs,
@@ -40,22 +39,20 @@ const JobItem = memo(
     onPress: (item: Job) => void;
     onEdit: (item: Job) => void;
   }) => {
-    const tasks = useMemo(
-      () =>
-        [
-          item.task1,
-          item.task2,
-          item.task3,
-          item.task4,
-          item.task5,
-          item.task6,
-          item.task7,
-          item.task8,
-          item.task9,
-          item.task10,
-        ].filter((t) => t && t.trim()),
-      [item]
-    );
+    const tasks = useMemo(() => {
+      return [
+        item.task1,
+        item.task2,
+        item.task3,
+        item.task4,
+        item.task5,
+        item.task6,
+        item.task7,
+        item.task8,
+        item.task9,
+        item.task10,
+      ].filter((t) => t && t.trim());
+    }, [item]);
 
     const statusNum = Number(item.status);
     const statusBackground =
@@ -178,7 +175,7 @@ const JobsScreen = ({
   const [initialLoad, setInitialLoad] = useState(true);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
 
   const jobTypeMap = useMemo(() => {
     const map = jobTypes.reduce(
@@ -191,55 +188,61 @@ const JobsScreen = ({
     return map;
   }, [jobTypes]);
 
+  // Add a ref to track if initial fetch has happened
+  const initialFetchDone = React.useRef(false);
+
+  // Modified jobs useMemo with more debugging
   const jobs = useMemo(() => {
-    if (!propertyData || !allJobs.length) {
+    if (!propertyData) {
+      return [];
+    }
+
+    if (!allJobs || allJobs.length === 0) {
       return [];
     }
 
     // Normalize property ID to string for consistent comparison
     const propIdStr = String(propertyData.id);
 
-    const filtered = allJobs.filter(
-      (job) => String(job.property_id) === propIdStr
-    );
+    const filtered = allJobs.filter((job) => {
+      const jobPropId = String(job.property_id);
+      const matches = jobPropId === propIdStr;
+      if (matches) return matches;
+    });
 
     return filtered;
   }, [allJobs, propertyData]);
 
-  // Load stored property & user
+  // Add a useEffect to force an initial fetch when both userData and propertyData are available
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const [prop, user] = await Promise.all([
-        AsyncStorage.getItem("selectedProperty"),
-        AsyncStorage.getItem("userData"),
-      ]);
-      if (!mounted) return;
-      if (prop) {
-        const parsed = JSON.parse(prop);
-        setPropertyData(parsed);
-      }
-
-      if (user) {
-        const parsed = JSON.parse(user);
-        const uid = parsed.payload?.userid ?? parsed.userid;
-        setUserData(parsed);
-      }
-
-      setInitialLoad(false);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // Fetch job types once userData is ready
-  useEffect(() => {
-    if (userData) {
+    if (userData && propertyData && !initialFetchDone.current && !loading) {
       const uid = userData.payload?.userid ?? userData.userid;
-      dispatch(fetchJobTypes({ userId: uid }) as any);
+      initialFetchDone.current = true;
+
+      // Force a fetch with force=true to bypass cache
+      // Define interfaces for typed responses
+      interface FetchJobsResult {
+        payload: JobPayload[];
+        type: string;
+        meta?: any;
+      }
+
+      interface JobPayload {
+        id: string;
+        job_num: string;
+        property_id: string | number;
+      }
+
+      dispatch(
+        fetchJobs({
+          userId: uid,
+          propertyId: propertyData.id,
+          force: true,
+          useCache: false,
+        }) as any
+      );
     }
-  }, [userData, dispatch]);
+  }, [userData, propertyData, dispatch, loading]);
 
   // Handle skeleton loader visibility with delay to prevent flickering
   useEffect(() => {
@@ -285,13 +288,27 @@ const JobsScreen = ({
       const needsRefresh = route.params?.refresh === true;
       const MIN_REFRESH_INTERVAL = 2000; // 2 seconds
       const now = Date.now();
-      const timeSinceLastRefresh = now - lastRefreshTime;
-      if (timeSinceLastRefresh < MIN_REFRESH_INTERVAL && !needsRefresh) {
+      const timeSinceLastRefresh = Math.max(0, now - lastRefreshTime);
+      // Modified condition to force refresh if jobs is empty but we should have jobs
+      const shouldForceRefresh = jobs.length === 0 && allJobs.length > 0;
+
+      if (
+        timeSinceLastRefresh < MIN_REFRESH_INTERVAL &&
+        !needsRefresh &&
+        !shouldForceRefresh
+      ) {
         return;
       }
+
       const CACHE_TIME = 5 * 60 * 1000;
       const isCacheValid = lastFetched && Date.now() - lastFetched < CACHE_TIME;
-      if (!needsRefresh && isCacheValid) {
+
+      if (
+        !needsRefresh &&
+        isCacheValid &&
+        jobs.length > 0 &&
+        !shouldForceRefresh
+      ) {
         return;
       }
 
@@ -303,22 +320,56 @@ const JobsScreen = ({
       // Get network status
       NetInfo.fetch().then((state) => {
         const isConnected = !!state.isConnected;
+        interface FetchJobsResult {
+          payload: JobPayload[];
+          type: string;
+          meta?: any;
+        }
+
+        interface JobPayload {
+          id: string;
+          property_id: string | number;
+          job_num?: string;
+          common_id?: string;
+        }
+
+        interface FetchJobsParams {
+          userId: string;
+          propertyId: string;
+          force: boolean;
+          useCache: boolean;
+        }
+
         dispatch(
           fetchJobs({
             userId: uid,
             propertyId: propertyData.id,
-            force: isConnected || needsRefresh,
+            force: isConnected || needsRefresh || shouldForceRefresh,
             useCache: !isConnected,
-          }) as any
-        ).finally(() => {
-          setRefreshing(false);
+          } as FetchJobsParams) as any
+        )
+          .then((result: FetchJobsResult) => {
+            if (result.payload) {
+              // Debug the returned job propertyIds to verify correct data
+              const returnedPropertyIds = result.payload.map((j: JobPayload) =>
+                String(j.property_id)
+              );
+              // Check if any jobs match our property
+              const matchingJobs = result.payload.filter(
+                (j: JobPayload) =>
+                  String(j.property_id) === String(propertyData.id)
+              );
+            }
+          })
+          .finally(() => {
+            setRefreshing(false);
 
-          if (needsRefresh && navigation.setParams) {
-            setTimeout(() => {
-              navigation.setParams({ refresh: false });
-            }, 100);
-          }
-        });
+            if (needsRefresh && navigation.setParams) {
+              setTimeout(() => {
+                navigation.setParams({ refresh: false });
+              }, 100);
+            }
+          });
       });
     }, [
       userData,
@@ -327,6 +378,8 @@ const JobsScreen = ({
       route.params?.refresh,
       lastRefreshTime,
       navigation,
+      jobs.length,
+      allJobs.length,
     ])
   );
 
@@ -416,6 +469,131 @@ const JobsScreen = ({
   // Show content when NOT initial loading AND we have property data AND we're not showing skeletons
   const shouldShowContent = !initialLoad && propertyData && !showSkeletons;
 
+  // Enhanced useEffect for loading stored property & user
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        // First, let's check if we have property data directly
+        const rawProp = await AsyncStorage.getItem("selectedProperty");
+        // Try to fetch user data and property data in parallel
+        const [prop, user] = await Promise.all([
+          rawProp || AsyncStorage.getItem("selectedProperty"),
+          AsyncStorage.getItem("userData"),
+        ]);
+
+        if (!mounted) return;
+
+        // Handle property data with better error checking
+        if (prop) {
+          try {
+            const parsed = JSON.parse(prop);
+            if (!parsed.id || !parsed.address) {
+              console.error(
+                "[JobsScreen:useEffect] Property data invalid, missing id or address:",
+                parsed
+              );
+              // Try to recover by checking if we can find the data elsewhere
+              const selectedPropId = await AsyncStorage.getItem(
+                "selectedPropertyId"
+              );
+              if (selectedPropId) {
+                // If we have at least an ID, create a minimal valid property object
+                setPropertyData({
+                  id: selectedPropId,
+                  address: "Property ID: " + selectedPropId,
+                  company: "Unknown company",
+                });
+              }
+            } else {
+              setPropertyData(parsed);
+            }
+          } catch (parseError) {
+            console.error(
+              "[JobsScreen:useEffect] Error parsing property data:",
+              parseError,
+              "Raw data:",
+              prop
+            );
+          }
+        } else {
+          // Try alternate property storage locations as a fallback
+          try {
+            const propId = await AsyncStorage.getItem("selectedPropertyId");
+            if (propId) {
+              setPropertyData({
+                id: propId,
+                address: "Property ID: " + propId,
+                company: "Unknown company",
+              });
+            } else {
+              // Check if there's a default property we could use
+              const allProps = await AsyncStorage.getItem("allProperties");
+              if (allProps) {
+                const properties = JSON.parse(allProps);
+                if (properties && properties.length > 0) {
+                  setPropertyData(properties[0]);
+                }
+              }
+            }
+          } catch (fallbackError) {
+            console.error(
+              "[JobsScreen:useEffect] Fallback strategy failed:",
+              fallbackError
+            );
+          }
+        }
+
+        // Handle user data
+        if (user) {
+          try {
+            const parsed = JSON.parse(user);
+            const uid = parsed.payload?.userid ?? parsed.userid;
+            setUserData(parsed);
+          } catch (parseError) {
+            console.error(
+              "[JobsScreen:useEffect] Error parsing user data:",
+              parseError
+            );
+          }
+        }
+
+        setInitialLoad(false);
+      } catch (err) {
+        console.error("[JobsScreen:useEffect] Error loading stored data:", err);
+        if (mounted) setInitialLoad(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Add a property data debug button if needed
+  const debugPropertyData = async () => {
+    try {
+      // Check all possible storage locations
+      const checks = [
+        "selectedProperty",
+        "selectedPropertyId",
+        "allProperties",
+      ];
+
+      for (const key of checks) {
+        const value = await AsyncStorage.getItem(key);
+        if (value) {
+          try {
+            const parsed = JSON.parse(value);
+          } catch (e) {}
+        }
+      }
+    } catch (err) {
+      console.error("[JobsScreen:debugPropertyData] Error:", err);
+    }
+  };
+
   return (
     <View style={styles.screenContainer}>
       <Header />
@@ -456,9 +634,17 @@ const JobsScreen = ({
 
             {error && <Text style={styles.errorText}>{error}</Text>}
 
+            {jobs.length === 0 && !error && (
+              <Text style={{ textAlign: "center" }}>
+                No jobs found for this property.
+              </Text>
+            )}
+
             <FlatList
               data={jobs}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) =>
+                item.id || item.common_id || String(Math.random())
+              }
               renderItem={({ item }) => (
                 <JobItem
                   item={item}
