@@ -171,11 +171,17 @@ const JobsScreen = ({
   } | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showSkeletons, setShowSkeletons] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
+  // Start with showing skeletons by default for better UX
+  const [showSkeletons, setShowSkeletons] = useState(true);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
+  // We've removed initialLoad state as it's redundant - we'll use showSkeletons instead
+
+  // Create a reference to track data loading state
+  const dataLoadedRef = React.useRef(false);
+  // Initial fetch reference
+  const initialFetchDone = React.useRef(false);
 
   const jobTypeMap = useMemo(() => {
     const map = jobTypes.reduce(
@@ -187,9 +193,6 @@ const JobsScreen = ({
     );
     return map;
   }, [jobTypes]);
-
-  // Add a ref to track if initial fetch has happened
-  const initialFetchDone = React.useRef(false);
 
   // Modified jobs useMemo with more debugging
   const jobs = useMemo(() => {
@@ -206,270 +209,13 @@ const JobsScreen = ({
 
     const filtered = allJobs.filter((job) => {
       const jobPropId = String(job.property_id);
-      const matches = jobPropId === propIdStr;
-      if (matches) return matches;
+      return jobPropId === propIdStr;
     });
 
     return filtered;
   }, [allJobs, propertyData]);
 
-  // Add a useEffect to force an initial fetch when both userData and propertyData are available
-  useEffect(() => {
-    if (userData && propertyData && !initialFetchDone.current && !loading) {
-      const uid = userData.payload?.userid ?? userData.userid;
-      initialFetchDone.current = true;
-
-      // Force a fetch with force=true to bypass cache
-      // Define interfaces for typed responses
-      interface FetchJobsResult {
-        payload: JobPayload[];
-        type: string;
-        meta?: any;
-      }
-
-      interface JobPayload {
-        id: string;
-        job_num: string;
-        property_id: string | number;
-      }
-
-      dispatch(
-        fetchJobs({
-          userId: uid,
-          propertyId: propertyData.id,
-          force: true,
-          useCache: false,
-        }) as any
-      );
-    }
-  }, [userData, propertyData, dispatch, loading]);
-
-  // Handle skeleton loader visibility with delay to prevent flickering
-  useEffect(() => {
-    let skeletonTimer: NodeJS.Timeout;
-
-    // Show skeletons when loading, unless it's a manual pull-to-refresh
-    if ((loading && !isManualRefreshing) || initialLoad) {
-      // Show skeletons after a small delay to avoid flickering
-      skeletonTimer = setTimeout(() => {
-        setShowSkeletons(true);
-      }, 200); // Reduced delay to make skeleton appear faster
-    } else {
-      setShowSkeletons(false);
-    }
-
-    return () => {
-      clearTimeout(skeletonTimer);
-    };
-  }, [loading, initialLoad, isManualRefreshing]);
-
-  // Check for network connectivity
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const offline = !state.isConnected;
-      setIsOffline(offline);
-    });
-
-    // Initial check
-    NetInfo.fetch().then((state) => {
-      const offline = !state.isConnected;
-      setIsOffline(offline);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!userData || !propertyData) {
-        return;
-      }
-
-      const needsRefresh = route.params?.refresh === true;
-      const MIN_REFRESH_INTERVAL = 2000; // 2 seconds
-      const now = Date.now();
-      const timeSinceLastRefresh = Math.max(0, now - lastRefreshTime);
-      // Modified condition to force refresh if jobs is empty but we should have jobs
-      const shouldForceRefresh = jobs.length === 0 && allJobs.length > 0;
-
-      if (
-        timeSinceLastRefresh < MIN_REFRESH_INTERVAL &&
-        !needsRefresh &&
-        !shouldForceRefresh
-      ) {
-        return;
-      }
-
-      const CACHE_TIME = 5 * 60 * 1000;
-      const isCacheValid = lastFetched && Date.now() - lastFetched < CACHE_TIME;
-
-      if (
-        !needsRefresh &&
-        isCacheValid &&
-        jobs.length > 0 &&
-        !shouldForceRefresh
-      ) {
-        return;
-      }
-
-      // We're doing a screen focus refresh, not a manual pull-to-refresh
-      setRefreshing(true);
-      setLastRefreshTime(now);
-      const uid = userData.payload?.userid ?? userData.userid;
-
-      // Get network status
-      NetInfo.fetch().then((state) => {
-        const isConnected = !!state.isConnected;
-        interface FetchJobsResult {
-          payload: JobPayload[];
-          type: string;
-          meta?: any;
-        }
-
-        interface JobPayload {
-          id: string;
-          property_id: string | number;
-          job_num?: string;
-          common_id?: string;
-        }
-
-        interface FetchJobsParams {
-          userId: string;
-          propertyId: string;
-          force: boolean;
-          useCache: boolean;
-        }
-
-        dispatch(
-          fetchJobs({
-            userId: uid,
-            propertyId: propertyData.id,
-            force: isConnected || needsRefresh || shouldForceRefresh,
-            useCache: !isConnected,
-          } as FetchJobsParams) as any
-        )
-          .then((result: FetchJobsResult) => {
-            if (result.payload) {
-              // Debug the returned job propertyIds to verify correct data
-              const returnedPropertyIds = result.payload.map((j: JobPayload) =>
-                String(j.property_id)
-              );
-              // Check if any jobs match our property
-              const matchingJobs = result.payload.filter(
-                (j: JobPayload) =>
-                  String(j.property_id) === String(propertyData.id)
-              );
-            }
-          })
-          .finally(() => {
-            setRefreshing(false);
-
-            if (needsRefresh && navigation.setParams) {
-              setTimeout(() => {
-                navigation.setParams({ refresh: false });
-              }, 100);
-            }
-          });
-      });
-    }, [
-      userData,
-      propertyData,
-      lastFetched,
-      route.params?.refresh,
-      lastRefreshTime,
-      navigation,
-      jobs.length,
-      allJobs.length,
-    ])
-  );
-
-  const onRefresh = useCallback(() => {
-    if (!userData || !propertyData) {
-      return;
-    }
-
-    // This is a manual pull-to-refresh, so we use isManualRefreshing
-    setRefreshing(true);
-    setIsManualRefreshing(true);
-
-    const uid = userData.payload?.userid ?? userData.userid;
-    const propId = propertyData.id;
-
-    if (isOffline) {
-      // In offline mode, explicitly set useCache to true
-      dispatch(
-        fetchJobs({
-          userId: uid,
-          propertyId: propId,
-          useCache: true,
-        }) as any
-      ).finally(() => {
-        setRefreshing(false);
-        setIsManualRefreshing(false);
-      });
-    } else {
-      dispatch(syncPendingJobs() as any)
-        .then(() => {
-          return dispatch(
-            fetchJobs({
-              userId: uid,
-              propertyId: propId,
-              force: true,
-              useCache: false,
-            }) as any
-          );
-        })
-        .catch(() => {
-          return dispatch(
-            fetchJobs({
-              userId: uid,
-              propertyId: propId,
-              force: true,
-              useCache: false,
-            }) as any
-          );
-        })
-        .finally(() => {
-          setRefreshing(false);
-          setIsManualRefreshing(false);
-        });
-    }
-  }, [userData, propertyData, dispatch, isOffline]);
-
-  const handleJobPress = useCallback(
-    async (item: Job) => {
-      await AsyncStorage.setItem("jobData", JSON.stringify(item));
-      const jobId = item.id || "";
-      navigation.navigate("JobDetailScreen", {
-        id: jobId,
-        common_id: item.common_id || "", // Pass common_id as empty string if null
-        refresh: true,
-        materialCost: item.material_cost || "",
-      });
-    },
-    [navigation]
-  );
-
-  const handleEditJob = useCallback(
-    (item: Job) => {
-      navigation.navigate("CreateEditJobScreen", {
-        jobId: item.id,
-        common_id: item.common_id,
-        isEditMode: true,
-      });
-    },
-    [navigation]
-  );
-
-  const handleOpenNewJob = () => {
-    navigation.navigate("CreateEditJobScreen");
-  };
-
-  // We separate initial loading from refresh loading
-  // Show content when NOT initial loading AND we have property data AND we're not showing skeletons
-  const shouldShowContent = !initialLoad && propertyData && !showSkeletons;
-
-  // Enhanced useEffect for loading stored property & user
+  // Enhanced useEffect for loading stored property & user - load early
   useEffect(() => {
     let mounted = true;
 
@@ -549,7 +295,6 @@ const JobsScreen = ({
         if (user) {
           try {
             const parsed = JSON.parse(user);
-            const uid = parsed.payload?.userid ?? parsed.userid;
             setUserData(parsed);
           } catch (parseError) {
             console.error(
@@ -558,11 +303,8 @@ const JobsScreen = ({
             );
           }
         }
-
-        setInitialLoad(false);
       } catch (err) {
         console.error("[JobsScreen:useEffect] Error loading stored data:", err);
-        if (mounted) setInitialLoad(false);
       }
     })();
 
@@ -571,28 +313,216 @@ const JobsScreen = ({
     };
   }, []);
 
-  // Add a property data debug button if needed
-  const debugPropertyData = async () => {
-    try {
-      // Check all possible storage locations
-      const checks = [
-        "selectedProperty",
-        "selectedPropertyId",
-        "allProperties",
-      ];
+  // Add a useEffect to force an initial fetch when both userData and propertyData are available
+  useEffect(() => {
+    if (userData && propertyData && !initialFetchDone.current && !loading) {
+      const uid = userData.payload?.userid ?? userData.userid;
+      initialFetchDone.current = true;
 
-      for (const key of checks) {
-        const value = await AsyncStorage.getItem(key);
-        if (value) {
-          try {
-            const parsed = JSON.parse(value);
-          } catch (e) {}
-        }
-      }
-    } catch (err) {
-      console.error("[JobsScreen:debugPropertyData] Error:", err);
+      // Force a fetch with force=true to bypass cache
+      dispatch(
+        fetchJobs({
+          userId: uid,
+          propertyId: propertyData.id,
+          force: true,
+          useCache: false,
+        }) as any
+      );
     }
-  };
+  }, [userData, propertyData, dispatch, loading]);
+
+  // Optimized skeleton control - shows while loading, hides when data is ready
+  useEffect(() => {
+    // If we're doing a manual refresh, don't show skeletons
+    if (isManualRefreshing) {
+      return;
+    }
+
+    // Show skeletons when:
+    // 1. We're loading data AND not doing a manual refresh
+    // 2. OR we have no userData or propertyData yet
+    if (loading) {
+      setShowSkeletons(true);
+    }
+    // Hide skeletons when data is loaded AND we have both user and property data
+    else if (userData && propertyData) {
+      // Give a small delay before hiding skeletons to avoid flickering
+      const timer = setTimeout(() => {
+        setShowSkeletons(false);
+        dataLoadedRef.current = true;
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, userData, propertyData, isManualRefreshing]);
+
+  // Check for network connectivity
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const offline = !state.isConnected;
+      setIsOffline(offline);
+    });
+
+    // Initial check
+    NetInfo.fetch().then((state) => {
+      const offline = !state.isConnected;
+      setIsOffline(offline);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!userData || !propertyData) {
+        return;
+      }
+
+      const needsRefresh = route.params?.refresh === true;
+      const MIN_REFRESH_INTERVAL = 2000; // 2 seconds
+      const now = Date.now();
+      const timeSinceLastRefresh = Math.max(0, now - lastRefreshTime);
+      // Modified condition to force refresh if jobs is empty but we should have jobs
+      const shouldForceRefresh = jobs.length === 0 && allJobs.length > 0;
+
+      if (
+        timeSinceLastRefresh < MIN_REFRESH_INTERVAL &&
+        !needsRefresh &&
+        !shouldForceRefresh
+      ) {
+        return;
+      }
+
+      const CACHE_TIME = 5 * 60 * 1000;
+      const isCacheValid = lastFetched && Date.now() - lastFetched < CACHE_TIME;
+
+      if (
+        !needsRefresh &&
+        isCacheValid &&
+        jobs.length > 0 &&
+        !shouldForceRefresh
+      ) {
+        return;
+      }
+
+      // We're doing a screen focus refresh, not a manual pull-to-refresh
+      setRefreshing(true);
+      setLastRefreshTime(now);
+      const uid = userData.payload?.userid ?? userData.userid;
+
+      // Get network status
+      NetInfo.fetch().then((state) => {
+        const isConnected = !!state.isConnected;
+
+        dispatch(
+          fetchJobs({
+            userId: uid,
+            propertyId: propertyData.id,
+            force: isConnected || needsRefresh || shouldForceRefresh,
+            useCache: !isConnected,
+          }) as any
+        ).finally(() => {
+          setRefreshing(false);
+
+          if (needsRefresh && navigation.setParams) {
+            setTimeout(() => {
+              navigation.setParams({ refresh: false });
+            }, 100);
+          }
+        });
+      });
+    }, [
+      userData,
+      propertyData,
+      lastFetched,
+      route.params?.refresh,
+      lastRefreshTime,
+      navigation,
+      jobs.length,
+      allJobs.length,
+    ])
+  );
+
+  const onRefresh = useCallback(() => {
+    if (!userData || !propertyData) {
+      return;
+    }
+
+    // This is a manual pull-to-refresh, so we use isManualRefreshing
+    setRefreshing(true);
+    setIsManualRefreshing(true);
+
+    const uid = userData.payload?.userid ?? userData.userid;
+    const propId = propertyData.id;
+
+    if (isOffline) {
+      // In offline mode, explicitly set useCache to true
+      dispatch(
+        fetchJobs({
+          userId: uid,
+          propertyId: propId,
+          useCache: true,
+        }) as any
+      ).finally(() => {
+        setRefreshing(false);
+        setIsManualRefreshing(false);
+      });
+    } else {
+      dispatch(syncPendingJobs() as any)
+        .then(() => {
+          return dispatch(
+            fetchJobs({
+              userId: uid,
+              propertyId: propId,
+              force: true,
+              useCache: false,
+            }) as any
+          );
+        })
+        .catch(() => {
+          return dispatch(
+            fetchJobs({
+              userId: uid,
+              propertyId: propId,
+              force: true,
+              useCache: false,
+            }) as any
+          );
+        })
+        .finally(() => {
+          setRefreshing(false);
+          setIsManualRefreshing(false);
+        });
+    }
+  }, [userData, propertyData, dispatch, isOffline]);
+
+  const handleJobPress = useCallback(
+    async (item: Job) => {
+      await AsyncStorage.setItem("jobData", JSON.stringify(item));
+      const jobId = item.id || "";
+      navigation.navigate("JobDetailScreen", {
+        id: jobId,
+        common_id: item.common_id || "",
+        refresh: true,
+        materialCost: item.material_cost || "",
+      });
+    },
+    [navigation]
+  );
+
+  const handleEditJob = useCallback(
+    (item: Job) => {
+      navigation.navigate("CreateEditJobScreen", {
+        jobId: item.id,
+        common_id: item.common_id,
+        isEditMode: true,
+      });
+    },
+    [navigation]
+  );
+
+  const handleOpenNewJob = useCallback(() => {
+    navigation.navigate("CreateEditJobScreen");
+  }, [navigation]);
 
   return (
     <View style={styles.screenContainer}>
@@ -601,6 +531,8 @@ const JobsScreen = ({
         <View style={styles.headingContainer}>
           <Text style={styles.heading}>Jobs List</Text>
         </View>
+
+        {/* Always show skeletons first, then content when data is ready */}
         {showSkeletons ? (
           <>
             <PropertyBannerSkeleton />
@@ -617,54 +549,60 @@ const JobsScreen = ({
               <JobItemSkeleton key={i} />
             ))}
           </>
-        ) : shouldShowContent ? (
+        ) : (
           <>
-            <View style={styles.screenBanner}>
-              <Text style={styles.bannerLabel}>Selected Property:</Text>
-              <Text style={styles.bannerText}>{propertyData.address}</Text>
-              <Text style={styles.extraSmallText}>{propertyData.company}</Text>
-            </View>
+            {propertyData && (
+              <>
+                <View style={styles.screenBanner}>
+                  <Text style={styles.bannerLabel}>Selected Property:</Text>
+                  <Text style={styles.bannerText}>{propertyData.address}</Text>
+                  <Text style={styles.extraSmallText}>
+                    {propertyData.company}
+                  </Text>
+                </View>
 
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleOpenNewJob}
-            >
-              <Text style={styles.buttonText}>Open New Job</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={handleOpenNewJob}
+                >
+                  <Text style={styles.buttonText}>Open New Job</Text>
+                </TouchableOpacity>
 
-            {error && <Text style={styles.errorText}>{error}</Text>}
+                {error && <Text style={styles.errorText}>{error}</Text>}
 
-            {jobs.length === 0 && !error && (
-              <Text style={{ textAlign: "center" }}>
-                No jobs found for this property.
-              </Text>
+                {jobs.length === 0 && !error && (
+                  <Text style={{ textAlign: "center" }}>
+                    No jobs found for this property.
+                  </Text>
+                )}
+
+                <FlatList
+                  data={jobs}
+                  keyExtractor={(item) =>
+                    item.id || item.common_id || String(Math.random())
+                  }
+                  renderItem={({ item }) => (
+                    <JobItem
+                      item={item}
+                      typeName={jobTypeMap[item.job_type] ?? ""}
+                      onPress={handleJobPress}
+                      onEdit={handleEditJob}
+                    />
+                  )}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                  style={{ width: "100%" }}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefresh}
+                      colors={[color.primary]}
+                    />
+                  }
+                />
+              </>
             )}
-
-            <FlatList
-              data={jobs}
-              keyExtractor={(item) =>
-                item.id || item.common_id || String(Math.random())
-              }
-              renderItem={({ item }) => (
-                <JobItem
-                  item={item}
-                  typeName={jobTypeMap[item.job_type] ?? ""}
-                  onPress={handleJobPress}
-                  onEdit={handleEditJob}
-                />
-              )}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              style={{ width: "100%" }}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={[color.primary]}
-                />
-              }
-            />
           </>
-        ) : null}
+        )}
       </View>
     </View>
   );

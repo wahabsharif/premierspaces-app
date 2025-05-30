@@ -148,7 +148,7 @@ export const fetchJobs = createAsyncThunk<
       );
     }
 
-    // ONLINE MODE: Prioritize API data, ignore cache and jobService
+    // ONLINE MODE: Prioritize API data when we're online and not explicitly using cache
     if (isOnline && !useCache) {
       try {
         const ENDPOINT = `${BASE_API_URL}/getjobs.php?userid=${userId}${
@@ -158,7 +158,7 @@ export const fetchJobs = createAsyncThunk<
         // Add cache-busting parameter when force=true
         const cacheBuster = force ? `&_cb=${Date.now()}` : "";
 
-        // Make API request
+        // Make API request with appropriate timeout and headers
         const resp = await axios.get(`${ENDPOINT}${cacheBuster}`, {
           timeout: 15000,
           headers: force
@@ -172,8 +172,7 @@ export const fetchJobs = createAsyncThunk<
         if (resp.data.status === 1) {
           const serverJobs = resp.data.payload as Job[];
 
-          // When online, we only return the server data
-          // Sort by date_created desc
+          // Sort by date_created desc - doing this once at the source
           serverJobs.sort(
             (a, b) =>
               new Date(b.date_created || Date.now()).getTime() -
@@ -191,66 +190,64 @@ export const fetchJobs = createAsyncThunk<
     }
 
     // OFFLINE MODE: Combine data from cache and job service
-    else {
-      // Filter offline jobs by property if needed
-      let filteredOfflineJobs = [...offlineJobs];
-      if (propertyId) {
-        const propIdStr = String(propertyId);
-        filteredOfflineJobs = filteredOfflineJobs.filter((job) => {
-          const jobPropId = String(job.property_id);
-          return jobPropId === propIdStr;
-        });
-      }
+    // Filter offline jobs by property if needed
+    let filteredOfflineJobs = [...offlineJobs];
+    if (propertyId) {
+      const propIdStr = String(propertyId);
+      filteredOfflineJobs = filteredOfflineJobs.filter(
+        (job) => String(job.property_id) === propIdStr
+      );
+    }
 
-      // Get cached server jobs
-      let cachedServerJobs: Job[] = [];
-      try {
-        const entry = await getCache(cacheKey);
-        if (entry?.payload?.payload) {
-          cachedServerJobs = (entry.payload.payload as Job[]) || [];
-        } else {
-          // Try to get from general cache if property-specific cache doesn't exist
-          if (propertyId) {
-            const generalCacheKey = `jobsCache_${userId}`;
-            const generalEntry = await getCache(generalCacheKey);
-            if (generalEntry?.payload?.payload) {
-              const allCachedJobs = generalEntry.payload.payload as Job[];
-
-              // Filter by property ID
-              const propIdStr = String(propertyId);
-              cachedServerJobs = allCachedJobs.filter((job) => {
-                const jobPropId = String(job.property_id);
-                return jobPropId === propIdStr;
-              });
-            }
-          }
+    // Get cached server jobs with optimized error handling
+    let cachedServerJobs: Job[] = [];
+    try {
+      const entry = await getCache(cacheKey);
+      if (entry?.payload?.payload) {
+        cachedServerJobs = (entry.payload.payload as Job[]) || [];
+      } else if (propertyId) {
+        // Try to get from general cache if property-specific cache doesn't exist
+        const generalCacheKey = `jobsCache_${userId}`;
+        const generalEntry = await getCache(generalCacheKey);
+        if (generalEntry?.payload?.payload) {
+          const allCachedJobs = generalEntry.payload.payload as Job[];
+          // Filter by property ID
+          cachedServerJobs = allCachedJobs.filter(
+            (job) => String(job.property_id) === String(propertyId)
+          );
         }
-      } catch (err) {
-        Toast.error(
-          `Error fetching cached jobs: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        );
       }
+    } catch (err) {
+      Toast.error(
+        `Error fetching cached jobs: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
 
-      // Combine offline and cached server jobs
-      const combinedJobs = [...cachedServerJobs];
-      filteredOfflineJobs.forEach((o) => {
-        // Don't add if already in the list (by ID)
-        if (!combinedJobs.some((j) => j.id === o.id)) {
-          combinedJobs.push(o);
+    // Combine offline and cached server jobs efficiently
+    const combinedJobs = [...cachedServerJobs];
+
+    // Only process offline jobs if we have any
+    if (filteredOfflineJobs.length > 0) {
+      // Use a Map for O(1) lookups instead of array.some() which is O(n)
+      const existingJobIds = new Map(combinedJobs.map((job) => [job.id, true]));
+
+      filteredOfflineJobs.forEach((offlineJob) => {
+        if (!existingJobIds.has(offlineJob.id)) {
+          combinedJobs.push(offlineJob);
         }
       });
-
-      // Sort by date (newest first)
-      combinedJobs.sort(
-        (a, b) =>
-          new Date(b.date_created || Date.now()).getTime() -
-          new Date(a.date_created || Date.now()).getTime()
-      );
-
-      return combinedJobs;
     }
+
+    // Sort by date (newest first)
+    combinedJobs.sort(
+      (a, b) =>
+        new Date(b.date_created || Date.now()).getTime() -
+        new Date(a.date_created || Date.now()).getTime()
+    );
+
+    return combinedJobs;
   }
 );
 
