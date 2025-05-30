@@ -326,7 +326,15 @@ const CreateEditJobScreen = ({
           }, 300);
         })
         .catch((error) => {
-          showError(`Failed to update job: ${error}`);
+          // Improve error handling with more details
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+              ? error
+              : "Unknown error occurred";
+          showError(`Failed to update job: ${errorMessage}`);
+          console.error("Job update error details:", error);
         });
     } else {
       dispatch(createJob({ userId, jobData: payload }));

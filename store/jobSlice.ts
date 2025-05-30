@@ -355,11 +355,25 @@ export const updateJob = createAsyncThunk<
 
     // If offline, immediately use updateOfflineJob without trying API
     if (!isOnline) {
-      await updateOfflineJob(formattedJobData);
-      return {
-        message: "Job updated offline and will be synced when online",
-        isOffline: true,
-      };
+      try {
+        if (typeof updateOfflineJob !== "function") {
+          throw new Error("updateOfflineJob function is not available");
+        }
+        await updateOfflineJob(formattedJobData);
+        return {
+          message: "Job updated offline and will be synced when online",
+          isOffline: true,
+        };
+      } catch (offlineError) {
+        console.error("Error saving offline:", offlineError);
+        return rejectWithValue(
+          `Failed to save offline: ${
+            offlineError instanceof Error
+              ? offlineError.message
+              : String(offlineError)
+          }`
+        );
+      }
     }
 
     // If online, try the API call
@@ -373,32 +387,76 @@ export const updateJob = createAsyncThunk<
 
       if (response.data.status !== 1) {
         // API call failed with error status, save locally
-        await updateOfflineJob(formattedJobData);
-        return {
-          message:
-            response.data.payload?.message ||
-            "API update failed, saved locally",
-          isOffline: true,
-          apiError: true,
-        };
+        try {
+          if (typeof updateOfflineJob !== "function") {
+            throw new Error("updateOfflineJob function is not available");
+          }
+          await updateOfflineJob(formattedJobData);
+          return {
+            message:
+              response.data.payload?.message ||
+              "API update failed, saved locally",
+            isOffline: true,
+            apiError: true,
+          };
+        } catch (offlineError) {
+          console.error("Error saving offline after API error:", offlineError);
+          return rejectWithValue(
+            `API failed and offline save failed: ${
+              offlineError instanceof Error
+                ? offlineError.message
+                : String(offlineError)
+            }`
+          );
+        }
       }
 
       // Refresh all relevant caches after successful job update
-      await refreshCachesAfterPost(userId);
+      try {
+        await refreshCachesAfterPost(userId);
+      } catch (cacheError) {
+        console.error("Error refreshing caches:", cacheError);
+        // Continue even if cache refresh fails
+      }
 
       // Also update in local database for consistency
-      await updateOfflineJob(formattedJobData);
+      try {
+        if (typeof updateOfflineJob === "function") {
+          await updateOfflineJob(formattedJobData);
+        }
+      } catch (offlineError) {
+        console.error(
+          "Warning: Could not update local database:",
+          offlineError
+        );
+        // Continue even if local update fails since API update succeeded
+      }
+
       return response.data;
     } catch (apiError) {
       // Network/API error occurred, fall back to offline storage
       console.error("API error updating job:", apiError);
-      await updateOfflineJob(formattedJobData);
-      return {
-        message:
-          "API error, job updated offline and will be synced when online",
-        isOffline: true,
-        apiError: true,
-      };
+      try {
+        if (typeof updateOfflineJob !== "function") {
+          throw new Error("updateOfflineJob function is not available");
+        }
+        await updateOfflineJob(formattedJobData);
+        return {
+          message:
+            "API error, job updated offline and will be synced when online",
+          isOffline: true,
+          apiError: true,
+        };
+      } catch (offlineError) {
+        console.error("Error saving offline after API error:", offlineError);
+        return rejectWithValue(
+          `API error and offline save failed: ${
+            offlineError instanceof Error
+              ? offlineError.message
+              : String(offlineError)
+          }`
+        );
+      }
     }
   } catch (err: any) {
     console.error("Error updating job:", err);
