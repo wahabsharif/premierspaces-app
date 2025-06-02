@@ -23,7 +23,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { CacheService, DataSyncManager, NetworkStatus } from "./components";
+import { CacheService, DataSyncManager } from "./components";
 import { fontSize } from "./Constants/theme";
 import { AppNavigator } from "./navigation/AppNavigator";
 import LockScreen from "./screens/LockScreen";
@@ -145,7 +145,6 @@ export default function App() {
                   style={styles.container}
                   edges={["top", "bottom"]}
                 >
-                  <NetworkStatus />
                   <ToastManager
                     position="bottom"
                     style={{

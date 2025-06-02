@@ -1,22 +1,24 @@
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Octicons from "@expo/vector-icons/Octicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import * as Updates from "expo-updates";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   DevSettings,
   Image,
   Text,
   TouchableOpacity,
-  View,
   TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import styles from "../Constants/styles";
 import { fontSize } from "../Constants/theme";
 import { RootStackParamList } from "../types";
-import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+
 type HeaderNavigationProp = StackNavigationProp<
   RootStackParamList,
   "SearchPropertyScreen"
@@ -25,6 +27,8 @@ type HeaderNavigationProp = StackNavigationProp<
 const Header = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [userName, setUserName] = useState("Profile");
+  const [isConnected, setIsConnected] = useState(true);
+  const slideAnim = useRef(new Animated.Value(0)).current;
   const navigation = useNavigation<HeaderNavigationProp>();
 
   useEffect(() => {
@@ -43,13 +47,40 @@ const Header = () => {
     };
     fetchUserData();
 
+    // Add internet connectivity listener
+    const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
+      setIsConnected(state.isConnected || false);
+    });
+
     // Add navigation listener to close dropdown when navigating
     const unsubscribe = navigation.addListener("state", () => {
       setDropdownVisible(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      unsubscribeNetInfo();
+    };
   }, [navigation]);
+
+  // Animation effect for offline banner
+  useEffect(() => {
+    if (!isConnected) {
+      // Show the banner with animation
+      Animated.timing(slideAnim, {
+        toValue: 20, // Height when visible
+        duration: 300,
+        useNativeDriver: false,
+      }).start();
+    } else {
+      // Hide the banner with animation
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [isConnected, slideAnim]);
 
   const dropdownOptions = ["Home", "Settings", "Pending Data", "Logout"];
   const handleOptionSelect = (option: string) => {
@@ -90,7 +121,28 @@ const Header = () => {
 
   return (
     <>
-      <View style={styles.headerContainer}>
+      <Animated.View
+        style={{
+          backgroundColor: "red",
+          width: "100%",
+          height: slideAnim,
+          overflow: "hidden",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: "white",
+            fontSize: 10,
+            fontWeight: "bold",
+          }}
+        >
+          Offline
+        </Text>
+      </Animated.View>
+
+      <View style={[styles.headerContainer, { height: "auto" }]}>
         <View style={styles.headerTextContainer}>
           <Text
             style={styles.headerText}
@@ -101,17 +153,18 @@ const Header = () => {
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.headerLogoContainer}
-          onPress={() => navigation.navigate("SearchPropertyScreen")}
-          activeOpacity={0.7}
-        >
-          <Image
-            source={require("../assets/logo.png")}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+        <View style={styles.headerLogoContainer}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("SearchPropertyScreen")}
+            activeOpacity={0.7}
+          >
+            <Image
+              source={require("../assets/logo.png")}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </View>
 
         <View
           style={{
@@ -134,20 +187,11 @@ const Header = () => {
               padding: 12,
             }}
           >
-            {dropdownVisible ? (
-              // <FontAwesome5 name="times"  />
-              <FontAwesome6
-                name="times-circle"
-                size={fontSize.small}
-                color="black"
-              />
-            ) : (
-              <Octicons
-                name="three-bars"
-                size={fontSize.medium}
-                color="black"
-              />
-            )}
+            <MaterialCommunityIcons
+              name="dots-vertical-circle-outline"
+              size={fontSize.large}
+              color="black"
+            />
           </TouchableOpacity>
         </View>
       </View>

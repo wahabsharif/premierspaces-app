@@ -39,7 +39,7 @@ export default StyleSheet.create({
     position: "relative",
     backgroundColor: color.white,
     elevation: 5,
-    zIndex: 1,
+    zIndex: 5, // Increase from 1 to 5
   },
 
   headerLogoContainer: {
@@ -65,14 +65,16 @@ export default StyleSheet.create({
 
   dropdownContainer: {
     position: "absolute",
-    top: 45,
     right: 0,
+    top: "auto", // Remove fixed value to allow dynamic positioning
+    marginTop: 65, // Use margin instead to position below header
     width: 140,
     backgroundColor: color.white,
     borderWidth: 1,
     borderColor: color.secondary,
     borderRadius: 5,
-    zIndex: 10,
+    zIndex: 15,
+    elevation: 6,
     shadowColor: color.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -85,7 +87,7 @@ export default StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: "transparent",
-    zIndex: 5,
+    zIndex: 10, // Increase from 5 to 10
   },
   dropdownItemText: {
     fontSize: fontSize.small,
