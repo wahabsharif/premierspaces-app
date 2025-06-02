@@ -296,6 +296,10 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     () =>
       Gesture.Pan()
         .runOnJS(true)
+        // Only activate the gesture for significant horizontal movement
+        .activeOffsetX([-20, 20])
+        // Don't activate for vertical scrolling
+        .failOffsetY([-5, 5])
         .onEnd((event) => {
           try {
             if (!enableTabSwipe) return;
