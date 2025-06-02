@@ -4,7 +4,6 @@ eas update:configure
 
 eas update --branch production --platform android
 
-
 eas build --platform android
 
 eas update
