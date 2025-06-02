@@ -1,5 +1,5 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useEvent } from "expo";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, {
@@ -11,8 +11,10 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
+  Linking,
   Modal,
   RefreshControl,
   SafeAreaView,
@@ -23,6 +25,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import styles from "../Constants/styles";
@@ -66,6 +73,24 @@ const getFileCategoryNumber = (category: string): string => {
     video: "3",
   };
   return categoryMap[category] || "1";
+};
+
+const getDocumentType = (fileName: string): string => {
+  if (!fileName) return "unknown";
+  const extension = fileName.split(".").pop()?.toLowerCase() || "";
+
+  const typeMap: Record<string, string> = {
+    pdf: "pdf",
+    doc: "word",
+    docx: "word",
+    xls: "excel",
+    xlsx: "excel",
+    ppt: "powerpoint",
+    pptx: "powerpoint",
+    txt: "text",
+  };
+
+  return typeMap[extension] || "generic";
 };
 
 const formatSectionDate = (date: Date): string => {
@@ -170,6 +195,11 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [videoUrl, setVideoUrl] = useState<string>("");
+  const [enableTabSwipe] = useState(true);
+  const [, setSwipeIndicator] = useState({
+    visible: false,
+    direction: "",
+  });
 
   // Refs and memoized values
   const videoUrlRef = useRef<string | null>(null);
@@ -182,10 +212,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   // Video player
   const videoPlayer = useVideoPlayer(videoUrl, (player) => {
     if (videoUrl) player.play();
-  });
-
-  const { isPlaying } = useEvent(videoPlayer, "playingChange", {
-    isPlaying: videoPlayer.playing,
   });
 
   // Computed values
@@ -265,6 +291,54 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     };
   }, [modalVisible, orientation]);
 
+  // Define the pan gesture using Gesture.Pan()
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .onEnd((event) => {
+          try {
+            if (!enableTabSwipe) return;
+
+            // Threshold for tab switching (higher = less sensitive)
+            const SWIPE_THRESHOLD = 50;
+            const { translationX } = event;
+
+            if (translationX > SWIPE_THRESHOLD) {
+              // Right swipe - go to previous tab
+              const currentIndex = tabs.findIndex(
+                (tab) => tab.key === activeTab
+              );
+              if (currentIndex > 0) {
+                setActiveTab(tabs[currentIndex - 1].key);
+                setSwipeIndicator({ visible: true, direction: "right" });
+                setTimeout(
+                  () => setSwipeIndicator({ visible: false, direction: "" }),
+                  500
+                );
+              }
+            } else if (translationX < -SWIPE_THRESHOLD) {
+              // Left swipe - go to next tab
+              const currentIndex = tabs.findIndex(
+                (tab) => tab.key === activeTab
+              );
+              if (currentIndex < tabs.length - 1) {
+                setActiveTab(tabs[currentIndex + 1].key);
+                setSwipeIndicator({ visible: true, direction: "left" });
+                setTimeout(
+                  () => setSwipeIndicator({ visible: false, direction: "" }),
+                  500
+                );
+              }
+            }
+          } catch (error) {
+            console.log("Gesture error:", error);
+          }
+        })
+        .simultaneousWithExternalGesture(Gesture.Tap(), Gesture.LongPress()),
+    [activeTab, enableTabSwipe, tabs]
+  );
+
   // Handlers
   const loadJobFiles = useCallback(async () => {
     try {
@@ -305,14 +379,36 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }
   }, [filesFromRoute, loadJobFiles]);
 
-  const openModal = useCallback(async (item: FileItem) => {
-    setSelectedItem(item);
-    setModalVisible(true);
-
-    if (item.file_category === getFileCategoryNumber("video")) {
-      await ScreenOrientation.unlockAsync().catch(() => {});
+  const handleOpenDocument = useCallback(async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error("Error opening document:", error);
+      Alert.alert(
+        "Error",
+        "There was a problem opening this document. Please try again.",
+        [{ text: "OK" }]
+      );
     }
   }, []);
+
+  const openModal = useCallback(
+    async (item: FileItem) => {
+      setSelectedItem(item);
+
+      if (item.file_category === getFileCategoryNumber("document")) {
+        handleOpenDocument(item.stream_url);
+        return;
+      }
+
+      setModalVisible(true);
+
+      if (item.file_category === getFileCategoryNumber("video")) {
+        await ScreenOrientation.unlockAsync().catch(() => {});
+      }
+    },
+    [handleOpenDocument]
+  );
 
   const closeModal = useCallback(async () => {
     if (videoPlayer && videoUrl) {
@@ -392,9 +488,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             cache={thumbnailCache}
           />
         </View>
-        <View style={innerStyles.videoThumbnailOverlay}>
-          <Text style={innerStyles.videoIcon}>▶</Text>
-        </View>
         <Text style={innerStyles.videoLabel} numberOfLines={1}>
           {item.file_name || "Video"}
         </Text>
@@ -403,17 +496,62 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     [openModal, thumbnailCache]
   );
 
-  const renderDocumentItem = useCallback(
-    (item: FileItem) => (
+  const renderDocumentItem = useCallback((item: FileItem) => {
+    const docType = getDocumentType(item.file_name || "");
+
+    // Choose icon based on document type
+    let IconComponent = MaterialCommunityIcons;
+    // Use type assertion for icon names to match the expected literal type
+    let iconName: keyof typeof MaterialCommunityIcons.glyphMap =
+      "file-document-outline";
+    let iconColor = "#2C7DA0";
+
+    switch (docType) {
+      case "pdf":
+        iconName =
+          "file-pdf-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconColor = "#F40F02";
+        break;
+      case "word":
+        iconName =
+          "file-word-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconColor = "#295496";
+        break;
+      case "excel":
+        iconName =
+          "file-excel-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconColor = "#1D6F42";
+        break;
+      case "powerpoint":
+        iconName =
+          "file-powerpoint-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconColor = "#D24625";
+        break;
+      case "text":
+        iconName =
+          "file-document-outline" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconColor = "#424242";
+        break;
+      default:
+        iconName =
+          "file-outline" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconColor = "#607D8B";
+    }
+
+    return (
       <View style={innerStyles.documentPlaceholder}>
-        <Text style={innerStyles.documentText}>Document</Text>
+        <IconComponent
+          name={iconName}
+          size={60}
+          color={iconColor}
+          style={innerStyles.documentIcon}
+        />
         <Text style={innerStyles.documentName} numberOfLines={1}>
           {item.file_name}
         </Text>
       </View>
-    ),
-    []
-  );
+    );
+  }, []);
 
   const renderItem = useCallback(
     (item: FileItem) => {
@@ -607,7 +745,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   return (
     <View style={styles.screenContainer}>
       <Header />
-      <View style={{ flex: 1 }}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
         {/* Tabs */}
         <View style={innerStyles.tabsContainer}>
           {tabs.map((tab) => (
@@ -631,37 +769,45 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           ))}
         </View>
 
-        {/* Content */}
-        <SectionList
-          sections={groupedMedia}
-          keyExtractor={(items, sectionIndex) =>
-            `section-${sectionIndex}-${items.map((item) => item.id).join("-")}`
-          }
-          renderItem={({ item, index, section }) =>
-            renderRow(item, `row-${section.title}-${index}`)
-          }
-          renderSectionHeader={renderSectionHeader}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={
-            paginatedFiles.length === 0
-              ? { flex: 1, justifyContent: "center" }
-              : { paddingBottom: insets.bottom }
-          }
-          ListEmptyComponent={renderEmptyComponent}
-          ListFooterComponent={renderFooter}
-          onEndReached={loadMoreData}
-          onEndReachedThreshold={0.5}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={onRefresh}
-              colors={[color.primary]}
-              tintColor={color.primary}
-              title="Pull to refresh"
-              titleColor={color.primary}
-            />
-          }
-        />
+        {/* Content with swipe gestures */}
+        <View style={{ flex: 1 }}>
+          <GestureDetector gesture={panGesture}>
+            <View style={{ flex: 1 }}>
+              <SectionList
+                sections={groupedMedia}
+                keyExtractor={(items, sectionIndex) =>
+                  `section-${sectionIndex}-${items
+                    .map((item) => item.id)
+                    .join("-")}`
+                }
+                renderItem={({ item, index, section }) =>
+                  renderRow(item, `row-${section.title}-${index}`)
+                }
+                renderSectionHeader={renderSectionHeader}
+                stickySectionHeadersEnabled={false}
+                contentContainerStyle={
+                  paginatedFiles.length === 0
+                    ? { flex: 1, justifyContent: "center" }
+                    : { paddingBottom: insets.bottom }
+                }
+                ListEmptyComponent={renderEmptyComponent}
+                ListFooterComponent={renderFooter}
+                onEndReached={loadMoreData}
+                onEndReachedThreshold={0.5}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={onRefresh}
+                    colors={[color.primary]}
+                    tintColor={color.primary}
+                    title="Pull to refresh"
+                    titleColor={color.primary}
+                  />
+                }
+              />
+            </View>
+          </GestureDetector>
+        </View>
 
         {/* Modal */}
         <Modal
@@ -727,7 +873,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             )}
           </SafeAreaView>
         </Modal>
-      </View>
+      </GestureHandlerRootView>
     </View>
   );
 };
@@ -778,17 +924,22 @@ const innerStyles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#2C7DA0",
+    backgroundColor: "#f5f5f5",
     padding: 10,
   },
+  documentIcon: {
+    width: 60,
+    height: 60,
+    marginBottom: 5,
+  },
   documentText: {
-    color: "#fff",
+    color: "#444",
     textAlign: "center",
     padding: 4,
     fontWeight: "bold",
   },
   documentName: {
-    color: "#fff",
+    color: "#333",
     textAlign: "center",
     fontSize: 12,
     marginTop: 5,
@@ -939,23 +1090,6 @@ const innerStyles = StyleSheet.create({
     width: "100%",
     height: "100%",
     backgroundColor: "#222",
-  },
-  videoThumbnailOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
-  },
-  videoIcon: {
-    color: "#fff",
-    fontSize: 40,
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
   videoLabel: {
     position: "absolute",

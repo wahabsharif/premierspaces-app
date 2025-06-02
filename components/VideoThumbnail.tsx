@@ -1,4 +1,3 @@
-// components/Common/VideoThumbnail.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -8,6 +7,8 @@ import {
   Text,
   TouchableOpacity,
 } from "react-native";
+import * as VideoThumbnails from "expo-video-thumbnails";
+import { fontSize } from "../Constants/theme";
 
 interface VideoThumbnailProps {
   uri: string;
@@ -22,34 +23,45 @@ const VideoThumbnail: React.FC<VideoThumbnailProps> = ({
   active,
   cache,
 }) => {
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Instead of trying to generate thumbnails, we'll just use a placeholder
-  // This avoids all file system and native module dependencies
-
   useEffect(() => {
-    // Simulate a quick loading state for better UX
     if (active) {
-      setLoading(true);
-      const timer = setTimeout(() => {
-        setLoading(false);
-      }, 300);
-
-      return () => clearTimeout(timer);
+      generateThumbnail();
     }
-  }, [active]);
+  }, [active, uri]);
 
-  // Fallback display for videos
-  const renderVideoPlaceholder = () => (
-    <View style={styles.fallbackContainer}>
-      <View style={styles.playIcon}>
-        <Text style={styles.playText}>▶︎</Text>
-      </View>
-      <Text style={styles.videoText}>Video</Text>
-    </View>
-  );
+  const generateThumbnail = async () => {
+    setLoading(true);
+    setError(null);
 
+    try {
+      // Check if thumbnail is already cached
+      if (cache.has(uri)) {
+        setThumbnailUri(cache.get(uri)!);
+        setLoading(false);
+        return;
+      }
+
+      // Generate thumbnail at 1 second into the video
+      const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, {
+        time: 1000, // Time in milliseconds (1 second)
+      });
+
+      // Store the thumbnail URI in the cache
+      cache.set(uri, thumbUri);
+      setThumbnailUri(thumbUri);
+    } catch (err) {
+      console.error("Failed to generate thumbnail:", err);
+      setError("Failed to load thumbnail");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Loading state
   if (loading) {
     return (
       <View style={styles.placeholder}>
@@ -59,20 +71,36 @@ const VideoThumbnail: React.FC<VideoThumbnailProps> = ({
     );
   }
 
+  // Error or no thumbnail state
+  if (error || !thumbnailUri) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>
+          {error || "No thumbnail available"}
+        </Text>
+        <Text style={styles.videoText}>Video</Text>
+      </View>
+    );
+  }
+
+  // Success state: display the thumbnail
   return (
     <TouchableOpacity
       style={styles.container}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      {error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.videoText}>Video</Text>
-        </View>
-      ) : (
-        renderVideoPlaceholder()
-      )}
+      <View style={styles.filmStripLeft}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <View key={`left-${i}`} style={styles.filmHole} />
+        ))}
+      </View>
+      <Image source={{ uri: thumbnailUri }} style={styles.image} />
+      <View style={styles.filmStripRight}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <View key={`right-${i}`} style={styles.filmHole} />
+        ))}
+      </View>
     </TouchableOpacity>
   );
 };
@@ -86,6 +114,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: "hidden",
     position: "relative",
+    flexDirection: "row",
   },
   placeholder: {
     width: "100%",
@@ -94,36 +123,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  fallbackContainer: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#0077B6",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   image: {
-    width: "100%",
+    flex: 1,
     height: "100%",
   },
-  playIcon: {
-    position: "absolute",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
+  filmStripLeft: {
+    width: 10,
+    height: "100%",
+    backgroundColor: "#000",
+    justifyContent: "space-evenly",
     alignItems: "center",
   },
-  playText: {
-    color: "#fff",
-    fontSize: 18,
-    marginLeft: 3,
+  filmStripRight: {
+    width: 10,
+    height: "100%",
+    backgroundColor: "#000",
+    justifyContent: "space-evenly",
+    alignItems: "center",
   },
-  videoText: {
-    color: "#fff",
-    fontSize: 14,
-    marginTop: 8,
-    fontWeight: "bold",
+  filmHole: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#333",
   },
   errorContainer: {
     width: "100%",
@@ -134,8 +156,13 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#fff",
-    fontSize: 24,
+    fontSize: 14,
     marginBottom: 8,
+  },
+  videoText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
   },
   loadingText: {
     color: "#fff",
