@@ -1,4 +1,4 @@
-yarn expo prebuild
+yarn expo prebuild --clean
 
 eas update:configure
 
