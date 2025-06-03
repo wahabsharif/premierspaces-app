@@ -30,11 +30,18 @@ import {
   GestureDetector,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import styles from "../Constants/styles";
 import { color, fontSize } from "../Constants/theme";
 import { Header, VideoThumbnail } from "../components";
+import SkeletonLoader from "../components/SkeletonLoader";
+import { formatDate } from "../helper";
 import {
   loadFiles,
   selectFiles,
@@ -45,12 +52,10 @@ import { FileItem, RootStackParamList } from "../types";
 
 // Constants
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const NUM_COLUMNS = 5;
 const CONTAINER_PADDING = 12;
 const ITEM_SPACING = 4;
+const MIN_ITEM_WIDTH = 80;
 const PAGE_SIZE = 30;
-const AVAILABLE_WIDTH = SCREEN_WIDTH - 2 * CONTAINER_PADDING;
-const ITEM_WIDTH = AVAILABLE_WIDTH / NUM_COLUMNS - ITEM_SPACING;
 
 // Types
 type Props = NativeStackScreenProps<RootStackParamList, "MediaPreviewScreen">;
@@ -78,7 +83,6 @@ const getFileCategoryNumber = (category: string): string => {
 const getDocumentType = (fileName: string): string => {
   if (!fileName) return "unknown";
   const extension = fileName.split(".").pop()?.toLowerCase() || "";
-
   const typeMap: Record<string, string> = {
     pdf: "pdf",
     doc: "word",
@@ -89,7 +93,6 @@ const getDocumentType = (fileName: string): string => {
     pptx: "powerpoint",
     txt: "text",
   };
-
   return typeMap[extension] || "generic";
 };
 
@@ -97,10 +100,8 @@ const formatSectionDate = (date: Date): string => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-
   if (date.toDateString() === today.toDateString()) return "Today";
   if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-
   return date.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
@@ -108,15 +109,21 @@ const formatSectionDate = (date: Date): string => {
   });
 };
 
-const createFileRows = (files: FileItem[]): FileItem[][] => {
+const createFileRows = (
+  files: FileItem[],
+  numColumns: number
+): FileItem[][] => {
   const rows: FileItem[][] = [];
-  for (let i = 0; i < files.length; i += NUM_COLUMNS) {
-    rows.push(files.slice(i, i + NUM_COLUMNS));
+  for (let i = 0; i < files.length; i += numColumns) {
+    rows.push(files.slice(i, i + numColumns));
   }
   return rows;
 };
 
-const groupFilesByDate = (files: FileItem[]): MediaSection[] => {
+const groupFilesByDate = (
+  files: FileItem[],
+  numColumns: number
+): MediaSection[] => {
   const groupedByDate = files.reduce<Record<string, FileItem[]>>(
     (acc, file) => {
       const dateStr = new Date(file.date_created).toDateString();
@@ -126,14 +133,12 @@ const groupFilesByDate = (files: FileItem[]): MediaSection[] => {
     },
     {}
   );
-
   const sortedDates = Object.keys(groupedByDate).sort(
     (a, b) => new Date(b).getTime() - new Date(a).getTime()
   );
-
   return sortedDates.map((dateStr) => ({
     title: formatSectionDate(new Date(dateStr)),
-    data: createFileRows(groupedByDate[dateStr]),
+    data: createFileRows(groupedByDate[dateStr], numColumns),
   }));
 };
 
@@ -147,7 +152,6 @@ const useAsyncStorage = () => {
     if (!propRaw) throw new Error("Missing property data");
     return JSON.parse(propRaw);
   }, []);
-
   return { getProperty };
 };
 
@@ -157,16 +161,13 @@ const useScreenOrientation = () => {
     height: SCREEN_HEIGHT,
   });
   const [orientation, setOrientation] = useState(1);
-
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
       setDimensions(window);
       setOrientation(window.width > window.height ? 2 : 1);
     });
-
     return () => subscription?.remove();
   }, []);
-
   return { dimensions, orientation };
 };
 
@@ -196,10 +197,15 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [enableTabSwipe] = useState(true);
-  const [, setSwipeIndicator] = useState({
-    visible: false,
-    direction: "",
-  });
+  const [, setSwipeIndicator] = useState({ visible: false, direction: "" });
+
+  // Animation shared values
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const lastTranslateX = useSharedValue(0);
+  const lastTranslateY = useSharedValue(0);
 
   // Refs and memoized values
   const videoUrlRef = useRef<string | null>(null);
@@ -214,6 +220,22 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     if (videoUrl) player.play();
   });
 
+  // Dynamic grid calculations
+  const availableWidth = dimensions.width - 2 * CONTAINER_PADDING;
+  const numColumns = useMemo(() => {
+    let N = 5;
+    while (N >= 1) {
+      const itemWidth = (availableWidth - (N - 1) * ITEM_SPACING) / N;
+      if (itemWidth >= MIN_ITEM_WIDTH || N === 1) return N;
+      N--;
+    }
+    return 1;
+  }, [availableWidth]);
+  const itemWidth = useMemo(
+    () => (availableWidth - (numColumns - 1) * ITEM_SPACING) / numColumns,
+    [availableWidth, numColumns]
+  );
+
   // Computed values
   const allFilteredFiles = useMemo(() => {
     if (filesFromRoute) {
@@ -222,19 +244,14 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         (item) => item.file_category === categoryNumber
       );
     }
-
     if (allFiles.length > 0 && jobId) {
       const categoryNumber = getFileCategoryNumber(activeTab);
-      // Convert jobId to string to ensure consistent comparison
       const jobIdStr = String(jobId);
-
-      // Log how many files are being filtered
       const jobFiles = allFiles.filter(
         (item) => String(item.job_id) === jobIdStr
       );
       return jobFiles.filter((item) => item.file_category === categoryNumber);
     }
-
     return [];
   }, [activeTab, allFiles, jobId, filesFromRoute]);
 
@@ -242,12 +259,10 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     () => allFilteredFiles.slice(0, currentPage * PAGE_SIZE),
     [allFilteredFiles, currentPage]
   );
-
   const groupedMedia = useMemo(
-    () => groupFilesByDate(paginatedFiles),
-    [paginatedFiles]
+    () => groupFilesByDate(paginatedFiles, numColumns),
+    [paginatedFiles, numColumns]
   );
-
   const tabs = useMemo(
     () => [
       { key: "image", label: "Images" },
@@ -261,11 +276,9 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, allFiles, jobId, filesFromRoute]);
-
   useEffect(() => {
     if (reduxError) setError(reduxError);
   }, [reduxError]);
-
   useEffect(() => {
     if (selectedItem && activeTab === "video" && isModalReady && modalVisible) {
       setVideoUrl(selectedItem.stream_url);
@@ -275,70 +288,69 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
       videoUrlRef.current = null;
     }
   }, [selectedItem, activeTab, isModalReady, modalVisible]);
-
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null;
-
     if (modalVisible) {
       timeoutId = setTimeout(() => setIsModalReady(true), 100);
     } else {
       setIsModalReady(false);
       setIsFullscreen(false);
-      if (orientation !== 1) {
+      // Reset zoom values when modal closes
+      scale.value = 1;
+      savedScale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      lastTranslateX.value = 0;
+      lastTranslateY.value = 0;
+      if (orientation !== 1)
         ScreenOrientation.lockAsync(
           ScreenOrientation.OrientationLock.PORTRAIT_UP
         ).catch(() => {});
-      }
     }
-
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [modalVisible, orientation]);
+  }, [
+    modalVisible,
+    orientation,
+    scale,
+    savedScale,
+    translateX,
+    translateY,
+    lastTranslateX,
+    lastTranslateY,
+  ]);
 
-  // Define the pan gesture using Gesture.Pan()
+  // Gesture
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
         .runOnJS(true)
-        // Only activate the gesture for significant horizontal movement
         .activeOffsetX([-20, 20])
-        // Don't activate for vertical scrolling
         .failOffsetY([-5, 5])
         .onEnd((event) => {
           try {
             if (!enableTabSwipe) return;
-
-            // Threshold for tab switching (higher = less sensitive)
             const SWIPE_THRESHOLD = 50;
             const { translationX } = event;
-
-            if (translationX > SWIPE_THRESHOLD) {
-              // Right swipe - go to previous tab
-              const currentIndex = tabs.findIndex(
-                (tab) => tab.key === activeTab
+            const currentIndex = tabs.findIndex((tab) => tab.key === activeTab);
+            if (translationX > SWIPE_THRESHOLD && currentIndex > 0) {
+              setActiveTab(tabs[currentIndex - 1].key);
+              setSwipeIndicator({ visible: true, direction: "right" });
+              setTimeout(
+                () => setSwipeIndicator({ visible: false, direction: "" }),
+                500
               );
-              if (currentIndex > 0) {
-                setActiveTab(tabs[currentIndex - 1].key);
-                setSwipeIndicator({ visible: true, direction: "right" });
-                setTimeout(
-                  () => setSwipeIndicator({ visible: false, direction: "" }),
-                  500
-                );
-              }
-            } else if (translationX < -SWIPE_THRESHOLD) {
-              // Left swipe - go to next tab
-              const currentIndex = tabs.findIndex(
-                (tab) => tab.key === activeTab
+            } else if (
+              translationX < -SWIPE_THRESHOLD &&
+              currentIndex < tabs.length - 1
+            ) {
+              setActiveTab(tabs[currentIndex + 1].key);
+              setSwipeIndicator({ visible: true, direction: "left" });
+              setTimeout(
+                () => setSwipeIndicator({ visible: false, direction: "" }),
+                500
               );
-              if (currentIndex < tabs.length - 1) {
-                setActiveTab(tabs[currentIndex + 1].key);
-                setSwipeIndicator({ visible: true, direction: "left" });
-                setTimeout(
-                  () => setSwipeIndicator({ visible: false, direction: "" }),
-                  500
-                );
-              }
             }
           } catch (error) {}
         })
@@ -346,47 +358,82 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     [activeTab, enableTabSwipe, tabs]
   );
 
+  // Create image zoom and pan gestures
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((event) => {
+      scale.value = savedScale.value * event.scale;
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value < 1) {
+        scale.value = withTiming(1);
+        savedScale.value = 1;
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        lastTranslateX.value = 0;
+        lastTranslateY.value = 0;
+      }
+    });
+
+  const panGestureImage = Gesture.Pan()
+    .onUpdate((event) => {
+      if (scale.value > 1) {
+        translateX.value = lastTranslateX.value + event.translationX;
+        translateY.value = lastTranslateY.value + event.translationY;
+      }
+    })
+    .onEnd(() => {
+      lastTranslateX.value = translateX.value;
+      lastTranslateY.value = translateY.value;
+    });
+
+  const combinedGesture = Gesture.Simultaneous(pinchGesture, panGestureImage);
+
+  // Create animated style for image transforms
+  const imageAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+    };
+  });
+
   // Handlers
   const loadJobFiles = useCallback(async () => {
     try {
       const { id: propertyId } = await getProperty();
-
-      // First load all files for the property
       await dispatch(loadFiles({ propertyId }) as any);
     } catch (e: any) {
       setError(e.message);
     }
-  }, [dispatch, getProperty, jobId]);
+  }, [dispatch, getProperty]);
 
   const loadMoreData = useCallback(() => {
     if (isLoadingMore) return;
     setIsLoadingMore(true);
     setTimeout(() => {
       setCurrentPage((prev) => prev + 1);
-      setTimeout(() => setIsLoadingMore(false), 500);
+      setIsLoadingMore(false);
     }, 300);
   }, [isLoadingMore]);
 
-  // Modify the onRefresh function for better feedback
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     setError(null);
-
     if (filesFromRoute) {
-      // Show refresh for at least 800ms for better UX
       setTimeout(() => {
         setCurrentPage(1);
         setIsRefreshing(false);
       }, 800);
       return;
     }
-
     try {
       await loadJobFiles();
     } catch (e) {
       console.error("Refresh failed:", e);
     } finally {
-      // Ensure refresh indicator shows for at least 800ms
       setTimeout(() => setIsRefreshing(false), 800);
     }
   }, [filesFromRoute, loadJobFiles]);
@@ -395,7 +442,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     try {
       await Linking.openURL(url);
     } catch (error) {
-      console.error("Error opening document:", error);
       Alert.alert(
         "Error",
         "There was a problem opening this document. Please try again.",
@@ -407,14 +453,11 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const openModal = useCallback(
     async (item: FileItem) => {
       setSelectedItem(item);
-
       if (item.file_category === getFileCategoryNumber("document")) {
         handleOpenDocument(item.stream_url);
         return;
       }
-
       setModalVisible(true);
-
       if (item.file_category === getFileCategoryNumber("video")) {
         await ScreenOrientation.unlockAsync().catch(() => {});
       }
@@ -423,10 +466,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   );
 
   const closeModal = useCallback(async () => {
-    if (videoPlayer && videoUrl) {
-      videoPlayer.pause();
-    }
-
+    if (videoPlayer && videoUrl) videoPlayer.pause();
     await ScreenOrientation.lockAsync(
       ScreenOrientation.OrientationLock.PORTRAIT_UP
     ).catch(() => {});
@@ -436,11 +476,9 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const toggleFullscreen = useCallback(async () => {
     const newState = !isFullscreen;
     setIsFullscreen(newState);
-
     const lockOrientation = newState
       ? ScreenOrientation.OrientationLock.LANDSCAPE
       : ScreenOrientation.OrientationLock.PORTRAIT_UP;
-
     await ScreenOrientation.lockAsync(lockOrientation).catch(() => {});
   }, [isFullscreen]);
 
@@ -453,25 +491,17 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     loadJobFiles();
   }, [loadJobFiles]);
 
-  // Load files on mount
   useEffect(() => {
-    if (!filesFromRoute) {
-      loadJobFiles();
-    }
+    if (!filesFromRoute) loadJobFiles();
   }, [filesFromRoute, loadJobFiles]);
-
-  // Update effect to load files when jobId changes
   useEffect(() => {
-    if (!filesFromRoute && jobId) {
-      loadJobFiles();
-    }
+    if (!filesFromRoute && jobId) loadJobFiles();
   }, [filesFromRoute, loadJobFiles, jobId]);
 
   // Render functions
   const renderImageItem = useCallback(
     (item: FileItem) => {
       const isFailed = failedImages.has(item.stream_url);
-
       if (isFailed) {
         return (
           <View style={innerStyles.brokenImageContainer}>
@@ -483,7 +513,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           </View>
         );
       }
-
       return (
         <Image
           source={{ uri: item.stream_url }}
@@ -517,46 +546,35 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
   const renderDocumentItem = useCallback((item: FileItem) => {
     const docType = getDocumentType(item.file_name || "");
-
-    // Choose icon based on document type
     let IconComponent = MaterialCommunityIcons;
-    // Use type assertion for icon names to match the expected literal type
     let iconName: keyof typeof MaterialCommunityIcons.glyphMap =
       "file-document-outline";
     let iconColor = "#2C7DA0";
-
     switch (docType) {
       case "pdf":
-        iconName =
-          "file-pdf-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconName = "file-pdf-box";
         iconColor = "#F40F02";
         break;
       case "word":
-        iconName =
-          "file-word-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconName = "file-word-box";
         iconColor = "#295496";
         break;
       case "excel":
-        iconName =
-          "file-excel-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconName = "file-excel-box";
         iconColor = "#1D6F42";
         break;
       case "powerpoint":
-        iconName =
-          "file-powerpoint-box" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconName = "file-powerpoint-box";
         iconColor = "#D24625";
         break;
       case "text":
-        iconName =
-          "file-document-outline" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconName = "file-document-outline";
         iconColor = "#424242";
         break;
       default:
-        iconName =
-          "file-outline" as keyof typeof MaterialCommunityIcons.glyphMap;
+        iconName = "file-outline";
         iconColor = "#607D8B";
     }
-
     return (
       <View style={innerStyles.documentPlaceholder}>
         <IconComponent name={iconName} size={fontSize.xl} color={iconColor} />
@@ -596,12 +614,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             {renderItem(item)}
           </TouchableOpacity>
         ))}
-        {Array.from({ length: NUM_COLUMNS - items.length }).map((_, i) => (
-          <View
-            key={`placeholder-${rowKey}-${i}`}
-            style={innerStyles.placeholderItem}
-          />
-        ))}
       </View>
     ),
     [openModal, renderItem]
@@ -618,14 +630,10 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
   const renderModalContent = useCallback(() => {
     if (!selectedItem) return null;
-
-    if (activeTab === "video" && !isModalReady) {
+    if (activeTab === "video" && !isModalReady)
       return <ActivityIndicator size="large" color="#fff" />;
-    }
-
     if (activeTab === "image") {
       const isFailed = failedImages.has(selectedItem.stream_url);
-
       if (isFailed) {
         return (
           <View style={innerStyles.modalBrokenImageContainer}>
@@ -637,17 +645,21 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
           </View>
         );
       }
-
       return (
-        <Image
-          source={{ uri: selectedItem.stream_url }}
-          style={innerStyles.modalImage}
-          resizeMode="contain"
-          onError={() => handleImageError(selectedItem.stream_url)}
-        />
+        <GestureDetector gesture={combinedGesture}>
+          <Animated.View
+            style={[innerStyles.zoomableImageContainer, imageAnimatedStyle]}
+          >
+            <Image
+              source={{ uri: selectedItem.stream_url }}
+              style={innerStyles.modalImage}
+              resizeMode="contain"
+              onError={() => handleImageError(selectedItem.stream_url)}
+            />
+          </Animated.View>
+        </GestureDetector>
       );
     }
-
     if (activeTab === "video") {
       const isLandscape = orientation === 2 || isFullscreen;
       const videoStyles = isLandscape
@@ -656,7 +668,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             { width: dimensions.width, height: dimensions.height },
           ]
         : [innerStyles.videoPlayer];
-
       return (
         <View
           style={[
@@ -678,7 +689,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
         </View>
       );
     }
-
     return (
       <View style={innerStyles.modalDocContainer}>
         <Text style={innerStyles.modalDocText}>Document Preview</Text>
@@ -696,6 +706,8 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     videoUrl,
     videoPlayer,
     handleImageError,
+    combinedGesture,
+    imageAnimatedStyle,
   ]);
 
   const renderFooter = useCallback(
@@ -728,8 +740,31 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     return (
       <View style={styles.screenContainer}>
         <Header />
-        <View style={[styles.container, innerStyles.center]}>
-          <ActivityIndicator size="large" color={color.primary} />
+        <View style={styles.container}>
+          <View style={innerStyles.tabsContainer}>
+            {[1, 2, 3].map((tab) => (
+              <View key={`tab-skeleton-${tab}`} style={innerStyles.tabItem}>
+                <SkeletonLoader.Line
+                  width="60%"
+                  height={16}
+                  style={{ marginVertical: 8 }}
+                />
+              </View>
+            ))}
+          </View>
+          <View style={{ flex: 1, paddingHorizontal: CONTAINER_PADDING }}>
+            <SkeletonLoader.Line
+              width="40%"
+              height={20}
+              style={{ marginVertical: 10 }}
+            />
+            <SkeletonLoader.Grid
+              columns={numColumns}
+              items={15}
+              itemHeight={itemWidth}
+              style={{ marginTop: 8 }}
+            />
+          </View>
         </View>
       </View>
     );
@@ -759,8 +794,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   return (
     <View style={styles.screenContainer}>
       <Header />
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        {/* Tabs */}
+      <GestureHandlerRootView style={styles.container}>
         <View style={innerStyles.tabsContainer}>
           {tabs.map((tab) => (
             <TouchableOpacity
@@ -782,9 +816,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* Content with swipe gestures */}
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, width: "100%" }}>
           <GestureDetector gesture={panGesture}>
             <View style={{ flex: 1 }}>
               <SectionList
@@ -822,8 +854,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             </View>
           </GestureDetector>
         </View>
-
-        {/* Modal */}
         <Modal
           visible={modalVisible}
           transparent
@@ -842,7 +872,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
               barStyle="light-content"
               translucent
             />
-
             <TouchableOpacity
               style={[innerStyles.closeButton, isLandscapeModal && { top: 20 }]}
               onPress={closeModal}
@@ -850,7 +879,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             >
               <Text style={innerStyles.closeButtonText}>×</Text>
             </TouchableOpacity>
-
             {activeTab === "video" && (
               <TouchableOpacity
                 style={[
@@ -865,7 +893,6 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
                 </Text>
               </TouchableOpacity>
             )}
-
             <View
               style={[
                 innerStyles.modalContent,
@@ -874,14 +901,13 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
             >
               {renderModalContent()}
             </View>
-
             {selectedItem && !isLandscapeModal && (
               <View style={innerStyles.fileInfoContainer}>
                 <Text style={innerStyles.fileInfoText}>
                   {selectedItem.file_name}
                 </Text>
                 <Text style={innerStyles.fileInfoDate}>
-                  {new Date(selectedItem.date_created).toLocaleDateString()}
+                  {formatDate(selectedItem.date_created)}
                 </Text>
               </View>
             )}
@@ -892,7 +918,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   );
 };
 
-// Styles remain the same
+// Styles
 const innerStyles = StyleSheet.create({
   tabsContainer: {
     flexDirection: "row",
@@ -901,38 +927,16 @@ const innerStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
   },
-  tabItem: {
-    alignItems: "center",
-    paddingVertical: 6,
-    flex: 1,
-  },
-  tabText: {
-    fontSize: 16,
-    color: "#444",
-  },
-  activeTabText: {
-    fontWeight: "bold",
-    color: "#0077B6",
-  },
+  tabItem: { alignItems: "center", paddingVertical: 6, flex: 1 },
+  tabText: { fontSize: 16, color: "#444" },
+  activeTabText: { fontWeight: "bold", color: "#0077B6" },
   tabUnderline: {
     height: 2,
     backgroundColor: "#0077B6",
     width: "60%",
     marginTop: 4,
   },
-  itemContainer: {
-    width: ITEM_WIDTH,
-    height: ITEM_WIDTH,
-    margin: ITEM_SPACING / 2,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    overflow: "hidden",
-    elevation: 2,
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
+  image: { width: "100%", height: "100%" },
   documentPlaceholder: {
     width: "100%",
     height: "100%",
@@ -941,33 +945,15 @@ const innerStyles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     padding: 10,
   },
-  documentText: {
-    color: "#444",
-    textAlign: "center",
-    padding: 4,
-    fontWeight: "bold",
-  },
   documentName: {
     color: "#333",
     textAlign: "center",
     fontSize: fontSize.xs,
     marginTop: 5,
   },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#666",
-    textAlign: "center",
-    fontSize: 16,
-  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyText: { color: "#666", textAlign: "center", fontSize: 16 },
   errorText: {
     color: "red",
     padding: 16,
@@ -980,18 +966,13 @@ const innerStyles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 4,
   },
-  retryButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
+  retryButtonText: { color: "#fff", fontWeight: "bold" },
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
   },
-  fullscreenModalContainer: {
-    backgroundColor: "#000",
-  },
+  fullscreenModalContainer: { backgroundColor: "#000" },
   modalContent: {
     flex: 1,
     justifyContent: "center",
@@ -1023,11 +1004,7 @@ const innerStyles = StyleSheet.create({
     borderRadius: 8,
     padding: 20,
   },
-  modalDocText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
+  modalDocText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   modalFileName: {
     color: "#fff",
     fontSize: 14,
@@ -1046,11 +1023,7 @@ const innerStyles = StyleSheet.create({
     alignItems: "center",
     zIndex: 5,
   },
-  closeButtonText: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "bold",
-  },
+  closeButtonText: { color: "#fff", fontSize: 24, fontWeight: "bold" },
   fullscreenButton: {
     position: "absolute",
     top: 40,
@@ -1063,11 +1036,7 @@ const innerStyles = StyleSheet.create({
     alignItems: "center",
     zIndex: 5,
   },
-  fullscreenButtonText: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
+  fullscreenButtonText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
   fileInfoContainer: {
     position: "absolute",
     bottom: 30,
@@ -1077,16 +1046,8 @@ const innerStyles = StyleSheet.create({
     padding: 15,
     alignItems: "center",
   },
-  fileInfoText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  fileInfoDate: {
-    color: "#ccc",
-    fontSize: 12,
-    marginTop: 4,
-  },
+  fileInfoText: { color: "#fff", fontSize: 16, fontWeight: "500" },
+  fileInfoDate: { color: "#ccc", fontSize: 12, marginTop: 4 },
   videoThumbnailContainer: {
     width: "100%",
     height: "100%",
@@ -1095,11 +1056,7 @@ const innerStyles = StyleSheet.create({
     alignItems: "center",
     position: "relative",
   },
-  videoThumbnail: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#222",
-  },
+  videoThumbnail: { width: "100%", height: "100%", backgroundColor: "#222" },
   videoLabel: {
     position: "absolute",
     bottom: 0,
@@ -1116,22 +1073,21 @@ const innerStyles = StyleSheet.create({
     paddingVertical: 5,
     marginBottom: ITEM_SPACING,
   },
-  sectionHeaderText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
+  sectionHeaderText: { fontSize: 18, fontWeight: "bold", color: "#333" },
   row: {
     flexDirection: "row",
-    justifyContent: "center",
-    flexWrap: "nowrap",
-    paddingHorizontal: CONTAINER_PADDING - ITEM_SPACING / 2,
+    justifyContent: "space-around",
+    marginHorizontal: -ITEM_SPACING / 2,
     marginBottom: ITEM_SPACING,
   },
-  placeholderItem: {
-    width: ITEM_WIDTH,
-    height: ITEM_WIDTH,
-    margin: ITEM_SPACING / 2,
+  itemContainer: {
+    flex: 1,
+    marginHorizontal: ITEM_SPACING / 2,
+    aspectRatio: 1,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    elevation: 2,
   },
   loaderFooter: {
     padding: 20,
@@ -1154,6 +1110,14 @@ const innerStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#f0f0f0",
+  },
+  zoomableImageContainer: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * (4 / 3),
+    maxHeight: SCREEN_HEIGHT - 150,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
