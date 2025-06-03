@@ -32,12 +32,20 @@ export interface SyncState {
 // Only set notification handler if not in Expo Go on Android
 if (isNotificationsSupported) {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      // Check notification type to determine if sound should play
+      const shouldPlaySound =
+        notification.request.content.data?.playSound === true ||
+        notification.request.content.data?.type === "sync_complete" ||
+        notification.request.content.data?.type === "sync_error";
+
+      return {
+        shouldPlaySound,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    },
   });
 }
 
@@ -226,7 +234,10 @@ export class SyncManager {
       const hasPermission = await this.requestNotificationPermissions();
       if (!hasPermission) return;
 
-      const baseNotification = { title: "Data Sync", sound: false };
+      const baseNotification = {
+        title: "Data Sync",
+        sound: true,
+      };
 
       if (this.syncNotificationId) {
         await Notifications.dismissNotificationAsync(this.syncNotificationId);
@@ -239,7 +250,7 @@ export class SyncManager {
               content: {
                 ...baseNotification,
                 body: `Starting sync...`,
-                data: { type: "sync_progress" },
+                data: { type: "sync_progress", playSound: false },
               },
               trigger: null,
             });
@@ -257,6 +268,7 @@ export class SyncManager {
                 }, Failed: ${state.failedCount || 0}`,
                 data: {
                   type: "sync_progress",
+                  playSound: false,
                   progress: state.progress || 0,
                   syncedCount: state.syncedCount || 0,
                   failedCount: state.failedCount || 0,
@@ -271,7 +283,7 @@ export class SyncManager {
               ...baseNotification,
               title: "Sync Complete ✅",
               body: state.message,
-              data: { type: "sync_complete" },
+              data: { type: "sync_complete", playSound: true },
             },
             trigger: null,
           });
@@ -285,7 +297,7 @@ export class SyncManager {
               ...baseNotification,
               title: "Sync Error ❌",
               body: state.message,
-              data: { type: "sync_error" },
+              data: { type: "sync_error", playSound: true },
             },
             trigger: null,
           });
