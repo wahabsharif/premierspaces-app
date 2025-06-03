@@ -185,6 +185,9 @@ const SearchPropertyScreen: React.FC = () => {
           ),
         ]);
 
+        // Console log for debugging the stored property data
+        console.log("Property data stored in AsyncStorage:", completeItem);
+
         // Handle offline mode
         if (!isConnected) {
           await AsyncStorage.setItem(
@@ -195,6 +198,11 @@ const SearchPropertyScreen: React.FC = () => {
               selectionTime: new Date().toString(),
             })
           );
+          console.log("Offline property data stored:", {
+            ...completeItem,
+            selectedOffline: true,
+            selectionTime: new Date().toString(),
+          });
         }
 
         // Navigate to the next screen

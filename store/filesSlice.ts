@@ -257,9 +257,9 @@ export const createCategoryMappings = (categoriesData: any) => {
 
 export const loadFiles = createAsyncThunk<
   FileItem[],
-  { propertyId: string },
+  { propertyId: string; jobId?: string },
   { rejectValue: string }
->("files/load", async ({ propertyId }, { rejectWithValue }) => {
+>("files/load", async ({ propertyId, jobId }, { rejectWithValue }) => {
   try {
     const net = await NetInfo.fetch();
 
@@ -288,6 +288,15 @@ export const loadFiles = createAsyncThunk<
       // Cache all files to SQLite
       await setCache(cacheKey, resp.data.payload);
 
+      // If jobId is provided, filter by both property and job
+      if (jobId) {
+        return resp.data.payload.filter(
+          (file) =>
+            file.property_id === propertyId &&
+            String(file.job_id) === String(jobId)
+        );
+      }
+
       // Return only files for the selected property
       return resp.data.payload.filter(
         (file) => file.property_id === propertyId
@@ -296,11 +305,21 @@ export const loadFiles = createAsyncThunk<
       // Offline: load from cache
       const cached = await getCache(cacheKey);
       if (cached && cached.payload) {
-        // Filter for the requested property
+        // Get all cached files
         const allFiles = Array.isArray(cached.payload)
           ? cached.payload
           : cached.payload.payload || [];
 
+        // If jobId is provided, filter by both property and job
+        if (jobId) {
+          return allFiles.filter(
+            (file: FileItem) =>
+              file.property_id === propertyId &&
+              String(file.job_id) === String(jobId)
+          );
+        }
+
+        // Filter for the requested property
         return allFiles.filter(
           (file: FileItem) => file.property_id === propertyId
         );

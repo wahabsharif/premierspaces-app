@@ -66,7 +66,6 @@ const VideoThumbnail: React.FC<VideoThumbnailProps> = ({
     return (
       <View style={styles.placeholder}>
         <ActivityIndicator size="small" color="#fff" />
-        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -163,11 +162,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "bold",
-  },
-  loadingText: {
-    color: "#fff",
-    fontSize: 12,
-    marginTop: 8,
   },
 });
 

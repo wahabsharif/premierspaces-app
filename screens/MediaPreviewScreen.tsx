@@ -33,7 +33,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import styles from "../Constants/styles";
-import { color } from "../Constants/theme";
+import { color, fontSize } from "../Constants/theme";
 import { Header, VideoThumbnail } from "../components";
 import {
   loadFiles,
@@ -225,9 +225,14 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
     if (allFiles.length > 0 && jobId) {
       const categoryNumber = getFileCategoryNumber(activeTab);
-      return allFiles
-        .filter((item) => item.job_id === jobId)
-        .filter((item) => item.file_category === categoryNumber);
+      // Convert jobId to string to ensure consistent comparison
+      const jobIdStr = String(jobId);
+
+      // Log how many files are being filtered
+      const jobFiles = allFiles.filter(
+        (item) => String(item.job_id) === jobIdStr
+      );
+      return jobFiles.filter((item) => item.file_category === categoryNumber);
     }
 
     return [];
@@ -335,9 +340,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
                 );
               }
             }
-          } catch (error) {
-            console.log("Gesture error:", error);
-          }
+          } catch (error) {}
         })
         .simultaneousWithExternalGesture(Gesture.Tap(), Gesture.LongPress()),
     [activeTab, enableTabSwipe, tabs]
@@ -347,11 +350,13 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
   const loadJobFiles = useCallback(async () => {
     try {
       const { id: propertyId } = await getProperty();
-      dispatch(loadFiles({ propertyId }) as any);
+
+      // First load all files for the property
+      await dispatch(loadFiles({ propertyId }) as any);
     } catch (e: any) {
       setError(e.message);
     }
-  }, [dispatch, getProperty]);
+  }, [dispatch, getProperty, jobId]);
 
   const loadMoreData = useCallback(() => {
     if (isLoadingMore) return;
@@ -362,15 +367,17 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     }, 300);
   }, [isLoadingMore]);
 
+  // Modify the onRefresh function for better feedback
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     setError(null);
 
     if (filesFromRoute) {
+      // Show refresh for at least 800ms for better UX
       setTimeout(() => {
         setCurrentPage(1);
         setIsRefreshing(false);
-      }, 1000);
+      }, 800);
       return;
     }
 
@@ -379,7 +386,8 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
     } catch (e) {
       console.error("Refresh failed:", e);
     } finally {
-      setTimeout(() => setIsRefreshing(false), 1000);
+      // Ensure refresh indicator shows for at least 800ms
+      setTimeout(() => setIsRefreshing(false), 800);
     }
   }, [filesFromRoute, loadJobFiles]);
 
@@ -451,6 +459,13 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
       loadJobFiles();
     }
   }, [filesFromRoute, loadJobFiles]);
+
+  // Update effect to load files when jobId changes
+  useEffect(() => {
+    if (!filesFromRoute && jobId) {
+      loadJobFiles();
+    }
+  }, [filesFromRoute, loadJobFiles, jobId]);
 
   // Render functions
   const renderImageItem = useCallback(
@@ -544,12 +559,7 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
 
     return (
       <View style={innerStyles.documentPlaceholder}>
-        <IconComponent
-          name={iconName}
-          size={60}
-          color={iconColor}
-          style={innerStyles.documentIcon}
-        />
+        <IconComponent name={iconName} size={fontSize.xl} color={iconColor} />
         <Text style={innerStyles.documentName} numberOfLines={1}>
           {item.file_name}
         </Text>
@@ -804,8 +814,8 @@ const MediaPreviewScreen: React.FC<Props> = ({ route }) => {
                     onRefresh={onRefresh}
                     colors={[color.primary]}
                     tintColor={color.primary}
-                    title="Pull to refresh"
-                    titleColor={color.primary}
+                    progressBackgroundColor="rgba(255, 255, 255, 0.8)"
+                    progressViewOffset={10}
                   />
                 }
               />
@@ -931,11 +941,6 @@ const innerStyles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     padding: 10,
   },
-  documentIcon: {
-    width: 60,
-    height: 60,
-    marginBottom: 5,
-  },
   documentText: {
     color: "#444",
     textAlign: "center",
@@ -945,7 +950,7 @@ const innerStyles = StyleSheet.create({
   documentName: {
     color: "#333",
     textAlign: "center",
-    fontSize: 12,
+    fontSize: fontSize.xs,
     marginTop: 5,
   },
   center: {

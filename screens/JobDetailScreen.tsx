@@ -556,6 +556,22 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const showContent = !isLoading && jobDetail;
   const showError = !isLoading && !jobDetail;
 
+  // Update the navigation to MediaPreviewScreen to ensure consistent job ID handling
+  const navigateToMedia = useCallback(
+    (fileCategory: string) => {
+      if (!jobDetail) return;
+
+      // Ensure we always use the same job ID format
+      const id = String(jobId || jobDetail.id);
+
+      navigation.navigate("MediaPreviewScreen", {
+        jobId: id,
+        fileCategory,
+      });
+    },
+    [jobDetail, jobId, navigation]
+  );
+
   return (
     <View style={styles.screenContainer}>
       <Header />
@@ -737,12 +753,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   <View style={innerStyles.countsContainer}>
                     <TouchableOpacity
                       style={innerStyles.countBlock}
-                      onPress={() =>
-                        navigation.navigate("MediaPreviewScreen", {
-                          jobId,
-                          fileCategory: "image",
-                        })
-                      }
+                      onPress={() => navigateToMedia("image")}
                     >
                       <View style={innerStyles.countItemRow}>
                         <MaterialCommunityIcons
@@ -758,12 +769,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
                     <TouchableOpacity
                       style={innerStyles.countBlock}
-                      onPress={() =>
-                        navigation.navigate("MediaPreviewScreen", {
-                          jobId,
-                          fileCategory: "document",
-                        })
-                      }
+                      onPress={() => navigateToMedia("document")}
                     >
                       <View style={innerStyles.countItemRow}>
                         <MaterialCommunityIcons
@@ -779,12 +785,7 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
                     <TouchableOpacity
                       style={innerStyles.countBlock}
-                      onPress={() =>
-                        navigation.navigate("MediaPreviewScreen", {
-                          jobId,
-                          fileCategory: "video",
-                        })
-                      }
+                      onPress={() => navigateToMedia("video")}
                     >
                       <View style={innerStyles.countItemRow}>
                         <MaterialCommunityIcons
