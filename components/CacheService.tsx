@@ -450,6 +450,7 @@ const CacheService: React.FC<CacheServiceProps> = ({
       const data = await fetchWithSessionCheck(
         `${BASE_API_URL}/jobtypes.php?userid=${userId}`
       );
+
       if (!data) {
         return;
       }
@@ -464,10 +465,36 @@ const CacheService: React.FC<CacheServiceProps> = ({
         return;
       }
 
-      if (!Array.isArray(data.payload)) {
-        throw new Error("Invalid job types data");
+      // More robust validation and processing of response
+      let jobTypesData;
+      if (Array.isArray(data.payload)) {
+        jobTypesData = data.payload;
+      } else if (
+        data.payload &&
+        typeof data.payload === "object" &&
+        Array.isArray(data.payload.payload)
+      ) {
+        // Handle nested payload structure
+        jobTypesData = data.payload.payload;
+      } else if (data.payload) {
+        // If payload exists but isn't in expected format, try to use it
+        console.warn(
+          "[prefetchJobTypes] Unexpected payload structure:",
+          JSON.stringify(data.payload).substring(0, 100)
+        );
+        jobTypesData = data.payload;
+      } else {
+        console.error(
+          "[prefetchJobTypes] Invalid job types data structure:",
+          JSON.stringify(data).substring(0, 100)
+        );
+        throw new Error("Invalid job types data structure");
       }
-      await setCache(key, data.payload);
+
+      console.log(
+        `[prefetchJobTypes] Storing ${jobTypesData.length} job types in cache`
+      );
+      await setCache(key, jobTypesData);
       store.dispatch(fetchJobTypes({ userId }));
       lastFetchTimes.current.jobTypes = now;
     } catch (error) {
@@ -476,6 +503,9 @@ const CacheService: React.FC<CacheServiceProps> = ({
       const cacheEntry = await getCache(key);
       if (cacheEntry?.payload) {
         store.dispatch(fetchJobTypes({ userId, useCache: true }));
+        lastFetchTimes.current.jobTypes = Date.now(); // Update to prevent immediate retry
+      } else {
+        console.warn("[prefetchJobTypes] No cache available for fallback");
       }
     } finally {
       fetchInProgress.current.jobTypes = false;
