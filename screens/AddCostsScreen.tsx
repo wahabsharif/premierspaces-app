@@ -272,6 +272,8 @@ const AddCostsScreen: React.FC<Props> = ({ route, navigation }) => {
                 <Picker
                   selectedValue={row.contractorId}
                   onValueChange={(val) => updateRow(idx, "contractorId", val)}
+                  style={inner.picker}
+                  itemStyle={inner.pickerItem}
                 >
                   <Picker.Item label="Select Contractor" value="" />
                   {contractors.map((c) => (
@@ -337,6 +339,22 @@ const inner = StyleSheet.create({
     width: 250,
     height: 41,
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  picker: {
+    backgroundColor: color.white,
+    color: color.black,
+    height: 50,
+    width: "100%",
+    marginTop: 0,
+    marginBottom: 0,
+    paddingHorizontal: 10,
+  },
+  pickerItem: {
+    backgroundColor: color.white,
+    color: color.black,
+    fontSize: fontSize.medium,
+    height: 50,
   },
   addMore: {
     alignSelf: "flex-end",
