@@ -1,4 +1,4 @@
-export const BASE_API_URL = "http://easyhomz.co.uk/mapp";
+export const BASE_API_URL = "https://premierspaces.uk/mapp";
 
 // export const BASE_API_URL = "http://192.168.1.14:8000/api/mapp";
 
