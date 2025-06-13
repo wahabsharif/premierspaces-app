@@ -74,7 +74,7 @@
         "foregroundImage": "./assets/touch-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.premierspaces",
+      "package": "com.envbyte.premierspaces",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.WAKE_LOCK",

@@ -10,7 +10,8 @@
       "distribution": "store",
       "autoIncrement": true,
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "local"
       },
       "channel": "production"
     },
@@ -20,13 +21,18 @@
       "releaseChannel": "development",
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "local"
       },
       "channel": "development"
     },
     "preview": {
       "environment": "preview",
-      "channel": "preview"
+      "channel": "preview",
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "local"
+      }
     }
   },
   "submit": {
